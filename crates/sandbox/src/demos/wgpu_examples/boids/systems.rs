@@ -165,7 +165,6 @@ pub fn boids_prepare(
     render_pipeline_component.write().set_ready(render_pipeline);
 
     // create compute pipeline
-
     let compute_pipeline = device.create_compute_pipeline(&ComputePipelineDescriptor {
         label: Some("Compute pipeline"),
         layout: Some(&compute_pipeline_layout),

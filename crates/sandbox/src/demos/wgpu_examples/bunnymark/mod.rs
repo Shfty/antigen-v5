@@ -1,25 +1,29 @@
 mod components;
 mod systems;
 
-use std::num::NonZeroU32;
+use std::{borrow::Cow, num::NonZeroU32};
 
+use antigen_winit::RedrawUnconditionally;
 pub use components::*;
 use legion::{world::SubWorld, IntoQuery};
 pub use systems::*;
 
 use antigen_core::{
-    parallel, serial, single, AddIndirectComponent, ImmutableSchedule, RwLock, Serial, Single,
+    impl_read_write_lock, parallel, serial, AddIndirectComponent, ImmutableSchedule, ReadWriteLock,
+    RwLock, Serial, SizeComponent,
 };
 
 use antigen_wgpu::{
     assemble_buffer_data, assemble_texture_data,
     wgpu::{
-        BufferAddress, BufferDescriptor, BufferUsages, Device, Extent3d, ImageCopyTextureBase,
-        ImageDataLayout, SamplerDescriptor, TextureAspect, TextureDescriptor, TextureDimension,
-        TextureFormat, TextureUsages, TextureViewDescriptor,
+        AddressMode, BufferAddress, BufferDescriptor, BufferUsages, Device, Extent3d, FilterMode,
+        ImageCopyTextureBase, ImageDataLayout, SamplerDescriptor, ShaderModuleDescriptor,
+        ShaderSource, TextureAspect, TextureDescriptor, TextureDimension, TextureFormat,
+        TextureUsages, TextureViewDescriptor,
     },
-    BufferComponent, CommandBuffersComponent, RenderAttachment, RenderPipelineComponent,
-    SurfaceComponent, Texels, TextureComponent, TextureViewComponent,
+    BindGroupComponent, BufferComponent, CommandBuffersComponent, RenderAttachment,
+    RenderPipelineComponent, SamplerComponent, ShaderModuleComponent, SurfaceComponent, Texels,
+    TextureComponent, TextureViewComponent, ToBytes,
 };
 
 const MAX_BUNNIES: usize = 1 << 20;
@@ -30,6 +34,7 @@ const MAX_VELOCITY: f32 = 750.0;
 pub enum Logo {}
 pub enum Global {}
 pub enum Local {}
+pub enum PlayfieldExtent {}
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
@@ -39,13 +44,37 @@ struct Globals {
     pad: [f32; 2],
 }
 
-#[repr(C, align(256))]
-#[derive(Clone, Copy, bytemuck::Zeroable)]
+impl ToBytes for Globals {
+    fn to_bytes(&self) -> &[u8] {
+        bytemuck::bytes_of(self)
+    }
+}
+
+// Manually padded to 256 instead of using repr so we can use Pod instead of slice::from_raw_parts
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct Locals {
     position: [f32; 2],
     velocity: [f32; 2],
     color: u32,
-    _pad: u32,
+    _pad: [u32; 3],
+}
+
+impl ToBytes for Locals {
+    fn to_bytes(&self) -> &[u8] {
+        bytemuck::bytes_of(self)
+    }
+}
+
+#[repr(C)]
+pub struct Bunnies(RwLock<Vec<Locals>>);
+
+impl_read_write_lock!(Bunnies, 0, Vec<Locals>);
+
+impl Bunnies {
+    pub fn new() -> Self {
+        Bunnies(RwLock::new(Default::default()))
+    }
 }
 
 #[legion::system]
@@ -63,6 +92,9 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
     // Add title to window
     antigen_winit::assemble_window_title(cmd, &(window_entity,), &"Bunnymark");
 
+    // Redraw the window unconditionally
+    cmd.add_component(window_entity, RedrawUnconditionally);
+
     // Renderer
     cmd.add_component(renderer_entity, Bunnymark);
     cmd.add_component(renderer_entity, RenderPipelineComponent::<()>::pending());
@@ -73,16 +105,52 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
         window_entity,
     );
 
+    // Shader
+    cmd.add_component(
+        renderer_entity,
+        ShaderModuleComponent::<()>::pending(ShaderModuleDescriptor {
+            label: None,
+            source: ShaderSource::Wgsl(Cow::Borrowed(include_str!("shader.wgsl"))),
+        }),
+    );
+
+    // Bind groups
+    cmd.add_component(renderer_entity, BindGroupComponent::<Global>::pending());
+    cmd.add_component(renderer_entity, BindGroupComponent::<Local>::pending());
+
+    // Playfield extent
+    let extent = (640, 480);
+
     // Buffer data
     let globals = Globals {
-        mvp: *nalgebra::Orthographic3::new(0.0, 1.0, 0.0, 1.0, -1.0, 1.0)
+        mvp: *nalgebra::Orthographic3::new(0.0, extent.0 as f32, 0.0, extent.1 as f32, -1.0, 1.0)
             .into_inner()
             .as_ref(),
         size: [BUNNY_SIZE; 2],
         pad: [0.0; 2],
     };
-
     assemble_buffer_data::<Global, _>(cmd, renderer_entity, RwLock::new(globals), 0);
+
+    let bunnies = Bunnies::new();
+
+    let spawn_count = 64;
+    let color = rand::random::<u32>();
+    println!("Spawning {} bunnies", spawn_count,);
+
+    {
+        let mut bunnies = bunnies.write();
+        for _ in 0..spawn_count {
+            let speed = rand::random::<f32>() * MAX_VELOCITY - (MAX_VELOCITY * 0.5);
+            bunnies.push(Locals {
+                position: [0.0, 0.5 * (extent.0 as f32)],
+                velocity: [speed, 0.0],
+                color,
+                _pad: [0; 3],
+            });
+        }
+    }
+
+    assemble_buffer_data::<Local, _>(cmd, renderer_entity, bunnies, 0);
 
     // Texture data
     let img_data = include_bytes!("logo.png");
@@ -109,7 +177,7 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
         },
         ImageDataLayout {
             offset: 0,
-            bytes_per_row: Some(NonZeroU32::new(size.width).unwrap()),
+            bytes_per_row: Some(NonZeroU32::new(info.line_size as u32).unwrap()),
             rows_per_image: Some(NonZeroU32::new(size.height).unwrap()),
         },
     );
@@ -160,7 +228,22 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
     // Sampler
     cmd.add_component(
         renderer_entity,
-        SamplerComponent::<Logo>::pending(SamplerDescriptor::default()),
+        SamplerComponent::<Logo>::pending(SamplerDescriptor {
+            label: None,
+            address_mode_u: AddressMode::ClampToEdge,
+            address_mode_v: AddressMode::ClampToEdge,
+            address_mode_w: AddressMode::ClampToEdge,
+            mag_filter: FilterMode::Linear,
+            min_filter: FilterMode::Nearest,
+            mipmap_filter: FilterMode::Nearest,
+            ..Default::default()
+        }),
+    );
+
+    // Playfield extent
+    cmd.add_component(
+        renderer_entity,
+        SizeComponent::<(u32, u32), PlayfieldExtent>::new(extent),
     );
 }
 
@@ -174,13 +257,14 @@ pub fn prepare_schedule() -> ImmutableSchedule<Serial> {
             antigen_wgpu::create_samplers_system::<Logo>(),
         ],
         parallel![
-            antigen_wgpu::buffer_write_system::<Global, RwLock<Globals>, Globals> > (),
+            antigen_wgpu::buffer_write_system::<Global, RwLock<Globals>, Globals>(),
+            antigen_wgpu::buffer_write_system::<Local, Bunnies, Vec<Locals>>(),
             antigen_wgpu::texture_write_system::<Logo, Texels<Vec<u8>>, Vec<u8>>(),
         ],
         bunnymark_prepare_system(),
     ]
 }
 
-pub fn render_schedule() -> ImmutableSchedule<Single> {
-    single![bunnymark_render_system()]
+pub fn render_schedule() -> ImmutableSchedule<Serial> {
+    serial![bunnymark_tick_system(), bunnymark_render_system()]
 }

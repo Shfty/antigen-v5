@@ -1,6 +1,8 @@
+// TODO: Input handling for bunnymark
+//
 // TODO: Implement remaining WGPU demos using ECS pattern
 //       [✓] Boids
-//       [ ] Bunnymark
+//       [>] Bunnymark
 //       [ ] Capture(?)
 //       [ ] Conservative Raster
 //       [✓] Cube
@@ -118,16 +120,18 @@ pub fn winit_thread(world: ImmutableWorld) -> ! {
     ];
 
     let mut redraw_requested_schedule = single![antigen_wgpu::surface_textures_views_system()];
-    let mut window_resized_schedule = serial![
-        antigen_winit::resize_window_system(),
-        surface_resize_schedule(),
-    ];
-    let mut window_close_requested_schedule = single![antigen_winit::close_window_system()];
 
     let mut redraw_events_cleared_schedule = serial![
         crate::demos::wgpu_examples::render_schedule(),
         antigen_wgpu::submit_and_present_schedule(),
     ];
+
+    let mut window_resized_schedule = serial![
+        antigen_winit::resize_window_system(),
+        surface_resize_schedule(),
+    ];
+    let mut window_keyboard_event_schedule = serial![];
+    let mut window_close_requested_schedule = single![antigen_winit::close_window_system()];
 
     // Enter winit event loop
     antigen_winit::winit::event_loop::EventLoop::new().run(antigen_winit::event_loop_wrapper(
@@ -145,6 +149,9 @@ pub fn winit_thread(world: ImmutableWorld) -> ! {
                 }
                 WindowEvent::CloseRequested => {
                     window_close_requested_schedule.execute(world);
+                }
+                WindowEvent::KeyboardInput { input, .. } => {
+                    window_keyboard_event_schedule.execute(world)
                 }
                 _ => (),
             },
