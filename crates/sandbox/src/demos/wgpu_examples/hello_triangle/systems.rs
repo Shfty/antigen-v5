@@ -1,0 +1,113 @@
+use super::HelloTriangle;
+use antigen_core::{GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock};
+
+use antigen_wgpu::{
+    wgpu::{
+        Color, CommandEncoderDescriptor, Device, FragmentState, LoadOp, MultisampleState,
+        Operations, PipelineLayoutDescriptor, PrimitiveState, RenderPassColorAttachment,
+        RenderPassDescriptor, RenderPipelineDescriptor, SurfaceConfiguration, VertexState,
+    },
+    CommandBuffersComponent, RenderAttachment, RenderPipelineComponent, ShaderModuleComponent,
+    SurfaceComponent, TextureViewComponent,
+};
+
+use legion::IntoQuery;
+
+// Initialize the hello triangle render pipeline
+#[legion::system(par_for_each)]
+#[read_component(Device)]
+#[read_component(SurfaceComponent)]
+pub fn hello_triangle_prepare(
+    world: &legion::world::SubWorld,
+    _: &HelloTriangle,
+    shader_module: &ShaderModuleComponent<()>,
+    render_pipeline_component: &RenderPipelineComponent<()>,
+    surface_component: &IndirectComponent<SurfaceComponent>,
+) {
+    if !render_pipeline_component.read().is_pending() {
+        return;
+    }
+    let device = <&Device>::query().iter(world).next().unwrap();
+
+    let shader_module = shader_module.read();
+    let shader_module = if let LazyComponent::Ready(shader_module) = &*shader_module {
+        shader_module
+    } else {
+        return;
+    };
+
+    let surface_component = world.get_indirect(surface_component).unwrap();
+    let format = ReadWriteLock::<SurfaceConfiguration>::read(surface_component).format;
+
+    let pipeline_layout = device.create_pipeline_layout(&mut PipelineLayoutDescriptor {
+        label: None,
+        bind_group_layouts: &[],
+        push_constant_ranges: &[],
+    });
+
+    let render_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+        label: None,
+        layout: Some(&pipeline_layout),
+        vertex: VertexState {
+            module: &shader_module,
+            entry_point: "vs_main",
+            buffers: &[],
+        },
+        fragment: Some(FragmentState {
+            module: &shader_module,
+            entry_point: "fs_main",
+            targets: &[format.into()],
+        }),
+        primitive: PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: MultisampleState::default(),
+    });
+
+    render_pipeline_component.write().set_ready(render_pipeline);
+}
+
+// Render the hello triangle pipeline to the specified entity's surface
+#[legion::system(par_for_each)]
+#[read_component(Device)]
+#[read_component(TextureViewComponent<'static, RenderAttachment>)]
+pub fn hello_triangle_render(
+    world: &legion::world::SubWorld,
+    _: &HelloTriangle,
+    render_pipeline: &RenderPipelineComponent<()>,
+    command_buffers: &CommandBuffersComponent,
+    texture_view: &IndirectComponent<TextureViewComponent<'static, RenderAttachment>>,
+) {
+    let device = if let Some(components) = <&Device>::query().iter(world).next() {
+        components
+    } else {
+        return;
+    };
+
+    if let LazyComponent::Ready(render_pipeline) = &*render_pipeline.read() {
+        let texture_view = world.get_indirect(texture_view).unwrap();
+
+        if let LazyComponent::Ready(texture_view) = &*texture_view.read() {
+            let mut encoder =
+                device.create_command_encoder(&CommandEncoderDescriptor { label: None });
+
+            {
+                let mut rpass = encoder.begin_render_pass(&RenderPassDescriptor {
+                    label: None,
+                    color_attachments: &[RenderPassColorAttachment {
+                        view: texture_view,
+                        resolve_target: None,
+                        ops: Operations {
+                            load: LoadOp::Clear(Color::GREEN),
+                            store: true,
+                        },
+                    }],
+                    depth_stencil_attachment: None,
+                });
+                rpass.set_pipeline(render_pipeline);
+                rpass.draw(0..3, 0..1);
+            }
+
+            command_buffers.write().push(encoder.finish());
+        }
+    }
+}

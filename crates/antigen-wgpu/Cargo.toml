@@ -1,0 +1,12 @@
+[package]
+name = "antigen-wgpu"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+wgpu = "0.11.0"
+legion = "0.4.0"
+bytemuck = "1.7.2"
+
+antigen-core = { path = "../antigen-core" }
+antigen-winit = { path = "../antigen-winit" }

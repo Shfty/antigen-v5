@@ -1,0 +1,20 @@
+[package]
+name = "sandbox"
+version = "0.1.0"
+edition = "2018"
+resolver = "2"
+
+[dependencies]
+legion = { version = "0.4.0", features = ["extended-tuple-impls"] }
+
+pollster = "0.2.4"
+nalgebra = "0.29.0"
+nalgebra-glm = "0.15.0"
+bytemuck = { version = "1.7.2", features = ["derive", "min_const_generics"] }
+rand = "0.8.4"
+png = "0.17.2"
+
+antigen-core = { path = "../antigen-core" }
+antigen-winit = { path = "../antigen-winit" }
+antigen-wgpu = { path = "../antigen-wgpu" }
+antigen-util = { path = "../antigen-util" }

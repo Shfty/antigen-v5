@@ -1,16 +1,10 @@
-[package]
-name = "legion-immut"
-version = "0.1.0"
-edition = "2018"
+[workspace]
 resolver = "2"
 
-[dependencies]
-legion = { version = "0.4.0", features = ["extended-tuple-impls"] }
-parking_lot = "0.11.2"
-rayon = "1.5.1"
+members = [
+    "crates/*"
+]
 
-winit = "0.25.0"
-wgpu = "0.11.0"
-pollster = "0.2.4"
-cgmath = "0.18.0"
-bytemuck = { version = "1.7.2", features = ["derive"] }
+default-members = [
+    "crates/sandbox",
+]

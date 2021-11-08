@@ -1,0 +1,9 @@
+[package]
+name = "antigen-core"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+legion = "0.4.0"
+rayon = "1.5.1"
+parking_lot = "0.11.2"
