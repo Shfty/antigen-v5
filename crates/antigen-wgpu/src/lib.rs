@@ -2,20 +2,23 @@ mod components;
 mod systems;
 mod to_bytes;
 
+use std::path::Path;
+
 pub use components::*;
 pub use systems::*;
 pub use to_bytes::*;
 
 use legion::{storage::Component, systems::CommandBuffer, world::SubWorld, Entity, World};
 use wgpu::{
-    Adapter, BufferAddress, Device, ImageCopyTextureBase, ImageDataLayout, Instance, Queue,
+    Adapter, Backends, BufferAddress, Device, DeviceDescriptor, ImageCopyTextureBase,
+    ImageDataLayout, Instance, Queue, Surface,
 };
 
 pub use wgpu;
 
 use antigen_core::{
     serial, single, AddComponentWithChangedFlag, AddIndirectComponent, ChangedFlag,
-    ImmutableSchedule, ReadWriteLock, Serial, Single, SizeComponent,
+    ImmutableSchedule, ReadWriteLock, RwLock, Serial, Single, SizeComponent, Usage,
 };
 use antigen_winit::{WindowEntityMap, WindowEventComponent};
 
@@ -28,6 +31,36 @@ pub fn assemble_wgpu_entity(
     queue: Queue,
 ) -> Entity {
     world.push((instance, adapter, device, queue))
+}
+
+pub fn assemble_wgpu_entity_from_env(
+    world: &mut World,
+    device_desc: &DeviceDescriptor,
+    compatible_surface: Option<&Surface>,
+    trace_path: Option<&Path>,
+) {
+    let backend_bits = wgpu::util::backend_bits_from_env().unwrap_or(Backends::PRIMARY);
+
+    let instance = Instance::new(backend_bits);
+    println!("Created WGPU instance: {:#?}\n", instance);
+
+    let adapter = pollster::block_on(wgpu::util::initialize_adapter_from_env_or_default(
+        &instance,
+        backend_bits,
+        compatible_surface,
+    ))
+    .expect("Failed to acquire WGPU adapter");
+
+    let adapter_info = adapter.get_info();
+    println!("Acquired WGPU adapter: {:#?}\n", adapter_info);
+
+    let (device, queue) =
+        pollster::block_on(adapter.request_device(device_desc, trace_path)).unwrap();
+
+    println!("Acquired WGPU device: {:#?}\n", device);
+    println!("Acquired WGPU queue: {:#?}\n", queue);
+
+    assemble_wgpu_entity(world, instance, adapter, device, queue);
 }
 
 /// Extends an existing window entity with the means to render to a WGPU surface
@@ -53,19 +86,25 @@ pub fn assemble_window_surface(cmd: &mut CommandBuffer, #[state] (entity,): &(En
 
 #[legion::system]
 pub fn assemble_surface_size(cmd: &mut CommandBuffer, #[state] (entity,): &(Entity,)) {
-    cmd.add_component(*entity, SizeComponent::<(u32, u32), SurfaceSize>::default());
     cmd.add_component(
         *entity,
-        ChangedFlag::<SizeComponent<(u32, u32), SurfaceSize>>::new_clean(),
+        Usage::<SurfaceSize, SizeComponent<RwLock<(u32, u32)>>>::new(Default::default()),
+    );
+    cmd.add_component(
+        *entity,
+        ChangedFlag::<Usage<SurfaceSize, SizeComponent<RwLock<(u32, u32)>>>>::new_clean(),
     );
 }
 
 #[legion::system]
 pub fn assemble_texture_size(cmd: &mut CommandBuffer, #[state] (entity,): &(Entity,)) {
-    cmd.add_component(*entity, SizeComponent::<(u32, u32), TextureSize>::default());
     cmd.add_component(
         *entity,
-        ChangedFlag::<SizeComponent<(u32, u32), TextureSize>>::new_clean(),
+        Usage::<TextureSize, SizeComponent<RwLock<(u32, u32)>>>::new(Default::default()),
+    );
+    cmd.add_component(
+        *entity,
+        ChangedFlag::<Usage<TextureSize, SizeComponent<RwLock<(u32, u32)>>>>::new_clean(),
     );
 }
 

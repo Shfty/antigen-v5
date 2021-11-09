@@ -2,9 +2,15 @@ use super::{
     BufferWriteComponent, CommandBuffersComponent, RenderAttachment, SurfaceComponent,
     SurfaceTextureComponent, TextureViewComponent, TextureWriteComponent, ToBytes,
 };
-use crate::{BufferComponent, SurfaceSize, TextureComponent, TextureSize, SamplerComponent, ShaderModuleComponent};
+use crate::{
+    BufferComponent, SamplerComponent, ShaderModuleComponent, SurfaceSize, TextureComponent,
+    TextureSize,
+};
 
-use antigen_core::{ChangedFlag, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock};
+use antigen_core::{
+    ChangedFlag, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock, RwLock,
+    SizeComponent, Usage,
+};
 use antigen_winit::{winit::dpi::PhysicalSize, WindowComponent, WindowSize};
 
 use legion::{world::SubWorld, IntoQuery};
@@ -140,10 +146,10 @@ pub fn surface_texture_view_query(world: &legion::world::SubWorld, entity: &legi
 
 #[legion::system(par_for_each)]
 pub fn surface_size(
-    window_size: &antigen_core::SizeComponent<PhysicalSize<u32>, WindowSize>,
-    window_size_dirty: &ChangedFlag<antigen_core::SizeComponent<PhysicalSize<u32>, WindowSize>>,
-    surface_size: &antigen_core::SizeComponent<(u32, u32), SurfaceSize>,
-    surface_size_dirty: &ChangedFlag<antigen_core::SizeComponent<(u32, u32), SurfaceSize>>,
+    window_size: &Usage<WindowSize, SizeComponent<RwLock<PhysicalSize<u32>>>>,
+    window_size_dirty: &ChangedFlag<Usage<WindowSize, SizeComponent<RwLock<PhysicalSize<u32>>>>>,
+    surface_size: &Usage<SurfaceSize, SizeComponent<RwLock<(u32, u32)>>>,
+    surface_size_dirty: &ChangedFlag<Usage<SurfaceSize, SizeComponent<RwLock<(u32, u32)>>>>,
 ) {
     if window_size_dirty.get() {
         let window_size = *window_size.read();
@@ -154,10 +160,10 @@ pub fn surface_size(
 
 #[legion::system(par_for_each)]
 pub fn surface_texture_size(
-    surface_size: &antigen_core::SizeComponent<(u32, u32), SurfaceSize>,
-    surface_size_dirty: &ChangedFlag<antigen_core::SizeComponent<(u32, u32), SurfaceSize>>,
-    texture_size: &antigen_core::SizeComponent<(u32, u32), TextureSize>,
-    texture_size_dirty: &ChangedFlag<antigen_core::SizeComponent<(u32, u32), TextureSize>>,
+    surface_size: &Usage<SurfaceSize, SizeComponent<RwLock<(u32, u32)>>>,
+    surface_size_dirty: &ChangedFlag<Usage<SurfaceSize, SizeComponent<RwLock<(u32, u32)>>>>,
+    texture_size: &Usage<TextureSize, SizeComponent<RwLock<(u32, u32)>>>,
+    texture_size_dirty: &ChangedFlag<Usage<TextureSize, SizeComponent<RwLock<(u32, u32)>>>>,
 ) {
     if surface_size_dirty.get() {
         let size = *surface_size.read();
@@ -168,7 +174,7 @@ pub fn surface_texture_size(
 
 #[legion::system(par_for_each)]
 pub fn reset_surface_size_dirty_flag(
-    surface_size_dirty: &ChangedFlag<antigen_core::SizeComponent<(u32, u32), SurfaceSize>>,
+    surface_size_dirty: &ChangedFlag<Usage<SurfaceSize, SizeComponent<RwLock<(u32, u32)>>>>,
 ) {
     if surface_size_dirty.get() {
         surface_size_dirty.set(false);
@@ -177,7 +183,7 @@ pub fn reset_surface_size_dirty_flag(
 
 #[legion::system(par_for_each)]
 pub fn reset_texture_size_dirty_flag(
-    texture_size_dirty: &ChangedFlag<antigen_core::SizeComponent<(u32, u32), TextureSize>>,
+    texture_size_dirty: &ChangedFlag<Usage<TextureSize, SizeComponent<(u32, u32)>>>,
 ) {
     if texture_size_dirty.get() {
         texture_size_dirty.set(false);
@@ -270,7 +276,10 @@ pub fn create_samplers<T: Send + Sync + 'static>(world: &SubWorld, sampler: &Sam
 
 #[legion::system(par_for_each)]
 #[read_component(Device)]
-pub fn create_shader_modules<T: Send + Sync + 'static>(world: &SubWorld, shader_module: &ShaderModuleComponent<T>) {
+pub fn create_shader_modules<T: Send + Sync + 'static>(
+    world: &SubWorld,
+    shader_module: &ShaderModuleComponent<T>,
+) {
     if shader_module.read().is_pending() {
         let device = <&Device>::query().iter(world).next().unwrap();
         shader_module
@@ -306,34 +315,31 @@ pub fn buffer_write<
         &ChangedFlag<L>,
         &IndirectComponent<BufferComponent<T>>,
     )>::query()
-    .par_for_each(
-        world,
-        |(buffer_write, value, dirty_flag, buffer)| {
-            let buffer = world.get_indirect(buffer).unwrap();
+    .par_for_each(world, |(buffer_write, value, dirty_flag, buffer)| {
+        let buffer = world.get_indirect(buffer).unwrap();
 
-            if dirty_flag.get() {
-                let buffer = buffer.read();
-                let buffer = if let LazyComponent::Ready(buffer) = &*buffer {
-                    buffer
-                } else {
-                    return;
-                };
+        if dirty_flag.get() {
+            let buffer = buffer.read();
+            let buffer = if let LazyComponent::Ready(buffer) = &*buffer {
+                buffer
+            } else {
+                return;
+            };
 
-                let value = value.read();
-                let bytes = value.to_bytes();
+            let value = value.read();
+            let bytes = value.to_bytes();
 
-                println!(
-                    "Writing {} bytes to {} buffer at offset {}",
-                    bytes.len(),
-                    std::any::type_name::<T>(),
-                    *buffer_write.read()
-                );
-                queue.write_buffer(buffer, *buffer_write.read(), bytes);
+            println!(
+                "Writing {} bytes to {} buffer at offset {}",
+                bytes.len(),
+                std::any::type_name::<T>(),
+                *buffer_write.read()
+            );
+            queue.write_buffer(buffer, *buffer_write.read(), bytes);
 
-                dirty_flag.set(false);
-            }
-        },
-    );
+            dirty_flag.set(false);
+        }
+    });
 }
 
 // Write data to texture
@@ -362,48 +368,44 @@ where
         &ChangedFlag<L>,
         &IndirectComponent<TextureComponent<T>>,
     )>::query()
-    .par_for_each(
-        world,
-        |(texture_write, texels, dirty_flag, texture)| {
-            let texture_component = world.get_indirect(texture).unwrap();
+    .par_for_each(world, |(texture_write, texels, dirty_flag, texture)| {
+        let texture_component = world.get_indirect(texture).unwrap();
 
-            if dirty_flag.get() {
-                let texture = texture_component.read();
-                let texture = if let LazyComponent::Ready(texture) = &*texture {
-                    texture
-                } else {
-                    return;
-                };
+        if dirty_flag.get() {
+            let texture = texture_component.read();
+            let texture = if let LazyComponent::Ready(texture) = &*texture {
+                texture
+            } else {
+                return;
+            };
 
-                let texels = texels.read();
-                let bytes = texels.to_bytes();
-                let desc = texture_component.desc();
-                let image_copy_texture =
-                    ReadWriteLock::<ImageCopyTextureBase<()>>::read(texture_write);
-                let image_data_layout = ReadWriteLock::<ImageDataLayout>::read(texture_write);
+            let texels = texels.read();
+            let bytes = texels.to_bytes();
+            let desc = texture_component.desc();
+            let image_copy_texture = ReadWriteLock::<ImageCopyTextureBase<()>>::read(texture_write);
+            let image_data_layout = ReadWriteLock::<ImageDataLayout>::read(texture_write);
 
-                println!(
-                    "Writing {} bytes to texture at offset {}",
-                    bytes.len(),
-                    ReadWriteLock::<wgpu::ImageDataLayout>::read(texture_write).offset,
-                );
+            println!(
+                "Writing {} bytes to texture at offset {}",
+                bytes.len(),
+                ReadWriteLock::<wgpu::ImageDataLayout>::read(texture_write).offset,
+            );
 
-                queue.write_texture(
-                    wgpu::ImageCopyTexture {
-                        texture: &*texture,
-                        mip_level: image_copy_texture.mip_level,
-                        origin: image_copy_texture.origin,
-                        aspect: image_copy_texture.aspect,
-                    },
-                    bytes,
-                    *image_data_layout,
-                    desc.size,
-                );
+            queue.write_texture(
+                wgpu::ImageCopyTexture {
+                    texture: &*texture,
+                    mip_level: image_copy_texture.mip_level,
+                    origin: image_copy_texture.origin,
+                    aspect: image_copy_texture.aspect,
+                },
+                bytes,
+                *image_data_layout,
+                desc.size,
+            );
 
-                dirty_flag.set(false);
-            }
-        },
-    );
+            dirty_flag.set(false);
+        }
+    });
 }
 
 // Flush command buffers to the WGPU queue

@@ -6,12 +6,9 @@ pub use systems::*;
 
 pub use winit;
 
-use antigen_core::{
-    single, ChangedFlag, ImmutableSchedule, ImmutableWorld, ReadWriteLock, Single, SizeComponent,
-};
+use antigen_core::{single, ChangedFlag, ImmutableSchedule, ImmutableWorld, ReadWriteLock, Single};
 
 use winit::{
-    dpi::PhysicalSize,
     event::Event,
     event_loop::{ControlFlow, EventLoopWindowTarget},
 };
@@ -36,14 +33,8 @@ pub fn assemble_window_title(
     #[state] (entity,): &(legion::Entity,),
     #[state] title: &&'static str,
 ) {
-    cmd.add_component(
-        *entity,
-        antigen_core::NameComponent::<&str, WindowTitle>::new(title),
-    );
-    cmd.add_component(
-        *entity,
-        ChangedFlag::<antigen_core::NameComponent<&str, WindowTitle>>::new_dirty(),
-    );
+    cmd.add_component(*entity, WindowTitleComponent::new((*title).into()));
+    cmd.add_component(*entity, ChangedFlag::<WindowTitleComponent>::new_dirty());
 }
 
 #[legion::system]
@@ -52,14 +43,8 @@ pub fn assemble_window_size(
     #[state] (entity,): &(legion::Entity,),
 ) {
     // Add size tracking components to window
-    cmd.add_component(
-        *entity,
-        SizeComponent::<PhysicalSize<u32>, WindowSize>::default(),
-    );
-    cmd.add_component(
-        *entity,
-        ChangedFlag::<SizeComponent<PhysicalSize<u32>, WindowSize>>::new_clean(),
-    );
+    cmd.add_component(*entity, WindowSizeComponent::new(Default::default()));
+    cmd.add_component(*entity, ChangedFlag::<WindowSizeComponent>::new_clean());
 }
 
 /// Extend a winit event loop closure with a world reference and ECS event loop handling

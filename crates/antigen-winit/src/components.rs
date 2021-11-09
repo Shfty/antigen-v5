@@ -1,7 +1,7 @@
-use antigen_core::{impl_read_write_lock, LazyComponent, RwLock};
+use antigen_core::{LazyComponent, RwLock, Usage, impl_read_write_lock};
 
 use legion::Entity;
-use winit::{event::WindowEvent, window::WindowId};
+use winit::{dpi::PhysicalSize, event::WindowEvent, window::WindowId};
 
 use std::collections::BTreeMap;
 
@@ -47,3 +47,6 @@ pub enum WindowSize {}
 
 /// Usage tag for NameComponent
 pub enum WindowTitle {}
+
+pub type WindowTitleComponent = Usage<WindowTitle, RwLock<&'static str>>;
+pub type WindowSizeComponent = Usage<WindowSize, RwLock<PhysicalSize<u32>>>;

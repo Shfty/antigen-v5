@@ -67,3 +67,4 @@ impl<T: legion::storage::Component> AddComponentWithChangedFlag<T>
         );
     }
 }
+

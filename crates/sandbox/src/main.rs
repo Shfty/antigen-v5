@@ -1,13 +1,6 @@
-// TODO: Input handling for bunnymark
-//
-// TODO: Investigate frame drops on window events
-//       Ex. Obvious framerate dip when moving mouse over window in release mode
-//       [ ] Test rendering inside of RedrawRequested instead of RedrawEventsCleared
-//       [ ] Test rendering at the end of MainEventsCleared
-//
 // TODO: Implement remaining WGPU demos using ECS pattern
 //       [✓] Boids
-//       [>] Bunnymark
+//       [✓] Bunnymark
 //       [ ] Capture(?)
 //       [ ] Conservative Raster
 //       [✓] Cube
@@ -22,13 +15,18 @@
 //       [ ] Water
 //
 // TODO: Reimplement map renderer
+//
+// TODO: Investigate frame drops on window events
+//       Ex. Obvious framerate dip when moving mouse over bunnymark window in release mode
+//       [ ] Test rendering inside of RedrawRequested instead of RedrawEventsCleared
+//       [ ] Test rendering at the end of MainEventsCleared
 
 mod demos;
 
 pub use demos::*;
 
 use antigen_core::*;
-use antigen_wgpu::wgpu::{self, Backends, DeviceDescriptor, Features, Instance, Limits};
+use antigen_wgpu::wgpu::{DeviceDescriptor, Features, Limits};
 use antigen_winit::winit::event::{Event, WindowEvent};
 
 const GAME_TICK_DURATION: std::time::Duration = std::time::Duration::from_secs(1);
@@ -37,38 +35,20 @@ fn main() -> ! {
     // Create world
     let world = ImmutableWorld::default();
 
-    // Init WGPU backend
-    let backend_bits = wgpu::util::backend_bits_from_env().unwrap_or(Backends::PRIMARY);
+    // Assemble winit backend
+    antigen_winit::assemble_winit_entity(&mut world.write());
 
-    let instance = Instance::new(backend_bits);
-    println!("Created WGPU instance: {:#?}\n", instance);
-
-    let adapter = pollster::block_on(wgpu::util::initialize_adapter_from_env_or_default(
-        &instance,
-        backend_bits,
-        None,
-    ))
-    .expect("Failed to acquire WGPU adapter");
-
-    let adapter_info = adapter.get_info();
-    println!("Acquired WGPU adapter: {:#?}\n", adapter_info);
-
-    let (device, queue) = pollster::block_on(adapter.request_device(
+    // Assemble WGPU backend
+    antigen_wgpu::assemble_wgpu_entity_from_env(
+        &mut world.write(),
         &DeviceDescriptor {
             label: None,
             features: Features::default() | Features::POLYGON_MODE_LINE,
             limits: Limits::downlevel_defaults(),
         },
         None,
-    ))
-    .unwrap();
-
-    println!("Acquired WGPU device: {:#?}\n", device);
-    println!("Acquired WGPU queue: {:#?}\n", queue);
-
-    // Assemble winit / wgpu backend entities
-    antigen_winit::assemble_winit_entity(&mut world.write());
-    antigen_wgpu::assemble_wgpu_entity(&mut world.write(), instance, adapter, device, queue);
+        None,
+    );
 
     // Assemble modules
     single![demos::transform_integration::assemble_system()].execute_and_flush(&world);
@@ -156,9 +136,7 @@ pub fn winit_thread(world: ImmutableWorld) -> ! {
                 WindowEvent::CloseRequested => {
                     window_close_requested_schedule.execute(world);
                 }
-                WindowEvent::KeyboardInput { .. } => {
-                    window_keyboard_event_schedule.execute(world)
-                }
+                WindowEvent::KeyboardInput { .. } => window_keyboard_event_schedule.execute(world),
                 _ => (),
             },
             Event::RedrawEventsCleared => {

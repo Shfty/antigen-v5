@@ -1,78 +1,55 @@
-mod lazy_component;
+mod changed_flag;
 mod indirect_component;
-mod dirty_flag;
+mod lazy_component;
+mod usage;
 
-pub use lazy_component::*;
+pub use changed_flag::*;
 pub use indirect_component::*;
-pub use dirty_flag::*;
+pub use lazy_component::*;
+pub use usage::*;
 
-use crate::RwLock;
+use crate::ReadWriteLock;
 
-#[derive(Debug)]
-pub struct NameComponent<T, U> {
-    name: RwLock<T>,
-    _phantom: std::marker::PhantomData<U>
-}
+#[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct NameComponent<T>(T);
 
-impl<T, U> crate::ReadWriteLock<T> for NameComponent<T, U> {
-    fn read(&self) -> parking_lot::RwLockReadGuard<T> {
-        self.name.read()
+impl<T, V> ReadWriteLock<V> for NameComponent<T>
+where
+    T: ReadWriteLock<V>,
+{
+    fn read(&self) -> parking_lot::RwLockReadGuard<V> {
+        self.0.read()
     }
 
-    fn write(&self) -> parking_lot::RwLockWriteGuard<T> {
-        self.name.write()
-    }
-}
-
-impl<T, U> Default for NameComponent<T, U> where T: Default {
-    fn default() -> Self {
-        NameComponent {
-            name: RwLock::new(Default::default()),
-            _phantom: Default::default(),
-        }
+    fn write(&self) -> parking_lot::RwLockWriteGuard<V> {
+        self.0.write()
     }
 }
 
-impl<T, U> NameComponent<T, U> {
+impl<T> NameComponent<T> {
     pub fn new(name: T) -> Self {
-        NameComponent {
-            name: RwLock::new(name),
-            _phantom: Default::default(),
-        }
+        NameComponent(name)
     }
 }
 
-#[derive(Debug)]
-pub struct SizeComponent<T, U> {
-    size: RwLock<T>,
-    _phantom: std::marker::PhantomData<U>
-}
+#[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct SizeComponent<T>(T);
 
-impl<T, U> crate::ReadWriteLock<T> for SizeComponent<T, U> {
-    fn read(&self) -> parking_lot::RwLockReadGuard<T> {
-        self.size.read()
+impl<T, V> ReadWriteLock<V> for SizeComponent<T>
+where
+    T: ReadWriteLock<V>,
+{
+    fn read(&self) -> parking_lot::RwLockReadGuard<V> {
+        self.0.read()
     }
 
-    fn write(&self) -> parking_lot::RwLockWriteGuard<T> {
-        self.size.write()
-    }
-}
-
-impl<T, U> Default for SizeComponent<T, U> where T: Default {
-    fn default() -> Self {
-        SizeComponent {
-            size: RwLock::new(Default::default()),
-            _phantom: Default::default(),
-        }
+    fn write(&self) -> parking_lot::RwLockWriteGuard<V> {
+        self.0.write()
     }
 }
 
-impl<T, U> SizeComponent<T, U> {
+impl<T> SizeComponent<T> {
     pub fn new(size: T) -> Self {
-        SizeComponent {
-            size: RwLock::new(size),
-            _phantom: Default::default(),
-        }
+        SizeComponent(size)
     }
 }
-

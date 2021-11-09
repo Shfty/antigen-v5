@@ -1,6 +1,9 @@
 use super::{Cube, Index, Mandelbrot, OpaquePass, Uniform, Vertex, ViewProjection, WirePass};
 
-use antigen_core::{ChangedFlag, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock};
+use antigen_core::{
+    ChangedFlag, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock, RwLock,
+    SizeComponent, Usage,
+};
 use antigen_wgpu::{
     wgpu::{
         BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry,
@@ -14,7 +17,7 @@ use antigen_wgpu::{
     },
     BindGroupComponent, BufferComponent, CommandBuffersComponent, MatrixComponent,
     RenderAttachment, RenderPipelineComponent, ShaderModuleComponent, SurfaceComponent,
-    TextureViewComponent,
+    TextureSize, TextureViewComponent,
 };
 
 use legion::{world::SubWorld, IntoQuery};
@@ -197,16 +200,14 @@ pub fn cube_prepare(
 }
 
 #[legion::system(par_for_each)]
-#[read_component(antigen_core::SizeComponent<(u32, u32), antigen_wgpu::TextureSize>)]
-#[read_component(ChangedFlag<antigen_core::SizeComponent<(u32, u32), antigen_wgpu::TextureSize>>)]
+#[read_component(Usage<TextureSize, SizeComponent<RwLock<(u32, u32)>>>)]
+#[read_component(ChangedFlag<Usage<TextureSize, SizeComponent<RwLock<(u32, u32)>>>>)]
 pub fn cube_resize(
     world: &SubWorld,
     _: &Cube,
-    texture_size: &IndirectComponent<
-        antigen_core::SizeComponent<(u32, u32), antigen_wgpu::TextureSize>,
-    >,
+    texture_size: &IndirectComponent<Usage<TextureSize, SizeComponent<RwLock<(u32, u32)>>>>,
     dirty_flag: &IndirectComponent<
-        ChangedFlag<antigen_core::SizeComponent<(u32, u32), antigen_wgpu::TextureSize>>,
+        ChangedFlag<Usage<TextureSize, SizeComponent<RwLock<(u32, u32)>>>>,
     >,
     view_projection: &MatrixComponent<[f32; 16], ViewProjection>,
     matrix_dirty: &ChangedFlag<MatrixComponent<[f32; 16], ViewProjection>>,

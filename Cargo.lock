@@ -60,6 +60,7 @@ dependencies = [
  "antigen-winit",
  "bytemuck",
  "legion",
+ "pollster",
  "wgpu",
 ]
 

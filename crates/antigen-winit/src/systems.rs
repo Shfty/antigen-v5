@@ -1,7 +1,7 @@
 use super::{RedrawUnconditionally, WindowComponent};
-use crate::{WindowEntityMap, WindowEventComponent, WindowSize, WindowTitle};
+use crate::{WindowEntityMap, WindowEventComponent, WindowSizeComponent, WindowTitleComponent};
 
-use antigen_core::{ChangedFlag, ImmutableWorld, LazyComponent, ReadWriteLock, SizeComponent};
+use antigen_core::{ChangedFlag, ImmutableWorld, LazyComponent, ReadWriteLock};
 
 use legion::{world::SubWorld, IntoQuery};
 use rayon::iter::ParallelIterator;
@@ -34,8 +34,8 @@ pub fn create_windows_thread_local<T>(
     for entity in pending_entities {
         let (window_component, size_component, size_dirty) = <(
             &WindowComponent,
-            Option<&SizeComponent<PhysicalSize<u32>, WindowSize>>,
-            Option<&ChangedFlag<SizeComponent<PhysicalSize<u32>, WindowSize>>>,
+            Option<&WindowSizeComponent>,
+            Option<&ChangedFlag<WindowSizeComponent>>,
         )>::query()
         .get(&*world_read, *entity)
         .unwrap();
@@ -70,8 +70,8 @@ pub fn redraw_windows_on_main_events_cleared(
 #[read_component(WindowEventComponent)]
 #[read_component(WindowEntityMap)]
 #[read_component(WindowComponent)]
-#[read_component(SizeComponent<PhysicalSize<u32>, WindowSize>)]
-#[read_component(ChangedFlag<SizeComponent<PhysicalSize<u32>, WindowSize>>)]
+#[read_component(WindowSizeComponent)]
+#[read_component(ChangedFlag<WindowSizeComponent>)]
 pub fn resize_window(world: &SubWorld) {
     let event_window = <&WindowEventComponent>::query()
         .iter(&*world)
@@ -89,8 +89,8 @@ pub fn resize_window(world: &SubWorld) {
 
     let (window_component, size_component, dirty_flag) = if let Ok(components) = <(
         &WindowComponent,
-        &SizeComponent<PhysicalSize<u32>, WindowSize>,
-        &ChangedFlag<SizeComponent<PhysicalSize<u32>, WindowSize>>,
+        &WindowSizeComponent,
+        &ChangedFlag<WindowSizeComponent>,
     )>::query()
     .get(&*world, *entity)
     {
@@ -106,9 +106,7 @@ pub fn resize_window(world: &SubWorld) {
 }
 
 #[legion::system(par_for_each)]
-pub fn reset_resize_window_dirty_flags(
-    dirty_flag: &ChangedFlag<SizeComponent<PhysicalSize<u32>, WindowSize>>,
-) {
+pub fn reset_resize_window_dirty_flags(dirty_flag: &ChangedFlag<WindowSizeComponent>) {
     if dirty_flag.get() {
         dirty_flag.set(false);
     }
@@ -116,13 +114,13 @@ pub fn reset_resize_window_dirty_flags(
 
 #[legion::system]
 #[read_component(WindowComponent)]
-#[read_component(antigen_core::NameComponent<&str, WindowTitle>)]
-#[read_component(ChangedFlag<antigen_core::NameComponent<&str, WindowTitle>>)]
+#[read_component(WindowTitleComponent)]
+#[read_component(ChangedFlag<WindowTitleComponent>)]
 pub fn window_title(world: &SubWorld) {
     <(
         &WindowComponent,
-        &antigen_core::NameComponent<&str, WindowTitle>,
-        &ChangedFlag<antigen_core::NameComponent<&str, WindowTitle>>,
+        &WindowTitleComponent,
+        &ChangedFlag<WindowTitleComponent>,
     )>::query()
     .iter(world)
     .for_each(|(window, title, title_dirty)| {

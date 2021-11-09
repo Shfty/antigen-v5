@@ -6,10 +6,20 @@ use legion::systems::CommandBuffer;
 pub use systems::*;
 
 use antigen_core::{
-    parallel, serial, single, AddIndirectComponent, ChangedFlag, ImmutableSchedule, Serial, Single,
-    SizeComponent,
+    parallel, serial, single, AddIndirectComponent, ChangedFlag, ImmutableSchedule, RwLock, Serial,
+    Single, SizeComponent, Usage,
 };
-use antigen_wgpu::{BindGroupComponent, BufferComponent, CommandBuffersComponent, MatrixComponent, MeshIndices, MeshUvs, MeshVertices, RenderAttachment, RenderPipelineComponent, ShaderModuleComponent, SurfaceComponent, Texels, TextureComponent, TextureSize, TextureViewComponent, assemble_buffer_data, assemble_texture_data, wgpu::{BufferAddress, BufferDescriptor, BufferUsages, Device, Extent3d, ImageCopyTextureBase, ImageDataLayout, ShaderModuleDescriptor, ShaderSource, TextureAspect, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages, TextureViewDescriptor}};
+use antigen_wgpu::{
+    assemble_buffer_data, assemble_texture_data,
+    wgpu::{
+        BufferAddress, BufferDescriptor, BufferUsages, Device, Extent3d, ImageCopyTextureBase,
+        ImageDataLayout, ShaderModuleDescriptor, ShaderSource, TextureAspect, TextureDescriptor,
+        TextureDimension, TextureFormat, TextureUsages, TextureViewDescriptor,
+    },
+    BindGroupComponent, BufferComponent, CommandBuffersComponent, MatrixComponent, MeshIndices,
+    MeshUvs, MeshVertices, RenderAttachment, RenderPipelineComponent, ShaderModuleComponent,
+    SurfaceComponent, Texels, TextureComponent, TextureSize, TextureViewComponent,
+};
 
 use std::{borrow::Cow, num::NonZeroU32};
 
@@ -185,11 +195,11 @@ pub fn assemble(cmd: &mut CommandBuffer) {
         renderer_entity,
         window_entity,
     );
-    cmd.add_indirect_component::<SizeComponent<(u32, u32), TextureSize>>(
+    cmd.add_indirect_component::<Usage<TextureSize, SizeComponent<RwLock<(u32, u32)>>>>(
         renderer_entity,
         window_entity,
     );
-    cmd.add_indirect_component::<ChangedFlag<SizeComponent<(u32, u32), TextureSize>>>(
+    cmd.add_indirect_component::<ChangedFlag<Usage<TextureSize, SizeComponent<RwLock<(u32, u32)>>>>>(
         renderer_entity,
         window_entity,
     );

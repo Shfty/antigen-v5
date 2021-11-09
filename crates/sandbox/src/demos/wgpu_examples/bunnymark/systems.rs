@@ -4,10 +4,14 @@ use super::{
     Bunnies, Bunnymark, Global, Globals, Local, Locals, Logo, PlayfieldExtent, BUNNY_SIZE, GRAVITY,
 };
 use antigen_core::{
-    ChangedFlag, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock, SizeComponent,
+    ChangedFlag, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock, RwLock,
+    SizeComponent, Usage,
 };
 
-use antigen_winit::{WindowComponent, WindowEventComponent, winit::event::{ElementState, KeyboardInput, VirtualKeyCode}};
+use antigen_winit::{
+    winit::event::{ElementState, KeyboardInput, VirtualKeyCode, WindowEvent},
+    WindowComponent, WindowEventComponent,
+};
 
 use antigen_wgpu::{
     wgpu::{
@@ -209,7 +213,7 @@ pub fn bunnymark_prepare(
 pub fn bunnymark_tick(
     bunnies: &Bunnies,
     dirty_flag: &ChangedFlag<Bunnies>,
-    extent: &SizeComponent<(u32, u32), PlayfieldExtent>,
+    extent: &Usage<PlayfieldExtent, SizeComponent<RwLock<(u32, u32)>>>,
 ) {
     let delta = 0.01;
     for bunny in bunnies.write().iter_mut() {
@@ -311,7 +315,7 @@ pub fn bunnymark_key_event(
     world: &SubWorld,
     window: &IndirectComponent<WindowComponent>,
     bunnies: &Bunnies,
-    extent: &SizeComponent<(u32, u32), PlayfieldExtent>,
+    extent: &Usage<PlayfieldExtent, SizeComponent<RwLock<(u32, u32)>>>,
 ) {
     let window = world
         .get_indirect(window)
@@ -330,7 +334,7 @@ pub fn bunnymark_key_event(
 
     if let (
         Some(window_id),
-        Some(antigen_winit::winit::event::WindowEvent::KeyboardInput {
+        Some(WindowEvent::KeyboardInput {
             input:
                 KeyboardInput {
                     state: ElementState::Pressed,

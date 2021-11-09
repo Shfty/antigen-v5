@@ -8,7 +8,10 @@ pub use components::*;
 use legion::{world::SubWorld, IntoQuery};
 pub use systems::*;
 
-use antigen_core::{AddIndirectComponent, ImmutableSchedule, RwLock, Serial, Single, SizeComponent, impl_read_write_lock, parallel, serial, single};
+use antigen_core::{
+    impl_read_write_lock, parallel, serial, single, AddIndirectComponent, ImmutableSchedule,
+    RwLock, Serial, Single, SizeComponent, Usage,
+};
 
 use antigen_wgpu::{
     assemble_buffer_data, assemble_texture_data,
@@ -224,7 +227,9 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
     // Playfield extent
     cmd.add_component(
         renderer_entity,
-        SizeComponent::<(u32, u32), PlayfieldExtent>::new(extent),
+        Usage::<PlayfieldExtent, SizeComponent<RwLock<(u32, u32)>>>::new(SizeComponent::new(
+            RwLock::new(extent),
+        )),
     );
 }
 
