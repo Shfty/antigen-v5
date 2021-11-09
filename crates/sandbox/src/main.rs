@@ -1,5 +1,10 @@
 // TODO: Input handling for bunnymark
 //
+// TODO: Investigate frame drops on window events
+//       Ex. Obvious framerate dip when moving mouse over window in release mode
+//       [ ] Test rendering inside of RedrawRequested instead of RedrawEventsCleared
+//       [ ] Test rendering at the end of MainEventsCleared
+//
 // TODO: Implement remaining WGPU demos using ECS pattern
 //       [✓] Boids
 //       [>] Bunnymark
@@ -130,7 +135,8 @@ pub fn winit_thread(world: ImmutableWorld) -> ! {
         antigen_winit::resize_window_system(),
         surface_resize_schedule(),
     ];
-    let mut window_keyboard_event_schedule = serial![];
+    let mut window_keyboard_event_schedule =
+        serial![crate::demos::wgpu_examples::bunnymark::keyboard_event_schedule()];
     let mut window_close_requested_schedule = single![antigen_winit::close_window_system()];
 
     // Enter winit event loop
@@ -150,7 +156,7 @@ pub fn winit_thread(world: ImmutableWorld) -> ! {
                 WindowEvent::CloseRequested => {
                     window_close_requested_schedule.execute(world);
                 }
-                WindowEvent::KeyboardInput { input, .. } => {
+                WindowEvent::KeyboardInput { .. } => {
                     window_keyboard_event_schedule.execute(world)
                 }
                 _ => (),

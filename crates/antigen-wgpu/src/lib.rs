@@ -14,10 +14,10 @@ use wgpu::{
 pub use wgpu;
 
 use antigen_core::{
-    serial, single, AddComponentWithChangedFlag, AddIndirectComponent, ChangedFlag, ImmutableSchedule, ReadWriteLock,
-    Serial, Single, SizeComponent,
+    serial, single, AddComponentWithChangedFlag, AddIndirectComponent, ChangedFlag,
+    ImmutableSchedule, ReadWriteLock, Serial, Single, SizeComponent,
 };
-use antigen_winit::{EventWindow, WindowEntityMap};
+use antigen_winit::{WindowEntityMap, WindowEventComponent};
 
 /// Create an entity to hold an Instance, Adapter, Device and Queue
 pub fn assemble_wgpu_entity(
@@ -106,7 +106,7 @@ pub fn assemble_texture_data<U, T>(
 }
 
 #[legion::system]
-#[read_component(EventWindow)]
+#[read_component(WindowEventComponent)]
 #[read_component(WindowEntityMap)]
 #[read_component(SurfaceComponent)]
 #[read_component(SurfaceTextureComponent)]
@@ -115,16 +115,17 @@ pub fn assemble_texture_data<U, T>(
 pub fn surface_textures_views(world: &SubWorld) {
     use legion::IntoQuery;
 
-    let event_window = <&EventWindow>::query().iter(&*world).next().unwrap();
-    let event_window = event_window
-        .get_window()
-        .expect("No window for current event");
+    let window_event = <&WindowEventComponent>::query()
+        .iter(&*world)
+        .next()
+        .unwrap();
+    let window_event = window_event.read().0.expect("No window for current event");
 
     let window_entity_map = <&WindowEntityMap>::query().iter(&*world).next().unwrap();
     let window_entity_map = window_entity_map.read();
 
     let entity = window_entity_map
-        .get(&event_window)
+        .get(&window_event)
         .expect("Redraw requested for window without entity");
 
     // Create surface textures and views

@@ -19,7 +19,7 @@ use winit::{
 use legion::IntoQuery;
 
 pub fn assemble_winit_entity(world: &mut legion::World) {
-    world.push((WindowEntityMap::new(), EventWindow::new()));
+    world.push((WindowEntityMap::new(), WindowEventComponent::new()));
 }
 
 #[legion::system]
@@ -69,18 +69,27 @@ pub fn event_loop_wrapper<T>(
 ) -> impl FnMut(Event<T>, &EventLoopWindowTarget<T>, &mut ControlFlow) {
     move |event, event_loop_window_target, control_flow: &mut winit::event_loop::ControlFlow| {
         let world_read = world.read();
-        let event_window = <&EventWindow>::query().iter(&*world_read).next().unwrap();
-        event_window.set_window(None);
+        let window_event = <&WindowEventComponent>::query()
+            .iter(&*world_read)
+            .next()
+            .unwrap();
+        *window_event.write() = (None, None);
+
+        let event = if let Some(event) = event.to_static() {
+            event
+        } else {
+            return;
+        };
 
         match &event {
             winit::event::Event::MainEventsCleared => {
                 create_windows_thread_local(&world, event_loop_window_target);
             }
             winit::event::Event::RedrawRequested(window_id) => {
-                event_window.set_window(Some(*window_id));
+                window_event.write().0 = Some(*window_id);
             }
-            winit::event::Event::WindowEvent { window_id, .. } => {
-                event_window.set_window(Some(*window_id));
+            winit::event::Event::WindowEvent { window_id, event } => {
+                *window_event.write() = (Some(*window_id), Some(event.clone()));
             }
 
             _ => (),

@@ -3,15 +3,12 @@ mod systems;
 
 use std::{borrow::Cow, num::NonZeroU32};
 
-use antigen_winit::RedrawUnconditionally;
+use antigen_winit::{RedrawUnconditionally, WindowComponent};
 pub use components::*;
 use legion::{world::SubWorld, IntoQuery};
 pub use systems::*;
 
-use antigen_core::{
-    impl_read_write_lock, parallel, serial, AddIndirectComponent, ImmutableSchedule, ReadWriteLock,
-    RwLock, Serial, SizeComponent,
-};
+use antigen_core::{AddIndirectComponent, ImmutableSchedule, RwLock, Serial, Single, SizeComponent, impl_read_write_lock, parallel, serial, single};
 
 use antigen_wgpu::{
     assemble_buffer_data, assemble_texture_data,
@@ -105,6 +102,9 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
         window_entity,
     );
 
+    // Window reference for input handling
+    cmd.add_indirect_component::<WindowComponent>(renderer_entity, window_entity);
+
     // Shader
     cmd.add_component(
         renderer_entity,
@@ -131,26 +131,7 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
     };
     assemble_buffer_data::<Global, _>(cmd, renderer_entity, RwLock::new(globals), 0);
 
-    let bunnies = Bunnies::new();
-
-    let spawn_count = 64;
-    let color = rand::random::<u32>();
-    println!("Spawning {} bunnies", spawn_count,);
-
-    {
-        let mut bunnies = bunnies.write();
-        for _ in 0..spawn_count {
-            let speed = rand::random::<f32>() * MAX_VELOCITY - (MAX_VELOCITY * 0.5);
-            bunnies.push(Locals {
-                position: [0.0, 0.5 * (extent.0 as f32)],
-                velocity: [speed, 0.0],
-                color,
-                _pad: [0; 3],
-            });
-        }
-    }
-
-    assemble_buffer_data::<Local, _>(cmd, renderer_entity, bunnies, 0);
+    assemble_buffer_data::<Local, _>(cmd, renderer_entity, Bunnies::new(), 0);
 
     // Texture data
     let img_data = include_bytes!("logo.png");
@@ -267,4 +248,8 @@ pub fn prepare_schedule() -> ImmutableSchedule<Serial> {
 
 pub fn render_schedule() -> ImmutableSchedule<Serial> {
     serial![bunnymark_tick_system(), bunnymark_render_system()]
+}
+
+pub fn keyboard_event_schedule() -> ImmutableSchedule<Single> {
+    single![bunnymark_key_event_system()]
 }

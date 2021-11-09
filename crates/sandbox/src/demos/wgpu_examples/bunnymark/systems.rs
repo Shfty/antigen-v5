@@ -1,9 +1,13 @@
+use crate::wgpu_examples::bunnymark::MAX_VELOCITY;
+
 use super::{
     Bunnies, Bunnymark, Global, Globals, Local, Locals, Logo, PlayfieldExtent, BUNNY_SIZE, GRAVITY,
 };
 use antigen_core::{
     ChangedFlag, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock, SizeComponent,
 };
+
+use antigen_winit::{WindowComponent, WindowEventComponent, winit::event::{ElementState, KeyboardInput, VirtualKeyCode}};
 
 use antigen_wgpu::{
     wgpu::{
@@ -20,7 +24,7 @@ use antigen_wgpu::{
     TextureViewComponent,
 };
 
-use legion::IntoQuery;
+use legion::{world::SubWorld, IntoQuery};
 
 // Initialize the hello triangle render pipeline
 #[legion::system(par_for_each)]
@@ -296,6 +300,70 @@ pub fn bunnymark_render(
             }
 
             command_buffers.write().push(encoder.finish());
+        }
+    }
+}
+
+#[legion::system(par_for_each)]
+#[read_component(WindowComponent)]
+#[read_component(WindowEventComponent)]
+pub fn bunnymark_key_event(
+    world: &SubWorld,
+    window: &IndirectComponent<WindowComponent>,
+    bunnies: &Bunnies,
+    extent: &SizeComponent<(u32, u32), PlayfieldExtent>,
+) {
+    let window = world
+        .get_indirect(window)
+        .expect("No indirect WindowComponent");
+    let window = window.read();
+    let window = if let LazyComponent::Ready(window) = &*window {
+        window
+    } else {
+        return;
+    };
+
+    let window_event = <&WindowEventComponent>::query()
+        .iter(world)
+        .next()
+        .expect("No WindowEventComponent");
+
+    if let (
+        Some(window_id),
+        Some(antigen_winit::winit::event::WindowEvent::KeyboardInput {
+            input:
+                KeyboardInput {
+                    state: ElementState::Pressed,
+                    virtual_keycode: Some(VirtualKeyCode::Space),
+                    ..
+                },
+            ..
+        }),
+    ) = &*window_event.read()
+    {
+        if window.id() != *window_id {
+            return;
+        }
+
+        let spawn_count = 64 + bunnies.read().len() / 2;
+        let color = rand::random::<u32>();
+        println!(
+            "Spawning {} bunnies, total at {}",
+            spawn_count,
+            bunnies.read().len() + spawn_count
+        );
+
+        {
+            let mut bunnies = bunnies.write();
+            for _ in 0..spawn_count {
+                let speed = rand::random::<f32>() * MAX_VELOCITY - (MAX_VELOCITY * 0.5);
+                bunnies.push(Locals {
+                    position: [0.0, 0.5 * (extent.read().0 as f32)],
+                    velocity: [speed, 0.0],
+                    color,
+                    _pad: [0; 3],
+                });
+            }
         }
     }
 }

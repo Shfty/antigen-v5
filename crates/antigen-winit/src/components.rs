@@ -1,7 +1,7 @@
-use antigen_core::{LazyComponent, RwLock, impl_read_write_lock};
+use antigen_core::{impl_read_write_lock, LazyComponent, RwLock};
 
 use legion::Entity;
-use winit::window::WindowId;
+use winit::{event::WindowEvent, window::WindowId};
 
 use std::collections::BTreeMap;
 
@@ -31,22 +31,14 @@ impl WindowEntityMap {
     }
 }
 
-/// The window corresponding to a winit event
-pub struct EventWindow(RwLock<Option<WindowId>>);
+/// Window event wrapper
+pub struct WindowEventComponent(RwLock<(Option<WindowId>, Option<WindowEvent<'static>>)>);
 
-impl_read_write_lock!(EventWindow, 0, Option<WindowId>);
+impl_read_write_lock!(WindowEventComponent, 0, (Option<WindowId>, Option<WindowEvent<'static>>));
 
-impl EventWindow {
+impl WindowEventComponent {
     pub fn new() -> Self {
-        EventWindow(RwLock::new(None))
-    }
-
-    pub fn set_window(&self, window: Option<WindowId>) {
-        *self.0.write() = window;
-    }
-
-    pub fn get_window(&self) -> Option<WindowId> {
-        *self.0.read()
+        WindowEventComponent(RwLock::new((None, None)))
     }
 }
 

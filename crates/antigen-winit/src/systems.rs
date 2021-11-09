@@ -1,5 +1,5 @@
 use super::{RedrawUnconditionally, WindowComponent};
-use crate::{EventWindow, WindowEntityMap, WindowSize, WindowTitle};
+use crate::{WindowEntityMap, WindowEventComponent, WindowSize, WindowTitle};
 
 use antigen_core::{ChangedFlag, ImmutableWorld, LazyComponent, ReadWriteLock, SizeComponent};
 
@@ -67,23 +67,25 @@ pub fn redraw_windows_on_main_events_cleared(
 }
 
 #[legion::system]
-#[read_component(EventWindow)]
+#[read_component(WindowEventComponent)]
 #[read_component(WindowEntityMap)]
 #[read_component(WindowComponent)]
 #[read_component(SizeComponent<PhysicalSize<u32>, WindowSize>)]
 #[read_component(ChangedFlag<SizeComponent<PhysicalSize<u32>, WindowSize>>)]
 pub fn resize_window(world: &SubWorld) {
-    let event_window = <&EventWindow>::query().iter(&*world).next().unwrap();
-    let event_window = event_window
-        .get_window()
-        .expect("No window for current event");
+    let event_window = <&WindowEventComponent>::query()
+        .iter(&*world)
+        .next()
+        .unwrap();
+
+    let window_id = event_window.read().0.expect("No window for current event");
 
     let window_entity_map = <&WindowEntityMap>::query().iter(world).next().unwrap();
     let window_entity_map = window_entity_map.read();
 
     let entity = window_entity_map
-        .get(&event_window)
-        .expect("Redraw requested for window without entity");
+        .get(&window_id)
+        .expect("Resize requested for window without entity");
 
     let (window_component, size_component, dirty_flag) = if let Ok(components) = <(
         &WindowComponent,
@@ -135,21 +137,29 @@ pub fn window_title(world: &SubWorld) {
 }
 
 #[legion::system]
-#[read_component(EventWindow)]
+#[read_component(WindowEventComponent)]
 #[read_component(WindowEntityMap)]
 #[read_component(WindowComponent)]
 pub fn close_window(world: &SubWorld) {
-    let event_window = <&EventWindow>::query().iter(&*world).next().unwrap();
-    let event_window = event_window
-        .get_window()
-        .expect("No window for current event");
+    let window_event = <&WindowEventComponent>::query()
+        .iter(&*world)
+        .next()
+        .unwrap();
+
+    let window_event = window_event.read();
+
+    let window_id = if let (Some(window_id), _) = &*window_event {
+        window_id
+    } else {
+        return;
+    };
 
     let window_entity_map = <&WindowEntityMap>::query().iter(world).next().unwrap();
     let window_entity_map = window_entity_map.read();
 
     let entity = window_entity_map
-        .get(&event_window)
-        .expect("Redraw requested for window without entity");
+        .get(&window_id)
+        .expect("Close requested for window without entity");
 
     let window_component = <&WindowComponent>::query().get(&*world, *entity).unwrap();
 
