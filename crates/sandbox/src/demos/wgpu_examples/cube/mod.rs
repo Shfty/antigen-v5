@@ -16,8 +16,8 @@ use antigen_wgpu::{
         ImageDataLayout, ShaderModuleDescriptor, ShaderSource, TextureAspect, TextureDescriptor,
         TextureDimension, TextureFormat, TextureUsages, TextureViewDescriptor,
     },
-    BindGroupComponent, BufferComponent, CommandBuffersComponent, MatrixComponent, MeshIndices,
-    MeshUvs, MeshVertices, RenderAttachment, RenderPipelineComponent, ShaderModuleComponent,
+    BindGroupComponent, BufferComponent, CommandBuffersComponent, MeshIndices, MeshUvs,
+    MeshVertices, RenderAttachment, RenderPipelineComponent, ShaderModuleComponent,
     SurfaceComponent, Texels, TextureComponent, TextureSize, TextureViewComponent,
 };
 
@@ -43,6 +43,12 @@ pub enum Mandelbrot {}
 
 #[derive(Debug)]
 pub enum ViewProjection {}
+
+type ViewProjectionMatrix = Usage<ViewProjection, RwLock<[f32; 16]>>;
+
+type VertexBufferComponent<'a> = Usage<Vertex, BufferComponent<'a>>;
+type IndexBufferComponent<'a> = Usage<Index, BufferComponent<'a>>;
+type UniformBufferComponent<'a> = Usage<Uniform, BufferComponent<'a>>;
 
 fn create_vertices() -> Vec<[f32; 3]> {
     vec![
@@ -262,39 +268,39 @@ pub fn assemble(cmd: &mut CommandBuffer) {
     assemble_buffer_data::<Uniform, _>(
         cmd,
         renderer_entity,
-        MatrixComponent::<[f32; 16], ViewProjection>::new(buf),
+        ViewProjectionMatrix::new(buf.into()),
         0,
     );
 
     // Buffers
     cmd.add_component(
         renderer_entity,
-        BufferComponent::<Vertex>::pending(BufferDescriptor {
+        Usage::<Vertex, _>::new(BufferComponent::pending(BufferDescriptor {
             label: Some("Vertex Buffer"),
             usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
             size: ((vertex_count * vertex_size) + (vertex_count * uv_size)) as BufferAddress,
             mapped_at_creation: false,
-        }),
+        })),
     );
 
     cmd.add_component(
         renderer_entity,
-        BufferComponent::<Index>::pending(BufferDescriptor {
+        Usage::<Index, _>::new(BufferComponent::pending(BufferDescriptor {
             label: Some("Index Buffer"),
             usage: BufferUsages::INDEX | BufferUsages::COPY_DST,
             size: (index_count * std::mem::size_of::<u16>()) as BufferAddress,
             mapped_at_creation: false,
-        }),
+        })),
     );
 
     cmd.add_component(
         renderer_entity,
-        BufferComponent::<Uniform>::pending(BufferDescriptor {
+        Usage::<Uniform, _>::new(BufferComponent::pending(BufferDescriptor {
             label: Some("Uniform Buffer"),
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
             size: std::mem::size_of::<[f32; 4 * 4]>() as BufferAddress,
             mapped_at_creation: false,
-        }),
+        })),
     );
 
     // Texture
@@ -334,11 +340,7 @@ pub fn prepare_schedule() -> ImmutableSchedule<Serial> {
             antigen_wgpu::buffer_write_system::<Vertex, MeshVertices::<[f32; 3]>, Vec<[f32; 3]>>(),
             antigen_wgpu::buffer_write_system::<Vertex, MeshUvs::<[f32; 2]>, Vec<[f32; 2]>>(),
             antigen_wgpu::buffer_write_system::<Index, MeshIndices::<u16>, Vec<u16>>(),
-            antigen_wgpu::buffer_write_system::<
-                Uniform,
-                MatrixComponent<[f32; 16], ViewProjection>,
-                [f32; 16],
-            >(),
+            antigen_wgpu::buffer_write_system::<Uniform, ViewProjectionMatrix, [f32; 16]>(),
             antigen_wgpu::texture_write_system::<Mandelbrot, Texels<Vec<u8>>, Vec<u8>>(),
         ],
         cube_prepare_system(),

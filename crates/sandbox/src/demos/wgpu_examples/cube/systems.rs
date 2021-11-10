@@ -1,4 +1,7 @@
-use super::{Cube, Index, Mandelbrot, OpaquePass, Uniform, Vertex, ViewProjection, WirePass};
+use super::{
+    Cube, IndexBufferComponent, Mandelbrot, OpaquePass, UniformBufferComponent,
+    VertexBufferComponent, ViewProjectionMatrix, WirePass,
+};
 
 use antigen_core::{
     ChangedFlag, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock, RwLock,
@@ -15,9 +18,9 @@ use antigen_wgpu::{
         ShaderStages, SurfaceConfiguration, TextureSampleType, TextureViewDimension,
         VertexAttribute, VertexBufferLayout, VertexFormat, VertexState, VertexStepMode,
     },
-    BindGroupComponent, BufferComponent, CommandBuffersComponent, MatrixComponent,
-    RenderAttachment, RenderPipelineComponent, ShaderModuleComponent, SurfaceComponent,
-    TextureSize, TextureViewComponent,
+    BindGroupComponent, CommandBuffersComponent, RenderAttachment,
+    RenderPipelineComponent, ShaderModuleComponent, SurfaceComponent, TextureSize,
+    TextureViewComponent,
 };
 
 use legion::{world::SubWorld, IntoQuery};
@@ -33,7 +36,7 @@ pub fn cube_prepare(
     opaque_pipeline_component: &RenderPipelineComponent<OpaquePass>,
     wire_pipeline_component: &RenderPipelineComponent<WirePass>,
     texture_view: &TextureViewComponent<'static, Mandelbrot>,
-    uniform_buffer: &BufferComponent<Uniform>,
+    uniform_buffer: &UniformBufferComponent,
     bind_group_component: &BindGroupComponent<()>,
     surface_component: &IndirectComponent<SurfaceComponent>,
 ) {
@@ -209,8 +212,8 @@ pub fn cube_resize(
     dirty_flag: &IndirectComponent<
         ChangedFlag<Usage<TextureSize, SizeComponent<RwLock<(u32, u32)>>>>,
     >,
-    view_projection: &MatrixComponent<[f32; 16], ViewProjection>,
-    matrix_dirty: &ChangedFlag<MatrixComponent<[f32; 16], ViewProjection>>,
+    view_projection: &ViewProjectionMatrix,
+    matrix_dirty: &ChangedFlag<ViewProjectionMatrix>,
 ) {
     let dirty_flag = world.get_indirect(dirty_flag).unwrap();
     let texture_size = world.get_indirect(texture_size).unwrap();
@@ -234,8 +237,8 @@ pub fn cube_render(
     opaque_pipeline: &RenderPipelineComponent<OpaquePass>,
     wire_pipeline: &RenderPipelineComponent<WirePass>,
     bind_group: &BindGroupComponent<()>,
-    vertex_buffer: &BufferComponent<Vertex>,
-    index_buffer: &BufferComponent<Index>,
+    vertex_buffer: &VertexBufferComponent,
+    index_buffer: &IndexBufferComponent,
     command_buffers: &CommandBuffersComponent,
     texture_view: &IndirectComponent<TextureViewComponent<'static, RenderAttachment>>,
 ) {

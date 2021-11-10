@@ -119,7 +119,7 @@ pub fn assemble_buffer_data<U, T>(
 {
     cmd.add_component_with_changed_flag_dirty(entity, data);
     cmd.add_component(entity, BufferWriteComponent::<U, T>::new(offset));
-    cmd.add_indirect_component_self::<BufferComponent<U>>(entity);
+    cmd.add_indirect_component_self::<Usage<U, BufferComponent>>(entity);
 }
 
 pub fn assemble_texture_data<U, T>(

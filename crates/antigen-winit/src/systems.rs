@@ -5,7 +5,7 @@ use antigen_core::{ChangedFlag, ImmutableWorld, LazyComponent, ReadWriteLock};
 
 use legion::{world::SubWorld, IntoQuery};
 use rayon::iter::ParallelIterator;
-use winit::{dpi::PhysicalSize, event_loop::EventLoopWindowTarget};
+use winit::{event_loop::EventLoopWindowTarget};
 
 // Create winit::Window for WindowComponent
 pub fn create_windows_thread_local<T>(

@@ -1,7 +1,8 @@
 use crate::wgpu_examples::bunnymark::MAX_VELOCITY;
 
 use super::{
-    Bunnies, Bunnymark, Global, Globals, Local, Locals, Logo, PlayfieldExtent, BUNNY_SIZE, GRAVITY,
+    Bunnies, Bunnymark, Global, GlobalBufferComponent, Globals, Local, LocalBufferComponent,
+    Locals, Logo, PlayfieldExtent, BUNNY_SIZE, GRAVITY,
 };
 use antigen_core::{
     ChangedFlag, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock, RwLock,
@@ -23,7 +24,7 @@ use antigen_wgpu::{
         RenderPassDescriptor, RenderPipelineDescriptor, ShaderStages, SurfaceConfiguration,
         TextureSampleType, TextureViewDimension, VertexState,
     },
-    BindGroupComponent, BufferComponent, CommandBuffersComponent, RenderAttachment,
+    BindGroupComponent, CommandBuffersComponent, RenderAttachment,
     RenderPipelineComponent, SamplerComponent, ShaderModuleComponent, SurfaceComponent,
     TextureViewComponent,
 };
@@ -39,8 +40,8 @@ pub fn bunnymark_prepare(
     _: &Bunnymark,
     shader_module: &ShaderModuleComponent<()>,
     render_pipeline_component: &RenderPipelineComponent<()>,
-    global_buffer: &BufferComponent<Global>,
-    local_buffer: &BufferComponent<Local>,
+    global_buffer: &GlobalBufferComponent,
+    local_buffer: &LocalBufferComponent,
     texture_view: &TextureViewComponent<'static, Logo>,
     sampler: &SamplerComponent<'static, Logo>,
     global_bind_group: &BindGroupComponent<Global>,

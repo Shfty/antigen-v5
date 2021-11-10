@@ -9,6 +9,7 @@ pub use systems::*;
 
 use antigen_core::{
     parallel, serial, single, AddIndirectComponent, ImmutableSchedule, RwLock, Serial, Single,
+    Usage,
 };
 
 use antigen_wgpu::{
@@ -29,6 +30,11 @@ pub enum Vertex {}
 pub enum Uniform {}
 pub enum FrontBuffer {}
 pub enum BackBuffer {}
+
+type VertexBufferComponent<'a> = Usage<Vertex, BufferComponent<'a>>;
+type UniformBufferComponent<'a> = Usage<Uniform, BufferComponent<'a>>;
+type FrontBufferComponent<'a> = Usage<FrontBuffer, BufferComponent<'a>>;
+type BackBufferComponent<'a> = Usage<BackBuffer, BufferComponent<'a>>;
 
 const NUM_PARTICLES: usize = 1500;
 const PARTICLES_PER_GROUP: usize = 64;
@@ -120,42 +126,42 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     // Buffers
     cmd.add_component(
         renderer_entity,
-        BufferComponent::<Vertex>::pending(BufferDescriptor {
+        Usage::<Vertex, _>::new(BufferComponent::pending(BufferDescriptor {
             label: Some("Vertex Buffer"),
             size: (6 * std::mem::size_of::<f32>()) as BufferAddress,
             usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
             mapped_at_creation: false,
-        }),
+        })),
     );
 
     cmd.add_component(
         renderer_entity,
-        BufferComponent::<Uniform>::pending(BufferDescriptor {
+        Usage::<Uniform, _>::new(BufferComponent::pending(BufferDescriptor {
             label: Some("Simulation Parameter Buffer"),
             size: 7 * std::mem::size_of::<f32>() as BufferAddress,
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
             mapped_at_creation: false,
-        }),
+        })),
     );
 
     cmd.add_component(
         renderer_entity,
-        BufferComponent::<FrontBuffer>::pending(BufferDescriptor {
+        Usage::<FrontBuffer, _>::new(BufferComponent::pending(BufferDescriptor {
             label: Some("Front Particle Buffer"),
             size: (4 * NUM_PARTICLES * std::mem::size_of::<f32>()) as BufferAddress,
             usage: BufferUsages::VERTEX | BufferUsages::STORAGE | BufferUsages::COPY_DST,
             mapped_at_creation: false,
-        }),
+        })),
     );
 
     cmd.add_component(
         renderer_entity,
-        BufferComponent::<BackBuffer>::pending(BufferDescriptor {
+        Usage::<BackBuffer, _>::new(BufferComponent::pending(BufferDescriptor {
             label: Some("Back Particle Buffer"),
             size: (4 * NUM_PARTICLES * std::mem::size_of::<f32>()) as BufferAddress,
             usage: BufferUsages::VERTEX | BufferUsages::STORAGE | BufferUsages::COPY_DST,
             mapped_at_creation: false,
-        }),
+        })),
     );
 }
 

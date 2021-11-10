@@ -36,6 +36,9 @@ pub enum Global {}
 pub enum Local {}
 pub enum PlayfieldExtent {}
 
+pub type GlobalBufferComponent<'a> = Usage<Global, BufferComponent<'a>>;
+pub type LocalBufferComponent<'a> = Usage<Local, BufferComponent<'a>>;
+
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct Globals {
@@ -169,24 +172,24 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
     // Buffers
     cmd.add_component(
         renderer_entity,
-        BufferComponent::<Global>::pending(BufferDescriptor {
+        Usage::<Global, _>::new(BufferComponent::pending(BufferDescriptor {
             label: Some("Global"),
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
             size: std::mem::size_of::<Globals>() as BufferAddress,
             mapped_at_creation: false,
-        }),
+        })),
     );
 
     let uniform_alignment = device.limits().min_uniform_buffer_offset_alignment as BufferAddress;
 
     cmd.add_component(
         renderer_entity,
-        BufferComponent::<Local>::pending(BufferDescriptor {
+        Usage::<Local, _>::new(BufferComponent::pending(BufferDescriptor {
             label: Some("Local"),
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
             size: (MAX_BUNNIES as BufferAddress) * uniform_alignment,
             mapped_at_creation: false,
-        }),
+        })),
     );
 
     // Texture

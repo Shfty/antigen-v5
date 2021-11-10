@@ -1,6 +1,9 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use super::{BackBuffer, Boids, FrontBuffer, Uniform, Vertex, NUM_PARTICLES, Draw, Compute};
+use super::{
+    BackBuffer, BackBufferComponent, Boids, Compute, Draw, FrontBuffer, FrontBufferComponent,
+    UniformBufferComponent, VertexBufferComponent, NUM_PARTICLES,
+};
 use antigen_core::{GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock};
 
 use antigen_wgpu::{
@@ -10,11 +13,10 @@ use antigen_wgpu::{
         CommandEncoderDescriptor, ComputePassDescriptor, ComputePipelineDescriptor, Device,
         FragmentState, LoadOp, MultisampleState, Operations, PipelineLayoutDescriptor,
         PrimitiveState, RenderPassColorAttachment, RenderPassDescriptor, RenderPipelineDescriptor,
-        ShaderStages, SurfaceConfiguration,
-        VertexBufferLayout, VertexState, VertexStepMode,
+        ShaderStages, SurfaceConfiguration, VertexBufferLayout, VertexState, VertexStepMode,
     },
-    BindGroupComponent, BufferComponent, CommandBuffersComponent, ComputePipelineComponent,
-    RenderAttachment, RenderPipelineComponent, SurfaceComponent, TextureViewComponent, ShaderModuleComponent,
+    BindGroupComponent, CommandBuffersComponent, ComputePipelineComponent, RenderAttachment,
+    RenderPipelineComponent, ShaderModuleComponent, SurfaceComponent, TextureViewComponent,
 };
 
 use legion::IntoQuery;
@@ -30,9 +32,9 @@ pub fn boids_prepare(
     draw_shader: &ShaderModuleComponent<Draw>,
     render_pipeline_component: &RenderPipelineComponent<()>,
     compute_pipeline_component: &ComputePipelineComponent<()>,
-    sim_param_buffer: &BufferComponent<Uniform>,
-    front_buffer: &BufferComponent<FrontBuffer>,
-    back_buffer: &BufferComponent<BackBuffer>,
+    sim_param_buffer: &UniformBufferComponent,
+    front_buffer: &FrontBufferComponent,
+    back_buffer: &BackBufferComponent,
     front_buffer_bind_group: &BindGroupComponent<FrontBuffer>,
     back_buffer_bind_group: &BindGroupComponent<BackBuffer>,
     surface_component: &IndirectComponent<SurfaceComponent>,
@@ -228,9 +230,9 @@ pub fn boids_render(
     _: &Boids,
     render_pipeline: &RenderPipelineComponent<()>,
     compute_pipeline: &ComputePipelineComponent<()>,
-    vertex_buffer: &BufferComponent<Vertex>,
-    front_buffer: &BufferComponent<FrontBuffer>,
-    back_buffer: &BufferComponent<BackBuffer>,
+    vertex_buffer: &VertexBufferComponent,
+    front_buffer: &FrontBufferComponent,
+    back_buffer: &BackBufferComponent,
     front_buffer_bind_group: &BindGroupComponent<FrontBuffer>,
     back_buffer_bind_group: &BindGroupComponent<BackBuffer>,
     command_buffers: &CommandBuffersComponent,

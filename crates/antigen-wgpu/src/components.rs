@@ -226,13 +226,12 @@ impl CommandBuffersComponent {
 
 // WGPU buffer
 #[derive(Debug)]
-pub struct BufferComponent<'a, T> {
+pub struct BufferComponent<'a> {
     desc: wgpu::BufferDescriptor<'a>,
     buffer: RwLock<LazyComponent<wgpu::Buffer>>,
-    _phantom: PhantomData<T>,
 }
 
-impl<T> ReadWriteLock<LazyComponent<wgpu::Buffer>> for BufferComponent<'_, T> {
+impl ReadWriteLock<LazyComponent<wgpu::Buffer>> for BufferComponent<'_> {
     fn read(&self) -> RwLockReadGuard<LazyComponent<wgpu::Buffer>> {
         self.buffer.read()
     }
@@ -242,12 +241,11 @@ impl<T> ReadWriteLock<LazyComponent<wgpu::Buffer>> for BufferComponent<'_, T> {
     }
 }
 
-impl<'a, T> BufferComponent<'a, T> {
+impl<'a> BufferComponent<'a> {
     pub fn pending(desc: BufferDescriptor<'a>) -> Self {
         BufferComponent {
             desc,
             buffer: RwLock::new(LazyComponent::Pending),
-            _phantom: Default::default(),
         }
     }
 
@@ -432,30 +430,6 @@ impl<T> MeshIndices<T> {
 pub enum Model {}
 pub enum View {}
 pub enum Projection {}
-
-pub struct MatrixComponent<M, U> {
-    matrix: RwLock<M>,
-    _phantom: PhantomData<U>,
-}
-
-impl<M, U> ReadWriteLock<M> for MatrixComponent<M, U> {
-    fn read(&self) -> RwLockReadGuard<M> {
-        self.matrix.read()
-    }
-
-    fn write(&self) -> RwLockWriteGuard<M> {
-        self.matrix.write()
-    }
-}
-
-impl<M, U> MatrixComponent<M, U> {
-    pub fn new(matrix: M) -> Self {
-        MatrixComponent {
-            matrix: RwLock::new(matrix),
-            _phantom: Default::default(),
-        }
-    }
-}
 
 // Surface usage tag for SizeComponent
 pub enum SurfaceSize {}

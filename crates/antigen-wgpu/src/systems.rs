@@ -219,7 +219,7 @@ pub fn surface_texture_view_drop(
 
 #[legion::system(par_for_each)]
 #[read_component(Device)]
-pub fn create_buffers<T: Send + Sync + 'static>(world: &SubWorld, buffer: &BufferComponent<T>) {
+pub fn create_buffers<T: Send + Sync + 'static>(world: &SubWorld, buffer: &Usage<T, BufferComponent>) {
     if buffer.read().is_pending() {
         let device = <&Device>::query().iter(world).next().unwrap();
         println!("Created {} buffer", std::any::type_name::<T>());
@@ -294,8 +294,8 @@ pub fn create_shader_modules<T: Send + Sync + 'static>(
 #[read_component(BufferWriteComponent<T, L>)]
 #[read_component(L)]
 #[read_component(ChangedFlag<L>)]
-#[read_component(IndirectComponent<BufferComponent<T>>)]
-#[read_component(BufferComponent<T>)]
+#[read_component(IndirectComponent<Usage<T, BufferComponent>>)]
+#[read_component(Usage<T, BufferComponent>)]
 pub fn buffer_write<
     T: Send + Sync + 'static,
     L: ReadWriteLock<V> + Send + Sync + 'static,
@@ -313,7 +313,7 @@ pub fn buffer_write<
         &BufferWriteComponent<T, L>,
         &L,
         &ChangedFlag<L>,
-        &IndirectComponent<BufferComponent<T>>,
+        &IndirectComponent<Usage<T, BufferComponent>>,
     )>::query()
     .par_for_each(world, |(buffer_write, value, dirty_flag, buffer)| {
         let buffer = world.get_indirect(buffer).unwrap();
