@@ -1,8 +1,9 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use super::{
-    BackBuffer, BackBufferComponent, Boids, Compute, Draw, FrontBuffer, FrontBufferComponent,
-    UniformBufferComponent, VertexBufferComponent, NUM_PARTICLES,
+    BackBufferBindGroupComponent, BackBufferComponent, Boids, 
+    FrontBufferBindGroupComponent, FrontBufferComponent, UniformBufferComponent,
+    VertexBufferComponent, NUM_PARTICLES, ComputeShaderModuleComponent, DrawShaderModuleComponent,
 };
 use antigen_core::{GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock};
 
@@ -15,8 +16,8 @@ use antigen_wgpu::{
         PrimitiveState, RenderPassColorAttachment, RenderPassDescriptor, RenderPipelineDescriptor,
         ShaderStages, SurfaceConfiguration, VertexBufferLayout, VertexState, VertexStepMode,
     },
-    BindGroupComponent, CommandBuffersComponent, ComputePipelineComponent, RenderAttachment,
-    RenderPipelineComponent, ShaderModuleComponent, SurfaceComponent, TextureViewComponent,
+    CommandBuffersComponent, ComputePipelineComponent,
+    RenderAttachmentTextureView, RenderPipelineComponent, SurfaceComponent,
 };
 
 use legion::IntoQuery;
@@ -28,15 +29,15 @@ use legion::IntoQuery;
 pub fn boids_prepare(
     world: &legion::world::SubWorld,
     _: &Boids,
-    compute_shader: &ShaderModuleComponent<Compute>,
-    draw_shader: &ShaderModuleComponent<Draw>,
-    render_pipeline_component: &RenderPipelineComponent<()>,
-    compute_pipeline_component: &ComputePipelineComponent<()>,
+    compute_shader: &ComputeShaderModuleComponent,
+    draw_shader: &DrawShaderModuleComponent,
+    render_pipeline_component: &RenderPipelineComponent,
+    compute_pipeline_component: &ComputePipelineComponent,
     sim_param_buffer: &UniformBufferComponent,
     front_buffer: &FrontBufferComponent,
     back_buffer: &BackBufferComponent,
-    front_buffer_bind_group: &BindGroupComponent<FrontBuffer>,
-    back_buffer_bind_group: &BindGroupComponent<BackBuffer>,
+    front_buffer_bind_group: &FrontBufferBindGroupComponent,
+    back_buffer_bind_group: &BackBufferBindGroupComponent,
     surface_component: &IndirectComponent<SurfaceComponent>,
 ) {
     if !render_pipeline_component.read().is_pending() {
@@ -224,19 +225,19 @@ pub fn boids_prepare(
 // Render the hello triangle pipeline to the specified entity's surface
 #[legion::system(par_for_each)]
 #[read_component(Device)]
-#[read_component(TextureViewComponent<'static, RenderAttachment>)]
+#[read_component(RenderAttachmentTextureView<'static>)]
 pub fn boids_render(
     world: &legion::world::SubWorld,
     _: &Boids,
-    render_pipeline: &RenderPipelineComponent<()>,
-    compute_pipeline: &ComputePipelineComponent<()>,
+    render_pipeline: &RenderPipelineComponent,
+    compute_pipeline: &ComputePipelineComponent,
     vertex_buffer: &VertexBufferComponent,
     front_buffer: &FrontBufferComponent,
     back_buffer: &BackBufferComponent,
-    front_buffer_bind_group: &BindGroupComponent<FrontBuffer>,
-    back_buffer_bind_group: &BindGroupComponent<BackBuffer>,
+    front_buffer_bind_group: &FrontBufferBindGroupComponent,
+    back_buffer_bind_group: &BackBufferBindGroupComponent,
     command_buffers: &CommandBuffersComponent,
-    texture_view: &IndirectComponent<TextureViewComponent<'static, RenderAttachment>>,
+    texture_view: &IndirectComponent<RenderAttachmentTextureView<'static>>,
     #[state] frame_num_atomic: &AtomicUsize,
     #[state] work_group_count: &u32,
 ) {

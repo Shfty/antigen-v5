@@ -120,7 +120,7 @@ pub fn surface_texture_view_query(world: &legion::world::SubWorld, entity: &legi
     let (surface_texture, surface_texture_dirty, texture_view) = if let Ok(components) = <(
         &SurfaceTextureComponent,
         &ChangedFlag<SurfaceTextureComponent>,
-        &TextureViewComponent<RenderAttachment>,
+        &Usage<RenderAttachment, TextureViewComponent>,
     )>::query(
     )
     .get(world, *entity)
@@ -207,7 +207,7 @@ pub fn surface_texture_present(
 pub fn surface_texture_view_drop(
     surface_texture: &SurfaceTextureComponent,
     surface_texture_dirty: &ChangedFlag<SurfaceTextureComponent>,
-    texture_view: &TextureViewComponent<RenderAttachment>,
+    texture_view: &Usage<RenderAttachment, TextureViewComponent>,
 ) {
     if surface_texture_dirty.get() {
         if surface_texture.read().is_none() {
@@ -219,7 +219,10 @@ pub fn surface_texture_view_drop(
 
 #[legion::system(par_for_each)]
 #[read_component(Device)]
-pub fn create_buffers<T: Send + Sync + 'static>(world: &SubWorld, buffer: &Usage<T, BufferComponent>) {
+pub fn create_buffers<T: Send + Sync + 'static>(
+    world: &SubWorld,
+    buffer: &Usage<T, BufferComponent>,
+) {
     if buffer.read().is_pending() {
         let device = <&Device>::query().iter(world).next().unwrap();
         println!("Created {} buffer", std::any::type_name::<T>());
@@ -231,7 +234,10 @@ pub fn create_buffers<T: Send + Sync + 'static>(world: &SubWorld, buffer: &Usage
 
 #[legion::system(par_for_each)]
 #[read_component(Device)]
-pub fn create_textures<T: Send + Sync + 'static>(world: &SubWorld, texture: &TextureComponent<T>) {
+pub fn create_textures<T: Send + Sync + 'static>(
+    world: &SubWorld,
+    texture: &Usage<T, TextureComponent>,
+) {
     if texture.read().is_pending() {
         let device = <&Device>::query().iter(world).next().unwrap();
         texture
@@ -243,8 +249,8 @@ pub fn create_textures<T: Send + Sync + 'static>(world: &SubWorld, texture: &Tex
 #[legion::system(par_for_each)]
 #[read_component(Device)]
 pub fn create_texture_views<T: Send + Sync + 'static>(
-    texture: &TextureComponent<T>,
-    texture_view: &TextureViewComponent<T>,
+    texture: &Usage<T, TextureComponent>,
+    texture_view: &Usage<T, TextureViewComponent>,
 ) {
     if !texture_view.read().is_pending() {
         return;
@@ -265,7 +271,10 @@ pub fn create_texture_views<T: Send + Sync + 'static>(
 
 #[legion::system(par_for_each)]
 #[read_component(Device)]
-pub fn create_samplers<T: Send + Sync + 'static>(world: &SubWorld, sampler: &SamplerComponent<T>) {
+pub fn create_samplers<T: Send + Sync + 'static>(
+    world: &SubWorld,
+    sampler: &Usage<T, SamplerComponent>,
+) {
     if sampler.read().is_pending() {
         let device = <&Device>::query().iter(world).next().unwrap();
         sampler
@@ -276,22 +285,35 @@ pub fn create_samplers<T: Send + Sync + 'static>(world: &SubWorld, sampler: &Sam
 
 #[legion::system(par_for_each)]
 #[read_component(Device)]
-pub fn create_shader_modules<T: Send + Sync + 'static>(
+pub fn create_shader_modules(world: &SubWorld, shader_module: &ShaderModuleComponent) {
+    if shader_module.read().is_pending() {
+        let device = <&Device>::query().iter(world).next().unwrap();
+        shader_module
+            .write()
+            .set_ready(device.create_shader_module(shader_module.descriptor()));
+        println!("Created shader module");
+    }
+}
+
+#[legion::system(par_for_each)]
+#[read_component(Device)]
+pub fn create_shader_modules_usage<T: Send + Sync + 'static>(
     world: &SubWorld,
-    shader_module: &ShaderModuleComponent<T>,
+    shader_module: &Usage<T, ShaderModuleComponent>,
 ) {
     if shader_module.read().is_pending() {
         let device = <&Device>::query().iter(world).next().unwrap();
         shader_module
             .write()
             .set_ready(device.create_shader_module(shader_module.descriptor()));
+        println!("Created {} shader module", std::any::type_name::<T>());
     }
 }
 
 // Write data to buffer
 #[legion::system]
 #[read_component(Queue)]
-#[read_component(BufferWriteComponent<T, L>)]
+#[read_component(Usage<T, BufferWriteComponent<L>>)]
 #[read_component(L)]
 #[read_component(ChangedFlag<L>)]
 #[read_component(IndirectComponent<Usage<T, BufferComponent>>)]
@@ -310,7 +332,7 @@ pub fn buffer_write<
     };
 
     <(
-        &BufferWriteComponent<T, L>,
+        &Usage<T, BufferWriteComponent<L>>,
         &L,
         &ChangedFlag<L>,
         &IndirectComponent<Usage<T, BufferComponent>>,
@@ -345,11 +367,11 @@ pub fn buffer_write<
 // Write data to texture
 #[legion::system]
 #[read_component(Queue)]
-#[read_component(TextureWriteComponent<T, L>)]
+#[read_component(Usage<T, TextureWriteComponent<L>>)]
 #[read_component(L)]
 #[read_component(ChangedFlag<L>)]
-#[read_component(IndirectComponent<TextureComponent<T>>)]
-#[read_component(TextureComponent<T>)]
+#[read_component(IndirectComponent<Usage<T, TextureComponent>>)]
+#[read_component(Usage<T, TextureComponent>)]
 pub fn texture_write<T, L, V>(world: &SubWorld)
 where
     T: Send + Sync + 'static,
@@ -363,10 +385,10 @@ where
     };
 
     <(
-        &TextureWriteComponent<T, L>,
+        &Usage<T, TextureWriteComponent<L>>,
         &L,
         &ChangedFlag<L>,
-        &IndirectComponent<TextureComponent<T>>,
+        &IndirectComponent<Usage<T, TextureComponent>>,
     )>::query()
     .par_for_each(world, |(texture_write, texels, dirty_flag, texture)| {
         let texture_component = world.get_indirect(texture).unwrap();

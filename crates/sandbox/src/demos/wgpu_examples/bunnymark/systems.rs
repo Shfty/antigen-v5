@@ -1,13 +1,11 @@
 use crate::wgpu_examples::bunnymark::MAX_VELOCITY;
 
 use super::{
-    Bunnies, Bunnymark, Global, GlobalBufferComponent, Globals, Local, LocalBufferComponent,
-    Locals, Logo, PlayfieldExtent, BUNNY_SIZE, GRAVITY,
+    Bunnies, Bunnymark, GlobalBindGroupComponent, GlobalBufferComponent, Globals,
+    LocalBindGroupComponent, LocalBufferComponent, Locals, LogoSamplerComponent,
+    LogoTextureViewComponent, PlayfieldExtentComponent, BUNNY_SIZE, GRAVITY,
 };
-use antigen_core::{
-    ChangedFlag, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock, RwLock,
-    SizeComponent, Usage,
-};
+use antigen_core::{ChangedFlag, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock};
 
 use antigen_winit::{
     winit::event::{ElementState, KeyboardInput, VirtualKeyCode, WindowEvent},
@@ -24,9 +22,8 @@ use antigen_wgpu::{
         RenderPassDescriptor, RenderPipelineDescriptor, ShaderStages, SurfaceConfiguration,
         TextureSampleType, TextureViewDimension, VertexState,
     },
-    BindGroupComponent, CommandBuffersComponent, RenderAttachment,
-    RenderPipelineComponent, SamplerComponent, ShaderModuleComponent, SurfaceComponent,
-    TextureViewComponent,
+    CommandBuffersComponent, RenderAttachmentTextureView, RenderPipelineComponent,
+    ShaderModuleComponent, SurfaceComponent,
 };
 
 use legion::{world::SubWorld, IntoQuery};
@@ -38,14 +35,14 @@ use legion::{world::SubWorld, IntoQuery};
 pub fn bunnymark_prepare(
     world: &legion::world::SubWorld,
     _: &Bunnymark,
-    shader_module: &ShaderModuleComponent<()>,
-    render_pipeline_component: &RenderPipelineComponent<()>,
+    shader_module: &ShaderModuleComponent,
+    render_pipeline_component: &RenderPipelineComponent,
     global_buffer: &GlobalBufferComponent,
     local_buffer: &LocalBufferComponent,
-    texture_view: &TextureViewComponent<'static, Logo>,
-    sampler: &SamplerComponent<'static, Logo>,
-    global_bind_group: &BindGroupComponent<Global>,
-    local_bind_group: &BindGroupComponent<Local>,
+    texture_view: &LogoTextureViewComponent,
+    sampler: &LogoSamplerComponent<'static>,
+    global_bind_group: &GlobalBindGroupComponent,
+    local_bind_group: &LocalBindGroupComponent,
     surface_component: &IndirectComponent<SurfaceComponent>,
 ) {
     if !render_pipeline_component.read().is_pending() {
@@ -214,7 +211,7 @@ pub fn bunnymark_prepare(
 pub fn bunnymark_tick(
     bunnies: &Bunnies,
     dirty_flag: &ChangedFlag<Bunnies>,
-    extent: &Usage<PlayfieldExtent, SizeComponent<RwLock<(u32, u32)>>>,
+    extent: &PlayfieldExtentComponent,
 ) {
     let delta = 0.01;
     for bunny in bunnies.write().iter_mut() {
@@ -237,16 +234,16 @@ pub fn bunnymark_tick(
 // Render the hello triangle pipeline to the specified entity's surface
 #[legion::system(par_for_each)]
 #[read_component(Device)]
-#[read_component(TextureViewComponent<'static, RenderAttachment>)]
+#[read_component(RenderAttachmentTextureView<'static>)]
 pub fn bunnymark_render(
     world: &legion::world::SubWorld,
     _: &Bunnymark,
     bunnies: &Bunnies,
-    render_pipeline: &RenderPipelineComponent<()>,
+    render_pipeline: &RenderPipelineComponent,
     command_buffers: &CommandBuffersComponent,
-    global_bind_group: &BindGroupComponent<Global>,
-    local_bind_group: &BindGroupComponent<Local>,
-    texture_view: &IndirectComponent<TextureViewComponent<'static, RenderAttachment>>,
+    global_bind_group: &GlobalBindGroupComponent,
+    local_bind_group: &LocalBindGroupComponent,
+    texture_view: &IndirectComponent<RenderAttachmentTextureView<'static>>,
 ) {
     let device = if let Some(components) = <&Device>::query().iter(world).next() {
         components
@@ -316,7 +313,7 @@ pub fn bunnymark_key_event(
     world: &SubWorld,
     window: &IndirectComponent<WindowComponent>,
     bunnies: &Bunnies,
-    extent: &Usage<PlayfieldExtent, SizeComponent<RwLock<(u32, u32)>>>,
+    extent: &PlayfieldExtentComponent,
 ) {
     let window = world
         .get_indirect(window)

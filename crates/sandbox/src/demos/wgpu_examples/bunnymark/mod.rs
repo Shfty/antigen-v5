@@ -10,7 +10,7 @@ pub use systems::*;
 
 use antigen_core::{
     impl_read_write_lock, parallel, serial, single, AddIndirectComponent, ImmutableSchedule,
-    RwLock, Serial, Single, SizeComponent, Usage,
+    RwLock, Serial, Single, Usage,
 };
 
 use antigen_wgpu::{
@@ -21,7 +21,7 @@ use antigen_wgpu::{
         ShaderSource, TextureAspect, TextureDescriptor, TextureDimension, TextureFormat,
         TextureUsages, TextureViewDescriptor,
     },
-    BindGroupComponent, BufferComponent, CommandBuffersComponent, RenderAttachment,
+    BindGroupComponent, BufferComponent, CommandBuffersComponent, RenderAttachmentTextureView,
     RenderPipelineComponent, SamplerComponent, ShaderModuleComponent, SurfaceComponent, Texels,
     TextureComponent, TextureViewComponent, ToBytes,
 };
@@ -38,6 +38,15 @@ pub enum PlayfieldExtent {}
 
 pub type GlobalBufferComponent<'a> = Usage<Global, BufferComponent<'a>>;
 pub type LocalBufferComponent<'a> = Usage<Local, BufferComponent<'a>>;
+
+pub type GlobalBindGroupComponent<'a> = Usage<Global, BindGroupComponent>;
+pub type LocalBindGroupComponent<'a> = Usage<Local, BindGroupComponent>;
+
+pub type PlayfieldExtentComponent = Usage<PlayfieldExtent, RwLock<(u32, u32)>>;
+
+pub type LogoTextureComponent<'a> = Usage<Logo, TextureComponent<'a>>;
+pub type LogoTextureViewComponent<'a> = Usage<Logo, TextureViewComponent<'a>>;
+pub type LogoSamplerComponent<'a> = Usage<Logo, SamplerComponent<'a>>;
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
@@ -100,13 +109,10 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
 
     // Renderer
     cmd.add_component(renderer_entity, Bunnymark);
-    cmd.add_component(renderer_entity, RenderPipelineComponent::<()>::pending());
+    cmd.add_component(renderer_entity, RenderPipelineComponent::pending());
     cmd.add_component(renderer_entity, CommandBuffersComponent::new());
     cmd.add_indirect_component::<SurfaceComponent>(renderer_entity, window_entity);
-    cmd.add_indirect_component::<TextureViewComponent<RenderAttachment>>(
-        renderer_entity,
-        window_entity,
-    );
+    cmd.add_indirect_component::<RenderAttachmentTextureView>(renderer_entity, window_entity);
 
     // Window reference for input handling
     cmd.add_indirect_component::<WindowComponent>(renderer_entity, window_entity);
@@ -114,15 +120,21 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
     // Shader
     cmd.add_component(
         renderer_entity,
-        ShaderModuleComponent::<()>::pending(ShaderModuleDescriptor {
+        ShaderModuleComponent::pending(ShaderModuleDescriptor {
             label: None,
             source: ShaderSource::Wgsl(Cow::Borrowed(include_str!("shader.wgsl"))),
         }),
     );
 
     // Bind groups
-    cmd.add_component(renderer_entity, BindGroupComponent::<Global>::pending());
-    cmd.add_component(renderer_entity, BindGroupComponent::<Local>::pending());
+    cmd.add_component(
+        renderer_entity,
+        Usage::<Global, _>::new(BindGroupComponent::pending()),
+    );
+    cmd.add_component(
+        renderer_entity,
+        Usage::<Local, _>::new(BindGroupComponent::pending()),
+    );
 
     // Playfield extent
     let extent = (640, 480);
@@ -195,7 +207,7 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
     // Texture
     cmd.add_component(
         renderer_entity,
-        TextureComponent::<Logo>::pending(TextureDescriptor {
+        Usage::<Logo, _>::new(TextureComponent::pending(TextureDescriptor {
             label: None,
             size,
             mip_level_count: 1,
@@ -203,19 +215,21 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
             dimension: TextureDimension::D2,
             format: TextureFormat::Rgba8UnormSrgb,
             usage: TextureUsages::COPY_DST | TextureUsages::TEXTURE_BINDING,
-        }),
+        })),
     );
 
     // Texture view
     cmd.add_component(
         renderer_entity,
-        TextureViewComponent::<Logo>::pending(TextureViewDescriptor::default()),
+        Usage::<Logo, _>::new(TextureViewComponent::pending(
+            TextureViewDescriptor::default(),
+        )),
     );
 
     // Sampler
     cmd.add_component(
         renderer_entity,
-        SamplerComponent::<Logo>::pending(SamplerDescriptor {
+        Usage::<Logo, _>::new(SamplerComponent::pending(SamplerDescriptor {
             label: None,
             address_mode_u: AddressMode::ClampToEdge,
             address_mode_v: AddressMode::ClampToEdge,
@@ -224,21 +238,20 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
             min_filter: FilterMode::Nearest,
             mipmap_filter: FilterMode::Nearest,
             ..Default::default()
-        }),
+        })),
     );
 
     // Playfield extent
     cmd.add_component(
         renderer_entity,
-        Usage::<PlayfieldExtent, SizeComponent<RwLock<(u32, u32)>>>::new(SizeComponent::new(
-            RwLock::new(extent),
-        )),
+        Usage::<PlayfieldExtent, RwLock<(u32, u32)>>::new(RwLock::new(extent)),
     );
 }
 
 pub fn prepare_schedule() -> ImmutableSchedule<Serial> {
     serial![
         parallel![
+            antigen_wgpu::create_shader_modules_system(),
             antigen_wgpu::create_buffers_system::<Global>(),
             antigen_wgpu::create_buffers_system::<Local>(),
             antigen_wgpu::create_textures_system::<Logo>(),

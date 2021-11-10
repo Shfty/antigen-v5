@@ -8,8 +8,8 @@ use antigen_core::{serial, single, AddIndirectComponent, ImmutableSchedule, Seri
 
 use antigen_wgpu::{
     wgpu::{Device, ShaderModuleDescriptor, ShaderSource},
-    CommandBuffersComponent, RenderAttachment, RenderPipelineComponent, ShaderModuleComponent,
-    SurfaceComponent, TextureViewComponent,
+    CommandBuffersComponent, RenderPipelineComponent, ShaderModuleComponent,
+    SurfaceComponent, RenderAttachmentTextureView,
 };
 
 #[legion::system]
@@ -27,16 +27,16 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
 
     // Renderer
     cmd.add_component(renderer_entity, HelloTriangle);
-    cmd.add_component(renderer_entity, RenderPipelineComponent::<()>::pending());
+    cmd.add_component(renderer_entity, RenderPipelineComponent::pending());
     cmd.add_component(renderer_entity, CommandBuffersComponent::new());
     cmd.add_indirect_component::<SurfaceComponent>(renderer_entity, window_entity);
-    cmd.add_indirect_component::<TextureViewComponent<RenderAttachment>>(
+    cmd.add_indirect_component::<RenderAttachmentTextureView>(
         renderer_entity,
         window_entity,
     );
     cmd.add_component(
         renderer_entity,
-        ShaderModuleComponent::<()>::pending(ShaderModuleDescriptor {
+        ShaderModuleComponent::pending(ShaderModuleDescriptor {
             label: None,
             source: ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!("shader.wgsl"))),
         }),
@@ -45,7 +45,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
 
 pub fn prepare_schedule() -> ImmutableSchedule<Serial> {
     serial![
-        antigen_wgpu::create_shader_modules_system::<()>(),
+        antigen_wgpu::create_shader_modules_system(),
         hello_triangle_prepare_system()
     ]
 }

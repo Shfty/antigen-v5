@@ -1,6 +1,6 @@
 use super::{
-    Cube, IndexBufferComponent, Mandelbrot, OpaquePass, UniformBufferComponent,
-    VertexBufferComponent, ViewProjectionMatrix, WirePass,
+    Cube, IndexBufferComponent, MandelbrotTextureViewComponent, OpaquePass,
+    UniformBufferComponent, VertexBufferComponent, ViewProjectionMatrix, WirePass,
 };
 
 use antigen_core::{
@@ -18,9 +18,8 @@ use antigen_wgpu::{
         ShaderStages, SurfaceConfiguration, TextureSampleType, TextureViewDimension,
         VertexAttribute, VertexBufferLayout, VertexFormat, VertexState, VertexStepMode,
     },
-    BindGroupComponent, CommandBuffersComponent, RenderAttachment,
+    BindGroupComponent, CommandBuffersComponent, RenderAttachmentTextureView,
     RenderPipelineComponent, ShaderModuleComponent, SurfaceComponent, TextureSize,
-    TextureViewComponent,
 };
 
 use legion::{world::SubWorld, IntoQuery};
@@ -32,12 +31,12 @@ use legion::{world::SubWorld, IntoQuery};
 pub fn cube_prepare(
     world: &SubWorld,
     _: &Cube,
-    shader_module: &ShaderModuleComponent<()>,
-    opaque_pipeline_component: &RenderPipelineComponent<OpaquePass>,
-    wire_pipeline_component: &RenderPipelineComponent<WirePass>,
-    texture_view: &TextureViewComponent<'static, Mandelbrot>,
+    shader_module: &ShaderModuleComponent,
+    opaque_pipeline_component: &Usage<OpaquePass, RenderPipelineComponent>,
+    wire_pipeline_component: &Usage<WirePass, RenderPipelineComponent>,
+    texture_view: &MandelbrotTextureViewComponent,
     uniform_buffer: &UniformBufferComponent,
-    bind_group_component: &BindGroupComponent<()>,
+    bind_group_component: &BindGroupComponent,
     surface_component: &IndirectComponent<SurfaceComponent>,
 ) {
     if !opaque_pipeline_component.read().is_pending() {
@@ -230,17 +229,17 @@ pub fn cube_resize(
 // Render the hello triangle pipeline to the specified entity's surface
 #[legion::system(par_for_each)]
 #[read_component(Device)]
-#[read_component(TextureViewComponent<'static, RenderAttachment>)]
+#[read_component(RenderAttachmentTextureView<'static>)]
 pub fn cube_render(
     world: &SubWorld,
     _: &Cube,
-    opaque_pipeline: &RenderPipelineComponent<OpaquePass>,
-    wire_pipeline: &RenderPipelineComponent<WirePass>,
-    bind_group: &BindGroupComponent<()>,
+    opaque_pipeline: &Usage<OpaquePass, RenderPipelineComponent>,
+    wire_pipeline: &Usage<WirePass, RenderPipelineComponent>,
+    bind_group: &BindGroupComponent,
     vertex_buffer: &VertexBufferComponent,
     index_buffer: &IndexBufferComponent,
     command_buffers: &CommandBuffersComponent,
-    texture_view: &IndirectComponent<TextureViewComponent<'static, RenderAttachment>>,
+    texture_view: &IndirectComponent<RenderAttachmentTextureView<'static>>,
 ) {
     let device = if let Some(components) = <&Device>::query().iter(world).next() {
         components

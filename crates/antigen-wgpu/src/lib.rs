@@ -80,7 +80,7 @@ pub fn assemble_window_surface(cmd: &mut CommandBuffer, #[state] (entity,): &(En
     cmd.add_component(*entity, ChangedFlag::<SurfaceTextureComponent>::new_clean());
     cmd.add_component(
         *entity,
-        TextureViewComponent::<RenderAttachment>::pending(Default::default()),
+        Usage::<RenderAttachment, _>::new(TextureViewComponent::pending(Default::default())),
     );
 }
 
@@ -118,7 +118,10 @@ pub fn assemble_buffer_data<U, T>(
     T: Component,
 {
     cmd.add_component_with_changed_flag_dirty(entity, data);
-    cmd.add_component(entity, BufferWriteComponent::<U, T>::new(offset));
+    cmd.add_component(
+        entity,
+        Usage::<U, _>::new(BufferWriteComponent::<T>::new(offset)),
+    );
     cmd.add_indirect_component_self::<Usage<U, BufferComponent>>(entity);
 }
 
@@ -137,11 +140,14 @@ pub fn assemble_texture_data<U, T>(
     // Texture write
     cmd.add_component(
         entity,
-        TextureWriteComponent::<U, T>::new(image_copy_texture, image_data_layout),
+        Usage::<U, _>::new(TextureWriteComponent::<T>::new(
+            image_copy_texture,
+            image_data_layout,
+        )),
     );
 
     // Texture write indirect
-    cmd.add_indirect_component_self::<TextureComponent<U>>(entity);
+    cmd.add_indirect_component_self::<Usage<U, TextureComponent>>(entity);
 }
 
 #[legion::system]
@@ -150,7 +156,7 @@ pub fn assemble_texture_data<U, T>(
 #[read_component(SurfaceComponent)]
 #[read_component(SurfaceTextureComponent)]
 #[read_component(ChangedFlag<SurfaceTextureComponent>)]
-#[read_component(TextureViewComponent<RenderAttachment>)]
+#[read_component(Usage<RenderAttachment, TextureViewComponent>)]
 pub fn surface_textures_views(world: &SubWorld) {
     use legion::IntoQuery;
 

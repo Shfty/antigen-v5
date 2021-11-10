@@ -1,3 +1,5 @@
+// TODO: Investigate cube uniforms writing every frame
+//
 // TODO: Implement remaining WGPU demos using ECS pattern
 //       [✓] Boids
 //       [✓] Bunnymark

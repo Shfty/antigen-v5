@@ -7,8 +7,8 @@ use antigen_wgpu::{
         Operations, PipelineLayoutDescriptor, PrimitiveState, RenderPassColorAttachment,
         RenderPassDescriptor, RenderPipelineDescriptor, SurfaceConfiguration, VertexState,
     },
-    CommandBuffersComponent, RenderAttachment, RenderPipelineComponent, ShaderModuleComponent,
-    SurfaceComponent, TextureViewComponent,
+    CommandBuffersComponent, RenderAttachmentTextureView, RenderPipelineComponent,
+    ShaderModuleComponent, SurfaceComponent,
 };
 
 use legion::IntoQuery;
@@ -20,8 +20,8 @@ use legion::IntoQuery;
 pub fn hello_triangle_prepare(
     world: &legion::world::SubWorld,
     _: &HelloTriangle,
-    shader_module: &ShaderModuleComponent<()>,
-    render_pipeline_component: &RenderPipelineComponent<()>,
+    shader_module: &ShaderModuleComponent,
+    render_pipeline_component: &RenderPipelineComponent,
     surface_component: &IndirectComponent<SurfaceComponent>,
 ) {
     if !render_pipeline_component.read().is_pending() {
@@ -69,13 +69,13 @@ pub fn hello_triangle_prepare(
 // Render the hello triangle pipeline to the specified entity's surface
 #[legion::system(par_for_each)]
 #[read_component(Device)]
-#[read_component(TextureViewComponent<'static, RenderAttachment>)]
+#[read_component(RenderAttachmentTextureView<'static>)]
 pub fn hello_triangle_render(
     world: &legion::world::SubWorld,
     _: &HelloTriangle,
-    render_pipeline: &RenderPipelineComponent<()>,
+    render_pipeline: &RenderPipelineComponent,
     command_buffers: &CommandBuffersComponent,
-    texture_view: &IndirectComponent<TextureViewComponent<'static, RenderAttachment>>,
+    texture_view: &IndirectComponent<RenderAttachmentTextureView<'static>>,
 ) {
     let device = if let Some(components) = <&Device>::query().iter(world).next() {
         components

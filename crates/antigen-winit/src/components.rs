@@ -1,4 +1,4 @@
-use antigen_core::{LazyComponent, RwLock, Usage, impl_read_write_lock};
+use antigen_core::{LazyComponent, RwLock, SizeComponent, Usage, impl_read_write_lock};
 
 use legion::Entity;
 use winit::{dpi::PhysicalSize, event::WindowEvent, window::WindowId};
@@ -49,4 +49,4 @@ pub enum WindowSize {}
 pub enum WindowTitle {}
 
 pub type WindowTitleComponent = Usage<WindowTitle, RwLock<&'static str>>;
-pub type WindowSizeComponent = Usage<WindowSize, RwLock<PhysicalSize<u32>>>;
+pub type WindowSizeComponent = Usage<WindowSize, SizeComponent<RwLock<PhysicalSize<u32>>>>;

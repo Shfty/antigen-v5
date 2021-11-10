@@ -18,8 +18,7 @@ use antigen_wgpu::{
         BufferAddress, BufferDescriptor, BufferUsages, Device, ShaderModuleDescriptor, ShaderSource,
     },
     BindGroupComponent, BufferComponent, CommandBuffersComponent, ComputePipelineComponent,
-    RenderAttachment, RenderPipelineComponent, ShaderModuleComponent, SurfaceComponent,
-    TextureViewComponent,
+    RenderAttachmentTextureView, RenderPipelineComponent, ShaderModuleComponent, SurfaceComponent,
 };
 
 use rand::{distributions::Distribution, SeedableRng};
@@ -31,10 +30,17 @@ pub enum Uniform {}
 pub enum FrontBuffer {}
 pub enum BackBuffer {}
 
-type VertexBufferComponent<'a> = Usage<Vertex, BufferComponent<'a>>;
-type UniformBufferComponent<'a> = Usage<Uniform, BufferComponent<'a>>;
-type FrontBufferComponent<'a> = Usage<FrontBuffer, BufferComponent<'a>>;
-type BackBufferComponent<'a> = Usage<BackBuffer, BufferComponent<'a>>;
+pub type VertexBufferComponent<'a> = Usage<Vertex, BufferComponent<'a>>;
+pub type UniformBufferComponent<'a> = Usage<Uniform, BufferComponent<'a>>;
+
+pub type FrontBufferComponent<'a> = Usage<FrontBuffer, BufferComponent<'a>>;
+pub type BackBufferComponent<'a> = Usage<BackBuffer, BufferComponent<'a>>;
+
+pub type FrontBufferBindGroupComponent<'a> = Usage<FrontBuffer, BindGroupComponent>;
+pub type BackBufferBindGroupComponent<'a> = Usage<BackBuffer, BindGroupComponent>;
+
+pub type ComputeShaderModuleComponent<'a> = Usage<Compute, ShaderModuleComponent<'a>>;
+pub type DrawShaderModuleComponent<'a> = Usage<Draw, ShaderModuleComponent<'a>>;
 
 const NUM_PARTICLES: usize = 1500;
 const PARTICLES_PER_GROUP: usize = 64;
@@ -57,35 +63,35 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
 
     // Renderer
     cmd.add_component(renderer_entity, Boids);
-    cmd.add_component(renderer_entity, RenderPipelineComponent::<()>::pending());
-    cmd.add_component(renderer_entity, ComputePipelineComponent::<()>::pending());
+    cmd.add_component(renderer_entity, RenderPipelineComponent::pending());
+    cmd.add_component(renderer_entity, ComputePipelineComponent::pending());
     cmd.add_component(
         renderer_entity,
-        BindGroupComponent::<FrontBuffer>::pending(),
+        Usage::<FrontBuffer, _>::new(BindGroupComponent::pending()),
     );
-    cmd.add_component(renderer_entity, BindGroupComponent::<BackBuffer>::pending());
+    cmd.add_component(
+        renderer_entity,
+        Usage::<BackBuffer, _>::new(BindGroupComponent::pending()),
+    );
     cmd.add_component(renderer_entity, CommandBuffersComponent::new());
     cmd.add_indirect_component::<SurfaceComponent>(renderer_entity, window_entity);
-    cmd.add_indirect_component::<TextureViewComponent<RenderAttachment>>(
-        renderer_entity,
-        window_entity,
-    );
+    cmd.add_indirect_component::<RenderAttachmentTextureView>(renderer_entity, window_entity);
 
     // Shaders
     cmd.add_component(
         renderer_entity,
-        ShaderModuleComponent::<Compute>::pending(ShaderModuleDescriptor {
+        Usage::<Compute, _>::new(ShaderModuleComponent::pending(ShaderModuleDescriptor {
             label: None,
             source: ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!("compute.wgsl"))),
-        }),
+        })),
     );
 
     cmd.add_component(
         renderer_entity,
-        ShaderModuleComponent::<Draw>::pending(ShaderModuleDescriptor {
+        Usage::<Draw, _>::new(ShaderModuleComponent::pending(ShaderModuleDescriptor {
             label: None,
             source: ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!("draw.wgsl"))),
-        }),
+        })),
     );
 
     // Buffer data
@@ -168,8 +174,8 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
 pub fn prepare_schedule() -> ImmutableSchedule<Serial> {
     serial![
         parallel![
-            antigen_wgpu::create_shader_modules_system::<Compute>(),
-            antigen_wgpu::create_shader_modules_system::<Draw>(),
+            antigen_wgpu::create_shader_modules_usage_system::<Compute>(),
+            antigen_wgpu::create_shader_modules_usage_system::<Draw>(),
             antigen_wgpu::create_buffers_system::<Vertex>(),
             antigen_wgpu::create_buffers_system::<Uniform>(),
             antigen_wgpu::create_buffers_system::<FrontBuffer>(),

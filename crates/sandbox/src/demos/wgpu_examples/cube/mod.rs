@@ -7,7 +7,7 @@ pub use systems::*;
 
 use antigen_core::{
     parallel, serial, single, AddIndirectComponent, ChangedFlag, ImmutableSchedule, RwLock, Serial,
-    Single, SizeComponent, Usage,
+    Single, Usage, SizeComponent
 };
 use antigen_wgpu::{
     assemble_buffer_data, assemble_texture_data,
@@ -17,7 +17,7 @@ use antigen_wgpu::{
         TextureDimension, TextureFormat, TextureUsages, TextureViewDescriptor,
     },
     BindGroupComponent, BufferComponent, CommandBuffersComponent, MeshIndices, MeshUvs,
-    MeshVertices, RenderAttachment, RenderPipelineComponent, ShaderModuleComponent,
+    MeshVertices, RenderAttachmentTextureView, RenderPipelineComponent, ShaderModuleComponent,
     SurfaceComponent, Texels, TextureComponent, TextureSize, TextureViewComponent,
 };
 
@@ -49,6 +49,8 @@ type ViewProjectionMatrix = Usage<ViewProjection, RwLock<[f32; 16]>>;
 type VertexBufferComponent<'a> = Usage<Vertex, BufferComponent<'a>>;
 type IndexBufferComponent<'a> = Usage<Index, BufferComponent<'a>>;
 type UniformBufferComponent<'a> = Usage<Uniform, BufferComponent<'a>>;
+
+type MandelbrotTextureViewComponent<'a> = Usage<Mandelbrot, TextureViewComponent<'a>>;
 
 fn create_vertices() -> Vec<[f32; 3]> {
     vec![
@@ -184,23 +186,20 @@ pub fn assemble(cmd: &mut CommandBuffer) {
     cmd.add_component(renderer_entity, Cube);
 
     // Renderer resources
-    cmd.add_component(renderer_entity, BindGroupComponent::<()>::pending());
+    cmd.add_component(renderer_entity, BindGroupComponent::pending());
     cmd.add_component(
         renderer_entity,
-        RenderPipelineComponent::<OpaquePass>::pending(),
+        Usage::<OpaquePass, _>::new(RenderPipelineComponent::pending()),
     );
     cmd.add_component(
         renderer_entity,
-        RenderPipelineComponent::<WirePass>::pending(),
+        Usage::<WirePass, _>::new(RenderPipelineComponent::pending()),
     );
 
     cmd.add_component(renderer_entity, CommandBuffersComponent::new());
 
     cmd.add_indirect_component::<SurfaceComponent>(renderer_entity, window_entity);
-    cmd.add_indirect_component::<TextureViewComponent<RenderAttachment>>(
-        renderer_entity,
-        window_entity,
-    );
+    cmd.add_indirect_component::<RenderAttachmentTextureView>(renderer_entity, window_entity);
     cmd.add_indirect_component::<Usage<TextureSize, SizeComponent<RwLock<(u32, u32)>>>>(
         renderer_entity,
         window_entity,
@@ -213,7 +212,7 @@ pub fn assemble(cmd: &mut CommandBuffer) {
     // Shader
     cmd.add_component(
         renderer_entity,
-        ShaderModuleComponent::<()>::pending(ShaderModuleDescriptor {
+        ShaderModuleComponent::pending(ShaderModuleDescriptor {
             label: None,
             source: ShaderSource::Wgsl(Cow::Borrowed(include_str!("shader.wgsl"))),
         }),
@@ -306,7 +305,7 @@ pub fn assemble(cmd: &mut CommandBuffer) {
     // Texture
     cmd.add_component(
         renderer_entity,
-        TextureComponent::<Mandelbrot>::pending(TextureDescriptor {
+        Usage::<Mandelbrot, _>::new(TextureComponent::pending(TextureDescriptor {
             label: None,
             size: texture_extent,
             mip_level_count: 1,
@@ -314,20 +313,22 @@ pub fn assemble(cmd: &mut CommandBuffer) {
             dimension: TextureDimension::D2,
             format: TextureFormat::R8Uint,
             usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
-        }),
+        })),
     );
 
     // Texture view
     cmd.add_component(
         renderer_entity,
-        TextureViewComponent::<Mandelbrot>::pending(TextureViewDescriptor::default()),
+        Usage::<Mandelbrot, _>::new(TextureViewComponent::pending(
+            TextureViewDescriptor::default(),
+        )),
     );
 }
 
 pub fn prepare_schedule() -> ImmutableSchedule<Serial> {
     serial![
         parallel![
-            antigen_wgpu::create_shader_modules_system::<()>(),
+            antigen_wgpu::create_shader_modules_system(),
             antigen_wgpu::create_buffers_system::<Vertex>(),
             antigen_wgpu::create_buffers_system::<Index>(),
             antigen_wgpu::create_buffers_system::<Uniform>(),

@@ -1,8 +1,13 @@
 use antigen_core::{
     impl_read_write_lock, LazyComponent, ReadWriteLock, RwLock, RwLockReadGuard, RwLockWriteGuard,
+    Usage,
 };
 
-use wgpu::{BindGroup, BufferDescriptor, ComputePipeline, ImageCopyTextureBase, ImageDataLayout, RenderPipeline, ShaderModule, ShaderModuleDescriptor, Surface, SurfaceConfiguration, Texture, TextureDescriptor};
+use wgpu::{
+    BindGroup, BufferDescriptor, ComputePipeline, ImageCopyTextureBase, ImageDataLayout,
+    RenderPipeline, ShaderModule, ShaderModuleDescriptor, Surface, SurfaceConfiguration, Texture,
+    TextureDescriptor,
+};
 
 use std::marker::PhantomData;
 
@@ -32,13 +37,12 @@ impl_read_write_lock!(SurfaceComponent, surface, LazyComponent<wgpu::Surface>);
 impl_read_write_lock!(SurfaceComponent, config, wgpu::SurfaceConfiguration);
 
 // WGPU texture
-pub struct TextureComponent<'a, T> {
+pub struct TextureComponent<'a> {
     desc: TextureDescriptor<'a>,
     texture: RwLock<LazyComponent<Texture>>,
-    _phantom: PhantomData<T>,
 }
 
-impl<T> ReadWriteLock<LazyComponent<Texture>> for TextureComponent<'_, T> {
+impl ReadWriteLock<LazyComponent<Texture>> for TextureComponent<'_> {
     fn read(&self) -> RwLockReadGuard<LazyComponent<Texture>> {
         self.texture.read()
     }
@@ -48,12 +52,11 @@ impl<T> ReadWriteLock<LazyComponent<Texture>> for TextureComponent<'_, T> {
     }
 }
 
-impl<'a, T> TextureComponent<'a, T> {
+impl<'a> TextureComponent<'a> {
     pub fn pending(desc: TextureDescriptor<'a>) -> Self {
         TextureComponent {
             desc,
             texture: RwLock::new(LazyComponent::Pending),
-            _phantom: Default::default(),
         }
     }
 
@@ -64,6 +67,9 @@ impl<'a, T> TextureComponent<'a, T> {
 
 // Render attachment usage flag for TextureComponent
 pub enum RenderAttachment {}
+
+pub type RenderAttachmentTexture<'a> = Usage<RenderAttachment, TextureComponent<'a>>;
+pub type RenderAttachmentTextureView<'a> = Usage<RenderAttachment, TextureViewComponent<'a>>;
 
 // WGPU surface texture
 pub struct SurfaceTextureComponent(RwLock<Option<wgpu::SurfaceTexture>>);
@@ -77,13 +83,12 @@ impl SurfaceTextureComponent {
 }
 
 // WGPU texture view
-pub struct TextureViewComponent<'a, T> {
+pub struct TextureViewComponent<'a> {
     desc: wgpu::TextureViewDescriptor<'a>,
     view: RwLock<LazyComponent<wgpu::TextureView>>,
-    _phantom: PhantomData<T>,
 }
 
-impl<'a, T> ReadWriteLock<LazyComponent<wgpu::TextureView>> for TextureViewComponent<'a, T> {
+impl<'a> ReadWriteLock<LazyComponent<wgpu::TextureView>> for TextureViewComponent<'a> {
     fn read(&self) -> RwLockReadGuard<LazyComponent<wgpu::TextureView>> {
         self.view.read()
     }
@@ -93,12 +98,11 @@ impl<'a, T> ReadWriteLock<LazyComponent<wgpu::TextureView>> for TextureViewCompo
     }
 }
 
-impl<'a, T> TextureViewComponent<'a, T> {
+impl<'a> TextureViewComponent<'a> {
     pub fn pending(desc: wgpu::TextureViewDescriptor<'a>) -> Self {
         TextureViewComponent {
             desc,
             view: RwLock::new(LazyComponent::Pending),
-            _phantom: Default::default(),
         }
     }
 
@@ -108,13 +112,12 @@ impl<'a, T> TextureViewComponent<'a, T> {
 }
 
 // WGPU sampler
-pub struct SamplerComponent<'a, T> {
+pub struct SamplerComponent<'a> {
     desc: wgpu::SamplerDescriptor<'a>,
     view: RwLock<LazyComponent<wgpu::Sampler>>,
-    _phantom: PhantomData<T>,
 }
 
-impl<'a, T> ReadWriteLock<LazyComponent<wgpu::Sampler>> for SamplerComponent<'a, T> {
+impl<'a> ReadWriteLock<LazyComponent<wgpu::Sampler>> for SamplerComponent<'a> {
     fn read(&self) -> RwLockReadGuard<LazyComponent<wgpu::Sampler>> {
         self.view.read()
     }
@@ -124,12 +127,11 @@ impl<'a, T> ReadWriteLock<LazyComponent<wgpu::Sampler>> for SamplerComponent<'a,
     }
 }
 
-impl<'a, T> SamplerComponent<'a, T> {
+impl<'a> SamplerComponent<'a> {
     pub fn pending(desc: wgpu::SamplerDescriptor<'a>) -> Self {
         SamplerComponent {
             desc,
             view: RwLock::new(LazyComponent::Pending),
-            _phantom: Default::default(),
         }
     }
 
@@ -139,12 +141,11 @@ impl<'a, T> SamplerComponent<'a, T> {
 }
 
 // WGPU render pipeline
-pub struct RenderPipelineComponent<T> {
+pub struct RenderPipelineComponent {
     pipeline: RwLock<LazyComponent<RenderPipeline>>,
-    _phantom: PhantomData<T>,
 }
 
-impl<T> ReadWriteLock<LazyComponent<RenderPipeline>> for RenderPipelineComponent<T> {
+impl ReadWriteLock<LazyComponent<RenderPipeline>> for RenderPipelineComponent {
     fn read(&self) -> RwLockReadGuard<LazyComponent<RenderPipeline>> {
         self.pipeline.read()
     }
@@ -154,22 +155,20 @@ impl<T> ReadWriteLock<LazyComponent<RenderPipeline>> for RenderPipelineComponent
     }
 }
 
-impl<T> RenderPipelineComponent<T> {
+impl RenderPipelineComponent {
     pub fn pending() -> Self {
         RenderPipelineComponent {
             pipeline: RwLock::new(LazyComponent::Pending),
-            _phantom: Default::default(),
         }
     }
 }
 
 // WGPU compute pipeline
-pub struct ComputePipelineComponent<T> {
+pub struct ComputePipelineComponent {
     pipeline: RwLock<LazyComponent<ComputePipeline>>,
-    _phantom: PhantomData<T>,
 }
 
-impl<T> ReadWriteLock<LazyComponent<ComputePipeline>> for ComputePipelineComponent<T> {
+impl ReadWriteLock<LazyComponent<ComputePipeline>> for ComputePipelineComponent {
     fn read(&self) -> RwLockReadGuard<LazyComponent<ComputePipeline>> {
         self.pipeline.read()
     }
@@ -179,22 +178,20 @@ impl<T> ReadWriteLock<LazyComponent<ComputePipeline>> for ComputePipelineCompone
     }
 }
 
-impl<T> ComputePipelineComponent<T> {
+impl ComputePipelineComponent {
     pub fn pending() -> Self {
         ComputePipelineComponent {
             pipeline: RwLock::new(LazyComponent::Pending),
-            _phantom: Default::default(),
         }
     }
 }
 
 // WGPU bind group
-pub struct BindGroupComponent<T> {
+pub struct BindGroupComponent {
     bind_group: RwLock<LazyComponent<BindGroup>>,
-    _phantom: PhantomData<T>,
 }
 
-impl<T> ReadWriteLock<LazyComponent<BindGroup>> for BindGroupComponent<T> {
+impl ReadWriteLock<LazyComponent<BindGroup>> for BindGroupComponent {
     fn read(&self) -> RwLockReadGuard<LazyComponent<BindGroup>> {
         self.bind_group.read()
     }
@@ -204,11 +201,10 @@ impl<T> ReadWriteLock<LazyComponent<BindGroup>> for BindGroupComponent<T> {
     }
 }
 
-impl<T> BindGroupComponent<T> {
+impl BindGroupComponent {
     pub fn pending() -> Self {
         BindGroupComponent {
             bind_group: RwLock::new(LazyComponent::Pending),
-            _phantom: Default::default(),
         }
     }
 }
@@ -255,12 +251,12 @@ impl<'a> BufferComponent<'a> {
 }
 
 // Buffer write operation
-pub struct BufferWriteComponent<T, V> {
+pub struct BufferWriteComponent<T> {
     offset: RwLock<wgpu::BufferAddress>,
-    _phantom: PhantomData<(T, V)>,
+    _phantom: PhantomData<T>,
 }
 
-impl<T, V> ReadWriteLock<wgpu::BufferAddress> for BufferWriteComponent<T, V> {
+impl<T> ReadWriteLock<wgpu::BufferAddress> for BufferWriteComponent<T> {
     fn read(&self) -> RwLockReadGuard<wgpu::BufferAddress> {
         self.offset.read()
     }
@@ -270,7 +266,7 @@ impl<T, V> ReadWriteLock<wgpu::BufferAddress> for BufferWriteComponent<T, V> {
     }
 }
 
-impl<T, V> BufferWriteComponent<T, V> {
+impl<T> BufferWriteComponent<T> {
     pub fn new(offset: wgpu::BufferAddress) -> Self {
         BufferWriteComponent {
             offset: RwLock::new(offset),
@@ -280,13 +276,13 @@ impl<T, V> BufferWriteComponent<T, V> {
 }
 
 // Texture write operation
-pub struct TextureWriteComponent<T, U> {
+pub struct TextureWriteComponent<T> {
     image_copy_texture: RwLock<ImageCopyTextureBase<()>>,
     image_data_layout: RwLock<wgpu::ImageDataLayout>,
-    _phantom: PhantomData<(T, U)>,
+    _phantom: PhantomData<T>,
 }
 
-impl<T, U> ReadWriteLock<wgpu::ImageDataLayout> for TextureWriteComponent<T, U> {
+impl<T> ReadWriteLock<wgpu::ImageDataLayout> for TextureWriteComponent<T> {
     fn read(&self) -> RwLockReadGuard<ImageDataLayout> {
         self.image_data_layout.read()
     }
@@ -296,7 +292,7 @@ impl<T, U> ReadWriteLock<wgpu::ImageDataLayout> for TextureWriteComponent<T, U> 
     }
 }
 
-impl<T, U> ReadWriteLock<ImageCopyTextureBase<()>> for TextureWriteComponent<T, U> {
+impl<T> ReadWriteLock<ImageCopyTextureBase<()>> for TextureWriteComponent<T> {
     fn read(&self) -> RwLockReadGuard<ImageCopyTextureBase<()>> {
         self.image_copy_texture.read()
     }
@@ -306,7 +302,7 @@ impl<T, U> ReadWriteLock<ImageCopyTextureBase<()>> for TextureWriteComponent<T, 
     }
 }
 
-impl<T, U> TextureWriteComponent<T, U> {
+impl<T> TextureWriteComponent<T> {
     pub fn new(
         image_copy_texture: ImageCopyTextureBase<()>,
         image_data_layout: ImageDataLayout,
@@ -320,13 +316,12 @@ impl<T, U> TextureWriteComponent<T, U> {
 }
 
 // WGPU shader module
-pub struct ShaderModuleComponent<'a, T> {
+pub struct ShaderModuleComponent<'a> {
     descriptor: ShaderModuleDescriptor<'a>,
     bind_group: RwLock<LazyComponent<ShaderModule>>,
-    _phantom: PhantomData<T>,
 }
 
-impl<T> ReadWriteLock<LazyComponent<ShaderModule>> for ShaderModuleComponent<'_, T> {
+impl ReadWriteLock<LazyComponent<ShaderModule>> for ShaderModuleComponent<'_> {
     fn read(&self) -> RwLockReadGuard<LazyComponent<ShaderModule>> {
         self.bind_group.read()
     }
@@ -336,12 +331,11 @@ impl<T> ReadWriteLock<LazyComponent<ShaderModule>> for ShaderModuleComponent<'_,
     }
 }
 
-impl<'a, T> ShaderModuleComponent<'a, T> {
+impl<'a> ShaderModuleComponent<'a> {
     pub fn pending(descriptor: ShaderModuleDescriptor<'a>) -> Self {
         ShaderModuleComponent {
             descriptor,
             bind_group: RwLock::new(LazyComponent::Pending),
-            _phantom: Default::default(),
         }
     }
 
