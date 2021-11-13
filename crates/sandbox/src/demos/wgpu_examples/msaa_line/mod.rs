@@ -14,10 +14,8 @@ use antigen_wgpu::{
         ShaderSource, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
     },
     BufferComponent, CommandBuffersComponent, MeshVertices, MsaaFramebuffer,
-    MsaaFramebufferTexture, MsaaFramebufferTextureDescriptor, MsaaFramebufferTextureView,
-    MsaaFramebufferTextureViewDescriptor, PipelineLayoutComponent, RenderAttachmentTextureView,
-    RenderBundleComponent, SurfaceComponent, TextureComponent,
-    TextureDescriptorComponent, TextureViewComponent, TextureViewDescriptorComponent,
+    MsaaFramebufferTextureView, PipelineLayoutComponent, RenderAttachmentTextureView,
+    RenderBundleComponent, SurfaceComponent,
 };
 
 use bytemuck::{Pod, Zeroable};
@@ -105,9 +103,10 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     );
 
     // MSAA framebuffer
-    cmd.add_component(
+    antigen_wgpu::assemble_texture::<MsaaFramebuffer>(
+        cmd,
         renderer_entity,
-        MsaaFramebufferTextureDescriptor::new(TextureDescriptorComponent::new(TextureDescriptor {
+        TextureDescriptor {
             label: None,
             size: Extent3d {
                 width: 800,
@@ -119,25 +118,14 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
             dimension: TextureDimension::D2,
             format: TextureFormat::Bgra8UnormSrgb,
             usage: TextureUsages::RENDER_ATTACHMENT,
-        })),
-    );
-
-    cmd.add_component(
-        renderer_entity,
-        MsaaFramebufferTexture::new(TextureComponent::pending()),
+        },
     );
 
     // Texture view
-    cmd.add_component(
+    antigen_wgpu::assemble_texture_view::<MsaaFramebuffer>(
+        cmd,
         renderer_entity,
-        MsaaFramebufferTextureViewDescriptor::new(TextureViewDescriptorComponent::new(
-            Default::default(),
-        )),
-    );
-
-    cmd.add_component(
-        renderer_entity,
-        MsaaFramebufferTextureView::new(TextureViewComponent::pending()),
+        Default::default(),
     );
 
     cmd.add_indirect_component_self::<MsaaFramebufferTextureView>(renderer_entity);

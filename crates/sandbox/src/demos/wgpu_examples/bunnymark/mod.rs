@@ -22,9 +22,8 @@ use antigen_wgpu::{
         TextureUsages,
     },
     BindGroupComponent, BufferComponent, CommandBuffersComponent, RenderAttachmentTextureView,
-    RenderPipelineComponent, SamplerComponent, SamplerDescriptorComponent, SurfaceComponent,
-    Texels, TextureComponent, TextureDescriptorComponent, TextureViewComponent,
-    TextureViewDescriptorComponent, ToBytes,
+    RenderPipelineComponent, SamplerComponent, SurfaceComponent, Texels, TextureComponent,
+    TextureDescriptorComponent, TextureViewComponent, ToBytes,
 };
 
 const MAX_BUNNIES: usize = 1 << 20;
@@ -210,9 +209,10 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
     );
 
     // Texture
-    cmd.add_component(
+    antigen_wgpu::assemble_texture::<Logo>(
+        cmd,
         renderer_entity,
-        LogoTextureDescriptorComponent::new(TextureDescriptorComponent::new(TextureDescriptor {
+        TextureDescriptor {
             label: None,
             size,
             mip_level_count: 1,
@@ -220,29 +220,17 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
             dimension: TextureDimension::D2,
             format: TextureFormat::Rgba8UnormSrgb,
             usage: TextureUsages::COPY_DST | TextureUsages::TEXTURE_BINDING,
-        })),
-    );
-
-    cmd.add_component(
-        renderer_entity,
-        LogoTextureComponent::new(TextureComponent::pending()),
+        },
     );
 
     // Texture view
-    cmd.add_component(
-        renderer_entity,
-        Usage::<Logo, _>::new(TextureViewDescriptorComponent::new(Default::default())),
-    );
-
-    cmd.add_component(
-        renderer_entity,
-        Usage::<Logo, _>::new(TextureViewComponent::pending()),
-    );
+    antigen_wgpu::assemble_texture_view::<Logo>(cmd, renderer_entity, Default::default());
 
     // Sampler
-    cmd.add_component(
+    antigen_wgpu::assemble_sampler::<Logo>(
+        cmd,
         renderer_entity,
-        Usage::<Logo, _>::new(SamplerDescriptorComponent::new(SamplerDescriptor {
+        SamplerDescriptor {
             label: None,
             address_mode_u: AddressMode::ClampToEdge,
             address_mode_v: AddressMode::ClampToEdge,
@@ -251,11 +239,7 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
             min_filter: FilterMode::Nearest,
             mipmap_filter: FilterMode::Nearest,
             ..Default::default()
-        })),
-    );
-    cmd.add_component(
-        renderer_entity,
-        Usage::<Logo, _>::new(SamplerComponent::pending()),
+        },
     );
 
     // Playfield extent

@@ -14,12 +14,11 @@ use antigen_wgpu::{
     wgpu::{
         BufferAddress, BufferDescriptor, BufferUsages, Device, Extent3d, ImageCopyTextureBase,
         ImageDataLayout, ShaderModuleDescriptor, ShaderSource, TextureAspect, TextureDescriptor,
-        TextureDimension, TextureFormat, TextureUsages, TextureViewDescriptor,
+        TextureDimension, TextureFormat, TextureUsages,
     },
     BindGroupComponent, BufferComponent, CommandBuffersComponent, MeshIndices, MeshUvs,
     MeshVertices, RenderAttachmentTextureView, RenderPipelineComponent, SurfaceComponent, Texels,
     TextureComponent, TextureDescriptorComponent, TextureSizeComponent, TextureViewComponent,
-    TextureViewDescriptorComponent,
 };
 
 use std::{borrow::Cow, num::NonZeroU32};
@@ -308,38 +307,22 @@ pub fn assemble(cmd: &mut CommandBuffer) {
     );
 
     // Texture
-    cmd.add_component(
+    antigen_wgpu::assemble_texture::<Mandelbrot>(
+        cmd,
         renderer_entity,
-        MandelbrotTextureDescriptorComponent::new(TextureDescriptorComponent::new(
-            TextureDescriptor {
-                label: None,
-                size: texture_extent,
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: TextureDimension::D2,
-                format: TextureFormat::R8Uint,
-                usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
-            },
-        )),
-    );
-
-    cmd.add_component(
-        renderer_entity,
-        MandelbrotTextureComponent::new(TextureComponent::pending()),
+        TextureDescriptor {
+            label: None,
+            size: texture_extent,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::R8Uint,
+            usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
+        },
     );
 
     // Texture view
-    cmd.add_component(
-        renderer_entity,
-        Usage::<Mandelbrot, _>::new(TextureViewDescriptorComponent::new(
-            TextureViewDescriptor::default(),
-        )),
-    );
-
-    cmd.add_component(
-        renderer_entity,
-        Usage::<Mandelbrot, _>::new(TextureViewComponent::pending()),
-    );
+    antigen_wgpu::assemble_texture_view::<Mandelbrot>(cmd, renderer_entity, Default::default());
 }
 
 pub fn prepare_schedule() -> ImmutableSchedule<Serial> {
