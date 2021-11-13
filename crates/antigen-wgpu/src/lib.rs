@@ -18,7 +18,7 @@ pub use wgpu;
 
 use antigen_core::{
     serial, single, AddComponentWithChangedFlag, AddIndirectComponent, ChangedFlag,
-    ImmutableSchedule, ReadWriteLock, RwLock, Serial, Single, SizeComponent, Usage,
+    ImmutableSchedule, ReadWriteLock, Serial, Single, Usage,
 };
 use antigen_winit::{WindowEntityMap, WindowEventComponent};
 
@@ -86,26 +86,14 @@ pub fn assemble_window_surface(cmd: &mut CommandBuffer, #[state] (entity,): &(En
 
 #[legion::system]
 pub fn assemble_surface_size(cmd: &mut CommandBuffer, #[state] (entity,): &(Entity,)) {
-    cmd.add_component(
-        *entity,
-        Usage::<SurfaceSize, SizeComponent<RwLock<(u32, u32)>>>::new(Default::default()),
-    );
-    cmd.add_component(
-        *entity,
-        ChangedFlag::<Usage<SurfaceSize, SizeComponent<RwLock<(u32, u32)>>>>::new_clean(),
-    );
+    cmd.add_component(*entity, SurfaceSizeComponent::new(Default::default()));
+    cmd.add_component(*entity, ChangedFlag::<SurfaceSizeComponent>::new_clean());
 }
 
 #[legion::system]
 pub fn assemble_texture_size(cmd: &mut CommandBuffer, #[state] (entity,): &(Entity,)) {
-    cmd.add_component(
-        *entity,
-        Usage::<TextureSize, SizeComponent<RwLock<(u32, u32)>>>::new(Default::default()),
-    );
-    cmd.add_component(
-        *entity,
-        ChangedFlag::<Usage<TextureSize, SizeComponent<RwLock<(u32, u32)>>>>::new_clean(),
-    );
+    cmd.add_component(*entity, TextureSizeComponent::new(Default::default()));
+    cmd.add_component(*entity, ChangedFlag::<TextureSizeComponent>::new_clean());
 }
 
 pub fn assemble_buffer_data<U, T>(
@@ -156,7 +144,7 @@ pub fn assemble_texture_data<U, T>(
 #[read_component(SurfaceComponent)]
 #[read_component(SurfaceTextureComponent)]
 #[read_component(ChangedFlag<SurfaceTextureComponent>)]
-#[read_component(Usage<RenderAttachment, TextureViewComponent>)]
+#[read_component(RenderAttachmentTextureView)]
 pub fn surface_textures_views(world: &SubWorld) {
     use legion::IntoQuery;
 

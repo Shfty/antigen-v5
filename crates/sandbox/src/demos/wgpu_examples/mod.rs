@@ -4,6 +4,7 @@ pub mod boids;
 pub mod cube;
 pub mod hello_triangle;
 pub mod bunnymark;
+pub mod msaa_line;
 
 pub fn assemble_schedule() -> ImmutableSchedule<Parallel> {
     parallel![
@@ -11,6 +12,7 @@ pub fn assemble_schedule() -> ImmutableSchedule<Parallel> {
         cube::assemble_system(),
         boids::assemble_system(),
         bunnymark::assemble_system(),
+        msaa_line::assemble_system(),
     ]
 }
 
@@ -20,6 +22,7 @@ pub fn prepare_schedule() -> ImmutableSchedule<Parallel> {
         cube::prepare_schedule(),
         boids::prepare_schedule(),
         bunnymark::prepare_schedule(),
+        msaa_line::prepare_schedule(),
     ]
 }
 
@@ -29,6 +32,7 @@ pub fn render_schedule() -> ImmutableSchedule<Parallel> {
         cube::render_schedule(),
         boids::render_schedule(),
         bunnymark::render_schedule(),
+        msaa_line::render_schedule(),
     ]
 }
 

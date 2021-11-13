@@ -44,9 +44,8 @@ impl WindowEventComponent {
 
 /// Usage tag for SizeComponent
 pub enum WindowSize {}
+pub type WindowSizeComponent = Usage<WindowSize, SizeComponent<RwLock<PhysicalSize<u32>>>>;
 
 /// Usage tag for NameComponent
 pub enum WindowTitle {}
-
 pub type WindowTitleComponent = Usage<WindowTitle, RwLock<&'static str>>;
-pub type WindowSizeComponent = Usage<WindowSize, SizeComponent<RwLock<PhysicalSize<u32>>>>;

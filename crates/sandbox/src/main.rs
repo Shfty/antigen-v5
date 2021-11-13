@@ -1,4 +1,12 @@
-// TODO: Investigate cube uniforms writing every frame
+// TODO: Factor out Texels, MeshIndices, etc
+//       Implement with usage flags instead
+//
+// TODO: Move module-specific component type aliases into component submodules
+// TODO: Sweep through and use type aliases to construct Usages in renderer modules
+// TODO: Support for creating textures via buffer init
+//       Could use a two-variant enum in the component to hold either
+//       Alternately, use descriptors as components
+//          This is probably better, since it separates it and allows for a changed flag
 //
 // TODO: Implement remaining WGPU demos using ECS pattern
 //       [✓] Boids
@@ -11,10 +19,17 @@
 //       [ ] Hello Windows(?)
 //       [ ] Hello(?)
 //       [ ] Mipmap
-//       [ ] MSAA Line
+//       [>] MSAA Line
+//           [✓] MSAA rendering
+//           [ ] MSAA framebuffer recreation
+//           [ ] Render bundle recreation
 //       [ ] Shadow
 //       [ ] Texture Arrays
 //       [ ] Water
+//
+// TODO: Refactor Cube renderer to use original vertex layout
+//
+// TODO: Improve WindowEventComponent
 //
 // TODO: Reimplement map renderer
 //

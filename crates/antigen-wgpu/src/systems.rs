@@ -1,17 +1,16 @@
 use super::{
-    BufferWriteComponent, CommandBuffersComponent, RenderAttachment, SurfaceComponent,
+    BufferWriteComponent, CommandBuffersComponent, SurfaceComponent,
     SurfaceTextureComponent, TextureViewComponent, TextureWriteComponent, ToBytes,
 };
 use crate::{
-    BufferComponent, SamplerComponent, ShaderModuleComponent, SurfaceSize, TextureComponent,
-    TextureSize,
+    BufferComponent, RenderAttachmentTextureView, SamplerComponent, ShaderModuleComponent,
+    SurfaceSizeComponent, TextureComponent, TextureSizeComponent,
 };
 
 use antigen_core::{
-    ChangedFlag, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock, RwLock,
-    SizeComponent, Usage,
+    ChangedFlag, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock, Usage,
 };
-use antigen_winit::{winit::dpi::PhysicalSize, WindowComponent, WindowSize};
+use antigen_winit::{WindowComponent, WindowSizeComponent};
 
 use legion::{world::SubWorld, IntoQuery};
 use wgpu::{
@@ -120,7 +119,7 @@ pub fn surface_texture_view_query(world: &legion::world::SubWorld, entity: &legi
     let (surface_texture, surface_texture_dirty, texture_view) = if let Ok(components) = <(
         &SurfaceTextureComponent,
         &ChangedFlag<SurfaceTextureComponent>,
-        &Usage<RenderAttachment, TextureViewComponent>,
+        &RenderAttachmentTextureView,
     )>::query(
     )
     .get(world, *entity)
@@ -146,10 +145,10 @@ pub fn surface_texture_view_query(world: &legion::world::SubWorld, entity: &legi
 
 #[legion::system(par_for_each)]
 pub fn surface_size(
-    window_size: &Usage<WindowSize, SizeComponent<RwLock<PhysicalSize<u32>>>>,
-    window_size_dirty: &ChangedFlag<Usage<WindowSize, SizeComponent<RwLock<PhysicalSize<u32>>>>>,
-    surface_size: &Usage<SurfaceSize, SizeComponent<RwLock<(u32, u32)>>>,
-    surface_size_dirty: &ChangedFlag<Usage<SurfaceSize, SizeComponent<RwLock<(u32, u32)>>>>,
+    window_size: &WindowSizeComponent,
+    window_size_dirty: &ChangedFlag<WindowSizeComponent>,
+    surface_size: &SurfaceSizeComponent,
+    surface_size_dirty: &ChangedFlag<SurfaceSizeComponent>,
 ) {
     if window_size_dirty.get() {
         let window_size = *window_size.read();
@@ -160,10 +159,10 @@ pub fn surface_size(
 
 #[legion::system(par_for_each)]
 pub fn surface_texture_size(
-    surface_size: &Usage<SurfaceSize, SizeComponent<RwLock<(u32, u32)>>>,
-    surface_size_dirty: &ChangedFlag<Usage<SurfaceSize, SizeComponent<RwLock<(u32, u32)>>>>,
-    texture_size: &Usage<TextureSize, SizeComponent<RwLock<(u32, u32)>>>,
-    texture_size_dirty: &ChangedFlag<Usage<TextureSize, SizeComponent<RwLock<(u32, u32)>>>>,
+    surface_size: &SurfaceSizeComponent,
+    surface_size_dirty: &ChangedFlag<SurfaceSizeComponent>,
+    texture_size: &TextureSizeComponent,
+    texture_size_dirty: &ChangedFlag<TextureSizeComponent>,
 ) {
     if surface_size_dirty.get() {
         let size = *surface_size.read();
@@ -173,18 +172,14 @@ pub fn surface_texture_size(
 }
 
 #[legion::system(par_for_each)]
-pub fn reset_surface_size_dirty_flag(
-    surface_size_dirty: &ChangedFlag<Usage<SurfaceSize, SizeComponent<RwLock<(u32, u32)>>>>,
-) {
+pub fn reset_surface_size_dirty_flag(surface_size_dirty: &ChangedFlag<SurfaceSizeComponent>) {
     if surface_size_dirty.get() {
         surface_size_dirty.set(false);
     }
 }
 
 #[legion::system(par_for_each)]
-pub fn reset_texture_size_dirty_flag(
-    texture_size_dirty: &ChangedFlag<Usage<TextureSize, SizeComponent<(u32, u32)>>>,
-) {
+pub fn reset_texture_size_dirty_flag(texture_size_dirty: &ChangedFlag<TextureSizeComponent>) {
     if texture_size_dirty.get() {
         texture_size_dirty.set(false);
     }
@@ -207,7 +202,7 @@ pub fn surface_texture_present(
 pub fn surface_texture_view_drop(
     surface_texture: &SurfaceTextureComponent,
     surface_texture_dirty: &ChangedFlag<SurfaceTextureComponent>,
-    texture_view: &Usage<RenderAttachment, TextureViewComponent>,
+    texture_view: &RenderAttachmentTextureView,
 ) {
     if surface_texture_dirty.get() {
         if surface_texture.read().is_none() {

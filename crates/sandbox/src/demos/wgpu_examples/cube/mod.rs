@@ -7,7 +7,7 @@ pub use systems::*;
 
 use antigen_core::{
     parallel, serial, single, AddIndirectComponent, ChangedFlag, ImmutableSchedule, RwLock, Serial,
-    Single, Usage, SizeComponent
+    Single, Usage,
 };
 use antigen_wgpu::{
     assemble_buffer_data, assemble_texture_data,
@@ -18,7 +18,7 @@ use antigen_wgpu::{
     },
     BindGroupComponent, BufferComponent, CommandBuffersComponent, MeshIndices, MeshUvs,
     MeshVertices, RenderAttachmentTextureView, RenderPipelineComponent, ShaderModuleComponent,
-    SurfaceComponent, Texels, TextureComponent, TextureSize, TextureViewComponent,
+    SurfaceComponent, Texels, TextureComponent, TextureSizeComponent, TextureViewComponent,
 };
 
 use std::{borrow::Cow, num::NonZeroU32};
@@ -44,13 +44,16 @@ pub enum Mandelbrot {}
 #[derive(Debug)]
 pub enum ViewProjection {}
 
-type ViewProjectionMatrix = Usage<ViewProjection, RwLock<[f32; 16]>>;
+pub type OpaquePassRenderPipelineComponent = Usage<OpaquePass, RenderPipelineComponent>;
+pub type WirePassRenderPipelineComponent = Usage<WirePass, RenderPipelineComponent>;
 
-type VertexBufferComponent<'a> = Usage<Vertex, BufferComponent<'a>>;
-type IndexBufferComponent<'a> = Usage<Index, BufferComponent<'a>>;
-type UniformBufferComponent<'a> = Usage<Uniform, BufferComponent<'a>>;
+pub type ViewProjectionMatrix = Usage<ViewProjection, RwLock<[f32; 16]>>;
 
-type MandelbrotTextureViewComponent<'a> = Usage<Mandelbrot, TextureViewComponent<'a>>;
+pub type VertexBufferComponent<'a> = Usage<Vertex, BufferComponent<'a>>;
+pub type IndexBufferComponent<'a> = Usage<Index, BufferComponent<'a>>;
+pub type UniformBufferComponent<'a> = Usage<Uniform, BufferComponent<'a>>;
+
+pub type MandelbrotTextureViewComponent<'a> = Usage<Mandelbrot, TextureViewComponent<'a>>;
 
 fn create_vertices() -> Vec<[f32; 3]> {
     vec![
@@ -200,14 +203,8 @@ pub fn assemble(cmd: &mut CommandBuffer) {
 
     cmd.add_indirect_component::<SurfaceComponent>(renderer_entity, window_entity);
     cmd.add_indirect_component::<RenderAttachmentTextureView>(renderer_entity, window_entity);
-    cmd.add_indirect_component::<Usage<TextureSize, SizeComponent<RwLock<(u32, u32)>>>>(
-        renderer_entity,
-        window_entity,
-    );
-    cmd.add_indirect_component::<ChangedFlag<Usage<TextureSize, SizeComponent<RwLock<(u32, u32)>>>>>(
-        renderer_entity,
-        window_entity,
-    );
+    cmd.add_indirect_component::<TextureSizeComponent>(renderer_entity, window_entity);
+    cmd.add_indirect_component::<ChangedFlag<TextureSizeComponent>>(renderer_entity, window_entity);
 
     // Shader
     cmd.add_component(

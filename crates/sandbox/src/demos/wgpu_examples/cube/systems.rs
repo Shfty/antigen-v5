@@ -1,12 +1,10 @@
 use super::{
-    Cube, IndexBufferComponent, MandelbrotTextureViewComponent, OpaquePass,
-    UniformBufferComponent, VertexBufferComponent, ViewProjectionMatrix, WirePass,
+    Cube, IndexBufferComponent, MandelbrotTextureViewComponent, OpaquePassRenderPipelineComponent,
+    UniformBufferComponent, VertexBufferComponent, ViewProjectionMatrix,
+    WirePassRenderPipelineComponent,
 };
 
-use antigen_core::{
-    ChangedFlag, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock, RwLock,
-    SizeComponent, Usage,
-};
+use antigen_core::{ChangedFlag, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock};
 use antigen_wgpu::{
     wgpu::{
         BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry,
@@ -19,7 +17,7 @@ use antigen_wgpu::{
         VertexAttribute, VertexBufferLayout, VertexFormat, VertexState, VertexStepMode,
     },
     BindGroupComponent, CommandBuffersComponent, RenderAttachmentTextureView,
-    RenderPipelineComponent, ShaderModuleComponent, SurfaceComponent, TextureSize,
+    ShaderModuleComponent, SurfaceComponent, TextureSizeComponent,
 };
 
 use legion::{world::SubWorld, IntoQuery};
@@ -32,8 +30,8 @@ pub fn cube_prepare(
     world: &SubWorld,
     _: &Cube,
     shader_module: &ShaderModuleComponent,
-    opaque_pipeline_component: &Usage<OpaquePass, RenderPipelineComponent>,
-    wire_pipeline_component: &Usage<WirePass, RenderPipelineComponent>,
+    opaque_pipeline_component: &OpaquePassRenderPipelineComponent,
+    wire_pipeline_component: &WirePassRenderPipelineComponent,
     texture_view: &MandelbrotTextureViewComponent,
     uniform_buffer: &UniformBufferComponent,
     bind_group_component: &BindGroupComponent,
@@ -202,15 +200,13 @@ pub fn cube_prepare(
 }
 
 #[legion::system(par_for_each)]
-#[read_component(Usage<TextureSize, SizeComponent<RwLock<(u32, u32)>>>)]
-#[read_component(ChangedFlag<Usage<TextureSize, SizeComponent<RwLock<(u32, u32)>>>>)]
+#[read_component(TextureSizeComponent)]
+#[read_component(ChangedFlag<TextureSizeComponent>)]
 pub fn cube_resize(
     world: &SubWorld,
     _: &Cube,
-    texture_size: &IndirectComponent<Usage<TextureSize, SizeComponent<RwLock<(u32, u32)>>>>,
-    dirty_flag: &IndirectComponent<
-        ChangedFlag<Usage<TextureSize, SizeComponent<RwLock<(u32, u32)>>>>,
-    >,
+    texture_size: &IndirectComponent<TextureSizeComponent>,
+    dirty_flag: &IndirectComponent<ChangedFlag<TextureSizeComponent>>,
     view_projection: &ViewProjectionMatrix,
     matrix_dirty: &ChangedFlag<ViewProjectionMatrix>,
 ) {
@@ -233,8 +229,8 @@ pub fn cube_resize(
 pub fn cube_render(
     world: &SubWorld,
     _: &Cube,
-    opaque_pipeline: &Usage<OpaquePass, RenderPipelineComponent>,
-    wire_pipeline: &Usage<WirePass, RenderPipelineComponent>,
+    opaque_pipeline: &OpaquePassRenderPipelineComponent,
+    wire_pipeline: &WirePassRenderPipelineComponent,
     bind_group: &BindGroupComponent,
     vertex_buffer: &VertexBufferComponent,
     index_buffer: &IndexBufferComponent,
