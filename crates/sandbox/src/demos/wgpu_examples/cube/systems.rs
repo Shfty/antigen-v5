@@ -225,7 +225,7 @@ pub fn cube_resize(
 // Render the hello triangle pipeline to the specified entity's surface
 #[legion::system(par_for_each)]
 #[read_component(Device)]
-#[read_component(RenderAttachmentTextureView<'static>)]
+#[read_component(RenderAttachmentTextureView)]
 pub fn cube_render(
     world: &SubWorld,
     _: &Cube,
@@ -235,7 +235,7 @@ pub fn cube_render(
     vertex_buffer: &VertexBufferComponent,
     index_buffer: &IndexBufferComponent,
     command_buffers: &CommandBuffersComponent,
-    texture_view: &IndirectComponent<RenderAttachmentTextureView<'static>>,
+    texture_view: &IndirectComponent<RenderAttachmentTextureView>,
 ) {
     let device = if let Some(components) = <&Device>::query().iter(world).next() {
         components

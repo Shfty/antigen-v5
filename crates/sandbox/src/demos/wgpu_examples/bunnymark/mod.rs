@@ -19,11 +19,12 @@ use antigen_wgpu::{
         AddressMode, BufferAddress, BufferDescriptor, BufferUsages, Device, Extent3d, FilterMode,
         ImageCopyTextureBase, ImageDataLayout, SamplerDescriptor, ShaderModuleDescriptor,
         ShaderSource, TextureAspect, TextureDescriptor, TextureDimension, TextureFormat,
-        TextureUsages, TextureViewDescriptor,
+        TextureUsages,
     },
     BindGroupComponent, BufferComponent, CommandBuffersComponent, RenderAttachmentTextureView,
-    RenderPipelineComponent, SamplerComponent, ShaderModuleComponent, SurfaceComponent, Texels,
-    TextureComponent, TextureViewComponent, ToBytes,
+    RenderPipelineComponent, SamplerComponent, SamplerDescriptorComponent, SurfaceComponent,
+    Texels, TextureComponent, TextureDescriptorComponent, TextureViewComponent,
+    TextureViewDescriptorComponent, ToBytes,
 };
 
 const MAX_BUNNIES: usize = 1 << 20;
@@ -36,17 +37,18 @@ pub enum Global {}
 pub enum Local {}
 pub enum PlayfieldExtent {}
 
-pub type GlobalBufferComponent<'a> = Usage<Global, BufferComponent<'a>>;
-pub type LocalBufferComponent<'a> = Usage<Local, BufferComponent<'a>>;
+pub type GlobalBufferComponent = Usage<Global, BufferComponent>;
+pub type LocalBufferComponent = Usage<Local, BufferComponent>;
 
 pub type GlobalBindGroupComponent<'a> = Usage<Global, BindGroupComponent>;
 pub type LocalBindGroupComponent<'a> = Usage<Local, BindGroupComponent>;
 
 pub type PlayfieldExtentComponent = Usage<PlayfieldExtent, RwLock<(u32, u32)>>;
 
-pub type LogoTextureComponent<'a> = Usage<Logo, TextureComponent<'a>>;
-pub type LogoTextureViewComponent<'a> = Usage<Logo, TextureViewComponent<'a>>;
-pub type LogoSamplerComponent<'a> = Usage<Logo, SamplerComponent<'a>>;
+pub type LogoTextureDescriptorComponent<'a> = Usage<Logo, TextureDescriptorComponent<'a>>;
+pub type LogoTextureComponent = Usage<Logo, TextureComponent>;
+pub type LogoTextureViewComponent = Usage<Logo, TextureViewComponent>;
+pub type LogoSamplerComponent = Usage<Logo, SamplerComponent>;
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
@@ -118,12 +120,13 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
     cmd.add_indirect_component::<WindowComponent>(renderer_entity, window_entity);
 
     // Shader
-    cmd.add_component(
+    antigen_wgpu::assemble_shader(
+        cmd,
         renderer_entity,
-        ShaderModuleComponent::pending(ShaderModuleDescriptor {
+        ShaderModuleDescriptor {
             label: None,
             source: ShaderSource::Wgsl(Cow::Borrowed(include_str!("shader.wgsl"))),
-        }),
+        },
     );
 
     // Bind groups
@@ -182,32 +185,34 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
     );
 
     // Buffers
-    cmd.add_component(
+    antigen_wgpu::assemble_buffer::<Global>(
+        cmd,
         renderer_entity,
-        Usage::<Global, _>::new(BufferComponent::pending(BufferDescriptor {
+        BufferDescriptor {
             label: Some("Global"),
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
             size: std::mem::size_of::<Globals>() as BufferAddress,
             mapped_at_creation: false,
-        })),
+        },
     );
 
     let uniform_alignment = device.limits().min_uniform_buffer_offset_alignment as BufferAddress;
 
-    cmd.add_component(
+    antigen_wgpu::assemble_buffer::<Local>(
+        cmd,
         renderer_entity,
-        Usage::<Local, _>::new(BufferComponent::pending(BufferDescriptor {
+        BufferDescriptor {
             label: Some("Local"),
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
             size: (MAX_BUNNIES as BufferAddress) * uniform_alignment,
             mapped_at_creation: false,
-        })),
+        },
     );
 
     // Texture
     cmd.add_component(
         renderer_entity,
-        Usage::<Logo, _>::new(TextureComponent::pending(TextureDescriptor {
+        LogoTextureDescriptorComponent::new(TextureDescriptorComponent::new(TextureDescriptor {
             label: None,
             size,
             mip_level_count: 1,
@@ -218,18 +223,26 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
         })),
     );
 
+    cmd.add_component(
+        renderer_entity,
+        LogoTextureComponent::new(TextureComponent::pending()),
+    );
+
     // Texture view
     cmd.add_component(
         renderer_entity,
-        Usage::<Logo, _>::new(TextureViewComponent::pending(
-            TextureViewDescriptor::default(),
-        )),
+        Usage::<Logo, _>::new(TextureViewDescriptorComponent::new(Default::default())),
+    );
+
+    cmd.add_component(
+        renderer_entity,
+        Usage::<Logo, _>::new(TextureViewComponent::pending()),
     );
 
     // Sampler
     cmd.add_component(
         renderer_entity,
-        Usage::<Logo, _>::new(SamplerComponent::pending(SamplerDescriptor {
+        Usage::<Logo, _>::new(SamplerDescriptorComponent::new(SamplerDescriptor {
             label: None,
             address_mode_u: AddressMode::ClampToEdge,
             address_mode_v: AddressMode::ClampToEdge,
@@ -239,6 +252,10 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
             mipmap_filter: FilterMode::Nearest,
             ..Default::default()
         })),
+    );
+    cmd.add_component(
+        renderer_entity,
+        Usage::<Logo, _>::new(SamplerComponent::pending()),
     );
 
     // Playfield extent

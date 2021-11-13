@@ -69,13 +69,13 @@ pub fn hello_triangle_prepare(
 // Render the hello triangle pipeline to the specified entity's surface
 #[legion::system(par_for_each)]
 #[read_component(Device)]
-#[read_component(RenderAttachmentTextureView<'static>)]
+#[read_component(RenderAttachmentTextureView)]
 pub fn hello_triangle_render(
     world: &legion::world::SubWorld,
     _: &HelloTriangle,
     render_pipeline: &RenderPipelineComponent,
     command_buffers: &CommandBuffersComponent,
-    texture_view: &IndirectComponent<RenderAttachmentTextureView<'static>>,
+    texture_view: &IndirectComponent<RenderAttachmentTextureView>,
 ) {
     let device = if let Some(components) = <&Device>::query().iter(world).next() {
         components

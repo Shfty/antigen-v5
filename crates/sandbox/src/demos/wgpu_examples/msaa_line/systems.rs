@@ -121,15 +121,15 @@ pub fn msaa_line_prepare(
 // Render the hello triangle pipeline to the specified entity's surface
 #[legion::system(par_for_each)]
 #[read_component(Device)]
-#[read_component(RenderAttachmentTextureView<'static>)]
-#[read_component(MsaaFramebufferTextureView<'static>)]
+#[read_component(RenderAttachmentTextureView)]
+#[read_component(MsaaFramebufferTextureView)]
 pub fn msaa_line_render(
     world: &legion::world::SubWorld,
     _: &MsaaLine,
     render_bundle: &RenderBundleComponent,
     command_buffers: &CommandBuffersComponent,
-    render_attachment: &IndirectComponent<RenderAttachmentTextureView<'static>>,
-    msaa_framebuffer: &IndirectComponent<MsaaFramebufferTextureView<'static>>,
+    render_attachment: &IndirectComponent<RenderAttachmentTextureView>,
+    msaa_framebuffer: &IndirectComponent<MsaaFramebufferTextureView>,
 ) {
     let device = if let Some(components) = <&Device>::query().iter(world).next() {
         components

@@ -17,8 +17,9 @@ use antigen_wgpu::{
         TextureDimension, TextureFormat, TextureUsages, TextureViewDescriptor,
     },
     BindGroupComponent, BufferComponent, CommandBuffersComponent, MeshIndices, MeshUvs,
-    MeshVertices, RenderAttachmentTextureView, RenderPipelineComponent, ShaderModuleComponent,
-    SurfaceComponent, Texels, TextureComponent, TextureSizeComponent, TextureViewComponent,
+    MeshVertices, RenderAttachmentTextureView, RenderPipelineComponent, SurfaceComponent, Texels,
+    TextureComponent, TextureDescriptorComponent, TextureSizeComponent, TextureViewComponent,
+    TextureViewDescriptorComponent,
 };
 
 use std::{borrow::Cow, num::NonZeroU32};
@@ -49,11 +50,14 @@ pub type WirePassRenderPipelineComponent = Usage<WirePass, RenderPipelineCompone
 
 pub type ViewProjectionMatrix = Usage<ViewProjection, RwLock<[f32; 16]>>;
 
-pub type VertexBufferComponent<'a> = Usage<Vertex, BufferComponent<'a>>;
-pub type IndexBufferComponent<'a> = Usage<Index, BufferComponent<'a>>;
-pub type UniformBufferComponent<'a> = Usage<Uniform, BufferComponent<'a>>;
+pub type VertexBufferComponent = Usage<Vertex, BufferComponent>;
+pub type IndexBufferComponent = Usage<Index, BufferComponent>;
+pub type UniformBufferComponent = Usage<Uniform, BufferComponent>;
 
-pub type MandelbrotTextureViewComponent<'a> = Usage<Mandelbrot, TextureViewComponent<'a>>;
+pub type MandelbrotTextureDescriptorComponent<'a> =
+    Usage<Mandelbrot, TextureDescriptorComponent<'a>>;
+pub type MandelbrotTextureComponent = Usage<Mandelbrot, TextureComponent>;
+pub type MandelbrotTextureViewComponent = Usage<Mandelbrot, TextureViewComponent>;
 
 fn create_vertices() -> Vec<[f32; 3]> {
     vec![
@@ -207,12 +211,13 @@ pub fn assemble(cmd: &mut CommandBuffer) {
     cmd.add_indirect_component::<ChangedFlag<TextureSizeComponent>>(renderer_entity, window_entity);
 
     // Shader
-    cmd.add_component(
+    antigen_wgpu::assemble_shader(
+        cmd,
         renderer_entity,
-        ShaderModuleComponent::pending(ShaderModuleDescriptor {
+        ShaderModuleDescriptor {
             label: None,
             source: ShaderSource::Wgsl(Cow::Borrowed(include_str!("shader.wgsl"))),
-        }),
+        },
     );
 
     // Vertex data
@@ -269,56 +274,71 @@ pub fn assemble(cmd: &mut CommandBuffer) {
     );
 
     // Buffers
-    cmd.add_component(
+    antigen_wgpu::assemble_buffer::<Vertex>(
+        cmd,
         renderer_entity,
-        Usage::<Vertex, _>::new(BufferComponent::pending(BufferDescriptor {
+        BufferDescriptor {
             label: Some("Vertex Buffer"),
             usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
             size: ((vertex_count * vertex_size) + (vertex_count * uv_size)) as BufferAddress,
             mapped_at_creation: false,
-        })),
+        },
     );
 
-    cmd.add_component(
+    antigen_wgpu::assemble_buffer::<Index>(
+        cmd,
         renderer_entity,
-        Usage::<Index, _>::new(BufferComponent::pending(BufferDescriptor {
+        BufferDescriptor {
             label: Some("Index Buffer"),
             usage: BufferUsages::INDEX | BufferUsages::COPY_DST,
             size: (index_count * std::mem::size_of::<u16>()) as BufferAddress,
             mapped_at_creation: false,
-        })),
+        },
     );
 
-    cmd.add_component(
+    antigen_wgpu::assemble_buffer::<Uniform>(
+        cmd,
         renderer_entity,
-        Usage::<Uniform, _>::new(BufferComponent::pending(BufferDescriptor {
+        BufferDescriptor {
             label: Some("Uniform Buffer"),
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
             size: std::mem::size_of::<[f32; 4 * 4]>() as BufferAddress,
             mapped_at_creation: false,
-        })),
+        },
     );
 
     // Texture
     cmd.add_component(
         renderer_entity,
-        Usage::<Mandelbrot, _>::new(TextureComponent::pending(TextureDescriptor {
-            label: None,
-            size: texture_extent,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: TextureDimension::D2,
-            format: TextureFormat::R8Uint,
-            usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
-        })),
+        MandelbrotTextureDescriptorComponent::new(TextureDescriptorComponent::new(
+            TextureDescriptor {
+                label: None,
+                size: texture_extent,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: TextureDimension::D2,
+                format: TextureFormat::R8Uint,
+                usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
+            },
+        )),
+    );
+
+    cmd.add_component(
+        renderer_entity,
+        MandelbrotTextureComponent::new(TextureComponent::pending()),
     );
 
     // Texture view
     cmd.add_component(
         renderer_entity,
-        Usage::<Mandelbrot, _>::new(TextureViewComponent::pending(
+        Usage::<Mandelbrot, _>::new(TextureViewDescriptorComponent::new(
             TextureViewDescriptor::default(),
         )),
+    );
+
+    cmd.add_component(
+        renderer_entity,
+        Usage::<Mandelbrot, _>::new(TextureViewComponent::pending()),
     );
 }
 

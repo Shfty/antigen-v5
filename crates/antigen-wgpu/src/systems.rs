@@ -1,9 +1,11 @@
 use super::{
-    BufferWriteComponent, CommandBuffersComponent, SurfaceComponent,
-    SurfaceTextureComponent, TextureViewComponent, TextureWriteComponent, ToBytes,
+    BufferWriteComponent, CommandBuffersComponent, RenderAttachmentTextureViewDescriptor,
+    SurfaceComponent, SurfaceTextureComponent, TextureDescriptorComponent, TextureViewComponent,
+    TextureViewDescriptorComponent, TextureWriteComponent, ToBytes,
 };
 use crate::{
-    BufferComponent, RenderAttachmentTextureView, SamplerComponent, ShaderModuleComponent,
+    BufferComponent, BufferDescriptorComponent, RenderAttachmentTextureView, SamplerComponent,
+    SamplerDescriptorComponent, ShaderModuleComponent, ShaderModuleDescriptorComponent,
     SurfaceSizeComponent, TextureComponent, TextureSizeComponent,
 };
 
@@ -116,24 +118,25 @@ pub fn surface_texture_query(world: &legion::world::SubWorld, entity: &legion::E
 
 // Create a texture view for a surface texture, unsetting its dirty flag
 pub fn surface_texture_view_query(world: &legion::world::SubWorld, entity: &legion::Entity) {
-    let (surface_texture, surface_texture_dirty, texture_view) = if let Ok(components) = <(
-        &SurfaceTextureComponent,
-        &ChangedFlag<SurfaceTextureComponent>,
-        &RenderAttachmentTextureView,
-    )>::query(
-    )
-    .get(world, *entity)
-    {
-        components
-    } else {
-        return;
-    };
+    let (surface_texture, surface_texture_dirty, texture_view_desc, texture_view) =
+        if let Ok(components) = <(
+            &SurfaceTextureComponent,
+            &ChangedFlag<SurfaceTextureComponent>,
+            &RenderAttachmentTextureViewDescriptor,
+            &RenderAttachmentTextureView,
+        )>::query()
+        .get(world, *entity)
+        {
+            components
+        } else {
+            return;
+        };
 
     if surface_texture_dirty.get() {
         if let Some(surface_texture) = &*surface_texture.read() {
             let view = surface_texture
                 .texture
-                .create_view(&texture_view.descriptor());
+                .create_view(&texture_view_desc.read());
             texture_view.write().set_ready(view);
             surface_texture_dirty.set(false);
         } else {
@@ -216,6 +219,7 @@ pub fn surface_texture_view_drop(
 #[read_component(Device)]
 pub fn create_buffers<T: Send + Sync + 'static>(
     world: &SubWorld,
+    buffer_desc: &Usage<T, BufferDescriptorComponent>,
     buffer: &Usage<T, BufferComponent>,
 ) {
     if buffer.read().is_pending() {
@@ -223,7 +227,7 @@ pub fn create_buffers<T: Send + Sync + 'static>(
         println!("Created {} buffer", std::any::type_name::<T>());
         buffer
             .write()
-            .set_ready(device.create_buffer(buffer.desc()));
+            .set_ready(device.create_buffer(&buffer_desc.read()));
     }
 }
 
@@ -231,13 +235,14 @@ pub fn create_buffers<T: Send + Sync + 'static>(
 #[read_component(Device)]
 pub fn create_textures<T: Send + Sync + 'static>(
     world: &SubWorld,
+    texture_descriptor: &Usage<T, TextureDescriptorComponent>,
     texture: &Usage<T, TextureComponent>,
 ) {
     if texture.read().is_pending() {
         let device = <&Device>::query().iter(world).next().unwrap();
         texture
             .write()
-            .set_ready(device.create_texture(texture.desc()));
+            .set_ready(device.create_texture(&*texture_descriptor.read()));
     }
 }
 
@@ -245,6 +250,7 @@ pub fn create_textures<T: Send + Sync + 'static>(
 #[read_component(Device)]
 pub fn create_texture_views<T: Send + Sync + 'static>(
     texture: &Usage<T, TextureComponent>,
+    texture_view_desc: &Usage<T, TextureViewDescriptorComponent>,
     texture_view: &Usage<T, TextureViewComponent>,
 ) {
     if !texture_view.read().is_pending() {
@@ -261,31 +267,36 @@ pub fn create_texture_views<T: Send + Sync + 'static>(
     println!("Creating texture view");
     texture_view
         .write()
-        .set_ready(texture.create_view(texture_view.descriptor()));
+        .set_ready(texture.create_view(&texture_view_desc.read()));
 }
 
 #[legion::system(par_for_each)]
 #[read_component(Device)]
 pub fn create_samplers<T: Send + Sync + 'static>(
     world: &SubWorld,
+    sampler_desc: &Usage<T, SamplerDescriptorComponent>,
     sampler: &Usage<T, SamplerComponent>,
 ) {
     if sampler.read().is_pending() {
         let device = <&Device>::query().iter(world).next().unwrap();
         sampler
             .write()
-            .set_ready(device.create_sampler(sampler.descriptor()));
+            .set_ready(device.create_sampler(&sampler_desc.read()));
     }
 }
 
 #[legion::system(par_for_each)]
 #[read_component(Device)]
-pub fn create_shader_modules(world: &SubWorld, shader_module: &ShaderModuleComponent) {
+pub fn create_shader_modules(
+    world: &SubWorld,
+    shader_module_desc: &ShaderModuleDescriptorComponent,
+    shader_module: &ShaderModuleComponent,
+) {
     if shader_module.read().is_pending() {
         let device = <&Device>::query().iter(world).next().unwrap();
         shader_module
             .write()
-            .set_ready(device.create_shader_module(shader_module.descriptor()));
+            .set_ready(device.create_shader_module(&shader_module_desc.read()));
         println!("Created shader module");
     }
 }
@@ -294,13 +305,14 @@ pub fn create_shader_modules(world: &SubWorld, shader_module: &ShaderModuleCompo
 #[read_component(Device)]
 pub fn create_shader_modules_usage<T: Send + Sync + 'static>(
     world: &SubWorld,
+    shader_module_desc: &Usage<T, ShaderModuleDescriptorComponent>,
     shader_module: &Usage<T, ShaderModuleComponent>,
 ) {
     if shader_module.read().is_pending() {
         let device = <&Device>::query().iter(world).next().unwrap();
         shader_module
             .write()
-            .set_ready(device.create_shader_module(shader_module.descriptor()));
+            .set_ready(device.create_shader_module(&shader_module_desc.read()));
         println!("Created {} shader module", std::any::type_name::<T>());
     }
 }
@@ -365,7 +377,9 @@ pub fn buffer_write<
 #[read_component(Usage<T, TextureWriteComponent<L>>)]
 #[read_component(L)]
 #[read_component(ChangedFlag<L>)]
+#[read_component(IndirectComponent<Usage<T, TextureDescriptorComponent>>)]
 #[read_component(IndirectComponent<Usage<T, TextureComponent>>)]
+#[read_component(Usage<T, TextureDescriptorComponent>)]
 #[read_component(Usage<T, TextureComponent>)]
 pub fn texture_write<T, L, V>(world: &SubWorld)
 where
@@ -383,46 +397,51 @@ where
         &Usage<T, TextureWriteComponent<L>>,
         &L,
         &ChangedFlag<L>,
+        &IndirectComponent<Usage<T, TextureDescriptorComponent>>,
         &IndirectComponent<Usage<T, TextureComponent>>,
     )>::query()
-    .par_for_each(world, |(texture_write, texels, dirty_flag, texture)| {
-        let texture_component = world.get_indirect(texture).unwrap();
+    .par_for_each(
+        world,
+        |(texture_write, texels, dirty_flag, texture_desc, texture)| {
+            let texture_descriptor_component = world.get_indirect(texture_desc).unwrap();
+            let texture_component = world.get_indirect(texture).unwrap();
 
-        if dirty_flag.get() {
-            let texture = texture_component.read();
-            let texture = if let LazyComponent::Ready(texture) = &*texture {
-                texture
-            } else {
-                return;
-            };
+            if dirty_flag.get() {
+                let texture = texture_component.read();
+                let texture = if let LazyComponent::Ready(texture) = &*texture {
+                    texture
+                } else {
+                    return;
+                };
 
-            let texels = texels.read();
-            let bytes = texels.to_bytes();
-            let desc = texture_component.desc();
-            let image_copy_texture = ReadWriteLock::<ImageCopyTextureBase<()>>::read(texture_write);
-            let image_data_layout = ReadWriteLock::<ImageDataLayout>::read(texture_write);
+                let texels = texels.read();
+                let bytes = texels.to_bytes();
+                let image_copy_texture =
+                    ReadWriteLock::<ImageCopyTextureBase<()>>::read(texture_write);
+                let image_data_layout = ReadWriteLock::<ImageDataLayout>::read(texture_write);
 
-            println!(
-                "Writing {} bytes to texture at offset {}",
-                bytes.len(),
-                ReadWriteLock::<wgpu::ImageDataLayout>::read(texture_write).offset,
-            );
+                println!(
+                    "Writing {} bytes to texture at offset {}",
+                    bytes.len(),
+                    ReadWriteLock::<wgpu::ImageDataLayout>::read(texture_write).offset,
+                );
 
-            queue.write_texture(
-                wgpu::ImageCopyTexture {
-                    texture: &*texture,
-                    mip_level: image_copy_texture.mip_level,
-                    origin: image_copy_texture.origin,
-                    aspect: image_copy_texture.aspect,
-                },
-                bytes,
-                *image_data_layout,
-                desc.size,
-            );
+                queue.write_texture(
+                    wgpu::ImageCopyTexture {
+                        texture: &*texture,
+                        mip_level: image_copy_texture.mip_level,
+                        origin: image_copy_texture.origin,
+                        aspect: image_copy_texture.aspect,
+                    },
+                    bytes,
+                    *image_data_layout,
+                    texture_descriptor_component.read().size,
+                );
 
-            dirty_flag.set(false);
-        }
-    });
+                dirty_flag.set(false);
+            }
+        },
+    );
 }
 
 // Flush command buffers to the WGPU queue

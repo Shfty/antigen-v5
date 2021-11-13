@@ -40,7 +40,7 @@ pub fn bunnymark_prepare(
     global_buffer: &GlobalBufferComponent,
     local_buffer: &LocalBufferComponent,
     texture_view: &LogoTextureViewComponent,
-    sampler: &LogoSamplerComponent<'static>,
+    sampler: &LogoSamplerComponent,
     global_bind_group: &GlobalBindGroupComponent,
     local_bind_group: &LocalBindGroupComponent,
     surface_component: &IndirectComponent<SurfaceComponent>,
@@ -234,7 +234,7 @@ pub fn bunnymark_tick(
 // Render the hello triangle pipeline to the specified entity's surface
 #[legion::system(par_for_each)]
 #[read_component(Device)]
-#[read_component(RenderAttachmentTextureView<'static>)]
+#[read_component(RenderAttachmentTextureView)]
 pub fn bunnymark_render(
     world: &legion::world::SubWorld,
     _: &Bunnymark,
@@ -243,7 +243,7 @@ pub fn bunnymark_render(
     command_buffers: &CommandBuffersComponent,
     global_bind_group: &GlobalBindGroupComponent,
     local_bind_group: &LocalBindGroupComponent,
-    texture_view: &IndirectComponent<RenderAttachmentTextureView<'static>>,
+    texture_view: &IndirectComponent<RenderAttachmentTextureView>,
 ) {
     let device = if let Some(components) = <&Device>::query().iter(world).next() {
         components

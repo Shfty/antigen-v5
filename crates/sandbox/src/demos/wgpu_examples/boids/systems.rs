@@ -225,7 +225,7 @@ pub fn boids_prepare(
 // Render the hello triangle pipeline to the specified entity's surface
 #[legion::system(par_for_each)]
 #[read_component(Device)]
-#[read_component(RenderAttachmentTextureView<'static>)]
+#[read_component(RenderAttachmentTextureView)]
 pub fn boids_render(
     world: &legion::world::SubWorld,
     _: &Boids,
@@ -237,7 +237,7 @@ pub fn boids_render(
     front_buffer_bind_group: &FrontBufferBindGroupComponent,
     back_buffer_bind_group: &BackBufferBindGroupComponent,
     command_buffers: &CommandBuffersComponent,
-    texture_view: &IndirectComponent<RenderAttachmentTextureView<'static>>,
+    texture_view: &IndirectComponent<RenderAttachmentTextureView>,
     #[state] frame_num_atomic: &AtomicUsize,
     #[state] work_group_count: &u32,
 ) {

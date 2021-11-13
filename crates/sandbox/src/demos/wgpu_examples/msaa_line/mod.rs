@@ -12,12 +12,12 @@ use antigen_wgpu::{
     wgpu::{
         BufferAddress, BufferDescriptor, BufferUsages, Device, Extent3d, ShaderModuleDescriptor,
         ShaderSource, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
-        TextureViewDescriptor,
     },
     BufferComponent, CommandBuffersComponent, MeshVertices, MsaaFramebuffer,
-    MsaaFramebufferTexture, MsaaFramebufferTextureView, PipelineLayoutComponent,
-    RenderAttachmentTextureView, RenderBundleComponent, ShaderModuleComponent, SurfaceComponent,
-    TextureComponent, TextureViewComponent,
+    MsaaFramebufferTexture, MsaaFramebufferTextureDescriptor, MsaaFramebufferTextureView,
+    MsaaFramebufferTextureViewDescriptor, PipelineLayoutComponent, RenderAttachmentTextureView,
+    RenderBundleComponent, SurfaceComponent, TextureComponent,
+    TextureDescriptorComponent, TextureViewComponent, TextureViewDescriptorComponent,
 };
 
 use bytemuck::{Pod, Zeroable};
@@ -31,7 +31,7 @@ struct Vertex {
 
 pub enum VertexBuffer {}
 
-pub type VertexBufferComponent<'a> = Usage<VertexBuffer, BufferComponent<'a>>;
+pub type VertexBufferComponent = Usage<VertexBuffer, BufferComponent>;
 
 const LINE_COUNT: u32 = 50;
 const VERTEX_COUNT: u32 = LINE_COUNT * 2;
@@ -60,12 +60,13 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     cmd.add_indirect_component::<RenderAttachmentTextureView>(renderer_entity, window_entity);
 
     // Shader
-    cmd.add_component(
+    antigen_wgpu::assemble_shader(
+        cmd,
         renderer_entity,
-        ShaderModuleComponent::pending(ShaderModuleDescriptor {
+        ShaderModuleDescriptor {
             label: None,
             source: ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!("shader.wgsl"))),
-        }),
+        },
     );
 
     // Vertex data
@@ -92,20 +93,21 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     );
 
     // Vertex buffer
-    cmd.add_component(
+    antigen_wgpu::assemble_buffer::<VertexBuffer>(
+        cmd,
         renderer_entity,
-        VertexBufferComponent::new(BufferComponent::pending(BufferDescriptor {
+        BufferDescriptor {
             label: Some("Vertex Buffer"),
             size: std::mem::size_of::<Vertex>() as BufferAddress * LINE_COUNT as BufferAddress * 2,
             usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
             mapped_at_creation: false,
-        })),
+        },
     );
 
     // MSAA framebuffer
     cmd.add_component(
         renderer_entity,
-        MsaaFramebufferTexture::new(TextureComponent::pending(TextureDescriptor {
+        MsaaFramebufferTextureDescriptor::new(TextureDescriptorComponent::new(TextureDescriptor {
             label: None,
             size: Extent3d {
                 width: 800,
@@ -120,15 +122,25 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         })),
     );
 
+    cmd.add_component(
+        renderer_entity,
+        MsaaFramebufferTexture::new(TextureComponent::pending()),
+    );
+
     // Texture view
     cmd.add_component(
         renderer_entity,
-        MsaaFramebufferTextureView::new(TextureViewComponent::pending(
-            TextureViewDescriptor::default(),
+        MsaaFramebufferTextureViewDescriptor::new(TextureViewDescriptorComponent::new(
+            Default::default(),
         )),
     );
 
-    cmd.add_indirect_component_self::<MsaaFramebufferTextureView<'static>>(renderer_entity);
+    cmd.add_component(
+        renderer_entity,
+        MsaaFramebufferTextureView::new(TextureViewComponent::pending()),
+    );
+
+    cmd.add_indirect_component_self::<MsaaFramebufferTextureView>(renderer_entity);
 }
 
 pub fn prepare_schedule() -> ImmutableSchedule<Serial> {

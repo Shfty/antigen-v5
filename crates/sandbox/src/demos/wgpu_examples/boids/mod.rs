@@ -30,17 +30,17 @@ pub enum Uniform {}
 pub enum FrontBuffer {}
 pub enum BackBuffer {}
 
-pub type VertexBufferComponent<'a> = Usage<Vertex, BufferComponent<'a>>;
-pub type UniformBufferComponent<'a> = Usage<Uniform, BufferComponent<'a>>;
+pub type VertexBufferComponent = Usage<Vertex, BufferComponent>;
+pub type UniformBufferComponent = Usage<Uniform, BufferComponent>;
 
-pub type FrontBufferComponent<'a> = Usage<FrontBuffer, BufferComponent<'a>>;
-pub type BackBufferComponent<'a> = Usage<BackBuffer, BufferComponent<'a>>;
+pub type FrontBufferComponent = Usage<FrontBuffer, BufferComponent>;
+pub type BackBufferComponent = Usage<BackBuffer, BufferComponent>;
 
-pub type FrontBufferBindGroupComponent<'a> = Usage<FrontBuffer, BindGroupComponent>;
-pub type BackBufferBindGroupComponent<'a> = Usage<BackBuffer, BindGroupComponent>;
+pub type FrontBufferBindGroupComponent = Usage<FrontBuffer, BindGroupComponent>;
+pub type BackBufferBindGroupComponent = Usage<BackBuffer, BindGroupComponent>;
 
-pub type ComputeShaderModuleComponent<'a> = Usage<Compute, ShaderModuleComponent<'a>>;
-pub type DrawShaderModuleComponent<'a> = Usage<Draw, ShaderModuleComponent<'a>>;
+pub type ComputeShaderModuleComponent = Usage<Compute, ShaderModuleComponent>;
+pub type DrawShaderModuleComponent = Usage<Draw, ShaderModuleComponent>;
 
 const NUM_PARTICLES: usize = 1500;
 const PARTICLES_PER_GROUP: usize = 64;
@@ -78,20 +78,22 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     cmd.add_indirect_component::<RenderAttachmentTextureView>(renderer_entity, window_entity);
 
     // Shaders
-    cmd.add_component(
+    antigen_wgpu::assemble_shader_usage::<Compute>(
+        cmd,
         renderer_entity,
-        Usage::<Compute, _>::new(ShaderModuleComponent::pending(ShaderModuleDescriptor {
+        ShaderModuleDescriptor {
             label: None,
             source: ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!("compute.wgsl"))),
-        })),
+        },
     );
 
-    cmd.add_component(
+    antigen_wgpu::assemble_shader_usage::<Draw>(
+        cmd,
         renderer_entity,
-        Usage::<Draw, _>::new(ShaderModuleComponent::pending(ShaderModuleDescriptor {
+        ShaderModuleDescriptor {
             label: None,
             source: ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!("draw.wgsl"))),
-        })),
+        },
     );
 
     // Buffer data
@@ -130,44 +132,48 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     assemble_buffer_data::<Uniform, _>(cmd, renderer_entity, RwLock::new(sim_param_data), 0);
 
     // Buffers
-    cmd.add_component(
+    antigen_wgpu::assemble_buffer::<Vertex>(
+        cmd,
         renderer_entity,
-        Usage::<Vertex, _>::new(BufferComponent::pending(BufferDescriptor {
+        BufferDescriptor {
             label: Some("Vertex Buffer"),
             size: (6 * std::mem::size_of::<f32>()) as BufferAddress,
             usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
             mapped_at_creation: false,
-        })),
+        },
     );
 
-    cmd.add_component(
+    antigen_wgpu::assemble_buffer::<Uniform>(
+        cmd,
         renderer_entity,
-        Usage::<Uniform, _>::new(BufferComponent::pending(BufferDescriptor {
+        BufferDescriptor {
             label: Some("Simulation Parameter Buffer"),
             size: 7 * std::mem::size_of::<f32>() as BufferAddress,
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
             mapped_at_creation: false,
-        })),
+        },
     );
 
-    cmd.add_component(
+    antigen_wgpu::assemble_buffer::<FrontBuffer>(
+        cmd,
         renderer_entity,
-        Usage::<FrontBuffer, _>::new(BufferComponent::pending(BufferDescriptor {
+        BufferDescriptor {
             label: Some("Front Particle Buffer"),
             size: (4 * NUM_PARTICLES * std::mem::size_of::<f32>()) as BufferAddress,
             usage: BufferUsages::VERTEX | BufferUsages::STORAGE | BufferUsages::COPY_DST,
             mapped_at_creation: false,
-        })),
+        },
     );
 
-    cmd.add_component(
+    antigen_wgpu::assemble_buffer::<BackBuffer>(
+        cmd,
         renderer_entity,
-        Usage::<BackBuffer, _>::new(BufferComponent::pending(BufferDescriptor {
+        BufferDescriptor {
             label: Some("Back Particle Buffer"),
             size: (4 * NUM_PARTICLES * std::mem::size_of::<f32>()) as BufferAddress,
             usage: BufferUsages::VERTEX | BufferUsages::STORAGE | BufferUsages::COPY_DST,
             mapped_at_creation: false,
-        })),
+        },
     );
 }
 

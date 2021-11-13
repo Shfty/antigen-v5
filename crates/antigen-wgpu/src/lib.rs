@@ -10,8 +10,8 @@ pub use to_bytes::*;
 
 use legion::{storage::Component, systems::CommandBuffer, world::SubWorld, Entity, World};
 use wgpu::{
-    Adapter, Backends, BufferAddress, Device, DeviceDescriptor, ImageCopyTextureBase,
-    ImageDataLayout, Instance, Queue, Surface,
+    Adapter, Backends, BufferAddress, BufferDescriptor, Device, DeviceDescriptor,
+    ImageCopyTextureBase, ImageDataLayout, Instance, Queue, ShaderModuleDescriptor, Surface,
 };
 
 pub use wgpu;
@@ -80,7 +80,11 @@ pub fn assemble_window_surface(cmd: &mut CommandBuffer, #[state] (entity,): &(En
     cmd.add_component(*entity, ChangedFlag::<SurfaceTextureComponent>::new_clean());
     cmd.add_component(
         *entity,
-        Usage::<RenderAttachment, _>::new(TextureViewComponent::pending(Default::default())),
+        Usage::<RenderAttachment, _>::new(TextureViewDescriptorComponent::new(Default::default())),
+    );
+    cmd.add_component(
+        *entity,
+        Usage::<RenderAttachment, _>::new(TextureViewComponent::pending()),
     );
 }
 
@@ -94,6 +98,41 @@ pub fn assemble_surface_size(cmd: &mut CommandBuffer, #[state] (entity,): &(Enti
 pub fn assemble_texture_size(cmd: &mut CommandBuffer, #[state] (entity,): &(Entity,)) {
     cmd.add_component(*entity, TextureSizeComponent::new(Default::default()));
     cmd.add_component(*entity, ChangedFlag::<TextureSizeComponent>::new_clean());
+}
+
+pub fn assemble_shader(
+    cmd: &mut CommandBuffer,
+    entity: Entity,
+    desc: ShaderModuleDescriptor<'static>,
+) {
+    cmd.add_component(entity, ShaderModuleDescriptorComponent::new(desc));
+    cmd.add_component(entity, ShaderModuleComponent::pending());
+}
+
+pub fn assemble_shader_usage<U: Send + Sync + 'static>(
+    cmd: &mut CommandBuffer,
+    entity: Entity,
+    desc: ShaderModuleDescriptor<'static>,
+) {
+    cmd.add_component(
+        entity,
+        Usage::<U, _>::new(ShaderModuleDescriptorComponent::new(desc)),
+    );
+
+    cmd.add_component(entity, Usage::<U, _>::new(ShaderModuleComponent::pending()));
+}
+
+pub fn assemble_buffer<U: Send + Sync + 'static>(
+    cmd: &mut CommandBuffer,
+    entity: Entity,
+    desc: BufferDescriptor<'static>,
+) {
+    cmd.add_component(
+        entity,
+        Usage::<U, _>::new(BufferDescriptorComponent::new(desc)),
+    );
+
+    cmd.add_component(entity, Usage::<U, _>::new(BufferComponent::pending()));
 }
 
 pub fn assemble_buffer_data<U, T>(
@@ -135,6 +174,7 @@ pub fn assemble_texture_data<U, T>(
     );
 
     // Texture write indirect
+    cmd.add_indirect_component_self::<Usage<U, TextureDescriptorComponent>>(entity);
     cmd.add_indirect_component_self::<Usage<U, TextureComponent>>(entity);
 }
 
@@ -144,6 +184,7 @@ pub fn assemble_texture_data<U, T>(
 #[read_component(SurfaceComponent)]
 #[read_component(SurfaceTextureComponent)]
 #[read_component(ChangedFlag<SurfaceTextureComponent>)]
+#[read_component(RenderAttachmentTextureViewDescriptor)]
 #[read_component(RenderAttachmentTextureView)]
 pub fn surface_textures_views(world: &SubWorld) {
     use legion::IntoQuery;
