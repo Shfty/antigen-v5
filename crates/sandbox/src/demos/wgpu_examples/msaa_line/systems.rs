@@ -1,4 +1,4 @@
-use super::{MsaaLine, Vertex, VertexBufferComponent, SAMPLE_COUNT, VERTEX_COUNT};
+use super::{MsaaLine, Vertex, VertexBufferComponent, VERTEX_COUNT};
 use antigen_core::{
     ChangedFlag, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock, Usage,
 };
@@ -27,14 +27,16 @@ use legion::{world::SubWorld, IntoQuery};
 #[legion::system(par_for_each)]
 #[read_component(Device)]
 #[read_component(SurfaceConfigurationComponent)]
+#[read_component(MsaaFramebufferTextureDescriptor<'static>)]
 pub fn msaa_line_prepare(
     world: &legion::world::SubWorld,
     _: &MsaaLine,
     shader_module: &ShaderModuleComponent,
     pipeline_layout_component: &PipelineLayoutComponent,
     render_bundle_component: &RenderBundleComponent,
-    surface_configuration_component: &IndirectComponent<SurfaceConfigurationComponent>,
     vertex_buffer_component: &VertexBufferComponent,
+    surface_configuration_component: &IndirectComponent<SurfaceConfigurationComponent>,
+    msaa_framebuffer_desc: &IndirectComponent<MsaaFramebufferTextureDescriptor<'static>>,
 ) {
     let device = <&Device>::query().iter(world).next().unwrap();
 
@@ -80,6 +82,9 @@ pub fn msaa_line_prepare(
         world.get_indirect(surface_configuration_component).unwrap();
     let config = ReadWriteLock::<SurfaceConfiguration>::read(surface_configuration_component);
 
+    let msaa_framebuffer_desc = world.get_indirect(msaa_framebuffer_desc).unwrap();
+    let msaa_framebuffer_desc = msaa_framebuffer_desc.read();
+
     let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
         label: None,
         layout: Some(pipeline_layout),
@@ -104,7 +109,7 @@ pub fn msaa_line_prepare(
         },
         depth_stencil: None,
         multisample: MultisampleState {
-            count: SAMPLE_COUNT,
+            count: msaa_framebuffer_desc.sample_count,
             ..Default::default()
         },
     });
@@ -113,7 +118,7 @@ pub fn msaa_line_prepare(
         label: None,
         color_formats: &[config.format],
         depth_stencil: None,
-        sample_count: SAMPLE_COUNT,
+        sample_count: msaa_framebuffer_desc.sample_count,
     });
 
     encoder.set_pipeline(&pipeline);
@@ -174,11 +179,13 @@ pub fn msaa_line_resize(
 #[legion::system(par_for_each)]
 #[read_component(WindowComponent)]
 #[read_component(WindowEventComponent)]
+#[read_component(MsaaFramebufferTextureDescriptor<'static>)]
 pub fn msaa_line_key_event(
     world: &SubWorld,
     _: &MsaaLine,
     window: &IndirectComponent<WindowComponent>,
     render_bundle: &RenderBundleComponent,
+    msaa_framebuffer_desc: &IndirectComponent<MsaaFramebufferTextureDescriptor<'static>>,
 ) {
     let window = world
         .get_indirect(window)
@@ -195,7 +202,8 @@ pub fn msaa_line_key_event(
         .next()
         .expect("No WindowEventComponent");
 
-    if let (
+    let window_event = window_event.read();
+    let (window_id, key) = if let (
         Some(window_id),
         Some(WindowEvent::KeyboardInput {
             input:
@@ -206,23 +214,31 @@ pub fn msaa_line_key_event(
                 },
             ..
         }),
-    ) = &*window_event.read()
+    ) = &*window_event
     {
-        if window.id() != *window_id {
-            return;
-        }
+        (window_id, key)
+    } else {
+        return;
+    };
 
-        match key {
-            VirtualKeyCode::Left => {
-                println!("Left");
-                render_bundle.write().set_pending();
-            }
-            VirtualKeyCode::Right => {
-                println!("Right");
-                render_bundle.write().set_pending();
-            }
-            _ => (),
+    if window.id() != *window_id {
+        return;
+    }
+
+    let msaa_framebuffer_desc = world.get_indirect(msaa_framebuffer_desc).unwrap();
+
+    match key {
+        VirtualKeyCode::Left => {
+            msaa_framebuffer_desc.write().sample_count = 1;
+            render_bundle.write().set_pending();
+            window.request_redraw();
         }
+        VirtualKeyCode::Right => {
+            msaa_framebuffer_desc.write().sample_count = 4;
+            render_bundle.write().set_pending();
+            window.request_redraw();
+        }
+        _ => (),
     }
 }
 
@@ -230,6 +246,7 @@ pub fn msaa_line_key_event(
 #[legion::system(par_for_each)]
 #[read_component(Device)]
 #[read_component(RenderAttachmentTextureView)]
+#[read_component(MsaaFramebufferTextureDescriptor<'static>)]
 #[read_component(MsaaFramebufferTextureView)]
 pub fn msaa_line_render(
     world: &legion::world::SubWorld,
@@ -237,7 +254,8 @@ pub fn msaa_line_render(
     render_bundle: &RenderBundleComponent,
     command_buffers: &CommandBuffersComponent,
     render_attachment: &IndirectComponent<RenderAttachmentTextureView>,
-    msaa_framebuffer: &IndirectComponent<MsaaFramebufferTextureView>,
+    msaa_framebuffer_desc: &IndirectComponent<MsaaFramebufferTextureDescriptor<'static>>,
+    msaa_framebuffer_view: &IndirectComponent<MsaaFramebufferTextureView>,
 ) {
     let device = if let Some(components) = <&Device>::query().iter(world).next() {
         components
@@ -260,13 +278,17 @@ pub fn msaa_line_render(
         return;
     };
 
-    let msaa_framebuffer = world.get_indirect(msaa_framebuffer).unwrap();
-    let msaa_framebuffer = msaa_framebuffer.read();
-    let msaa_framebuffer = if let LazyComponent::Ready(msaa_framebuffer) = &*msaa_framebuffer {
-        msaa_framebuffer
-    } else {
-        return;
-    };
+    let msaa_framebuffer_desc = world.get_indirect(msaa_framebuffer_desc).unwrap();
+    let msaa_framebuffer_desc = msaa_framebuffer_desc.read();
+
+    let msaa_framebuffer_view = world.get_indirect(msaa_framebuffer_view).unwrap();
+    let msaa_framebuffer_view = msaa_framebuffer_view.read();
+    let msaa_framebuffer_view =
+        if let LazyComponent::Ready(msaa_framebuffer_view) = &*msaa_framebuffer_view {
+            msaa_framebuffer_view
+        } else {
+            return;
+        };
 
     let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor { label: None });
 
@@ -274,7 +296,7 @@ pub fn msaa_line_render(
         load: LoadOp::Clear(Color::BLACK),
         store: true,
     };
-    let rpass_color_attachment = if SAMPLE_COUNT == 1 {
+    let rpass_color_attachment = if msaa_framebuffer_desc.sample_count == 1 {
         RenderPassColorAttachment {
             view: render_attachment,
             resolve_target: None,
@@ -282,7 +304,7 @@ pub fn msaa_line_render(
         }
     } else {
         RenderPassColorAttachment {
-            view: msaa_framebuffer,
+            view: msaa_framebuffer_view,
             resolve_target: Some(render_attachment),
             ops,
         }

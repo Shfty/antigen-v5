@@ -4,10 +4,10 @@ use antigen_core::{
 };
 
 use wgpu::{
-    BindGroup, Buffer, BufferDescriptor, ComputePipeline, ImageCopyTextureBase, ImageDataLayout,
-    PipelineLayout, RenderBundle, RenderPipeline, Sampler, SamplerDescriptor, ShaderModule,
-    ShaderModuleDescriptor, Surface, SurfaceConfiguration, Texture, TextureDescriptor,
-    TextureViewDescriptor,
+    util::BufferInitDescriptor, BindGroup, Buffer, BufferDescriptor, ComputePipeline,
+    ImageCopyTextureBase, ImageDataLayout, PipelineLayout, RenderBundle, RenderPipeline, Sampler,
+    SamplerDescriptor, ShaderModule, ShaderModuleDescriptor, Surface, SurfaceConfiguration,
+    Texture, TextureDescriptor, TextureViewDescriptor,
 };
 
 use std::marker::PhantomData;
@@ -257,6 +257,26 @@ impl<'a> BufferDescriptorComponent<'a> {
     }
 }
 
+// WGPU buffer init descriptor
+#[derive(Debug)]
+pub struct BufferInitDescriptorComponent<'a>(RwLock<BufferInitDescriptor<'a>>);
+
+impl<'a> ReadWriteLock<BufferInitDescriptor<'a>> for BufferInitDescriptorComponent<'a> {
+    fn read(&self) -> RwLockReadGuard<BufferInitDescriptor<'a>> {
+        self.0.read()
+    }
+
+    fn write(&self) -> RwLockWriteGuard<BufferInitDescriptor<'a>> {
+        self.0.write()
+    }
+}
+
+impl<'a> BufferInitDescriptorComponent<'a> {
+    pub fn new(desc: BufferInitDescriptor<'a>) -> Self {
+        BufferInitDescriptorComponent(RwLock::new(desc))
+    }
+}
+
 // WGPU buffer
 #[derive(Debug)]
 pub struct BufferComponent(RwLock<LazyComponent<Buffer>>);
@@ -439,4 +459,3 @@ impl<T> MeshIndices<T> {
         MeshIndices(RwLock::new(indices))
     }
 }
-

@@ -12,35 +12,9 @@ use antigen_core::{
     Usage,
 };
 
-use antigen_wgpu::{
-    assemble_buffer_data,
-    wgpu::{
-        BufferAddress, BufferDescriptor, BufferUsages, Device, ShaderModuleDescriptor, ShaderSource,
-    },
-    BindGroupComponent, BufferComponent, CommandBuffersComponent, ComputePipelineComponent,
-    RenderAttachmentTextureView, RenderPipelineComponent, ShaderModuleComponent, SurfaceConfigurationComponent,
-};
+use antigen_wgpu::{BindGroupComponent, CommandBuffersComponent, ComputePipelineComponent, RenderAttachmentTextureView, RenderPipelineComponent, SurfaceConfigurationComponent, assemble_buffer_data, wgpu::{BufferAddress, BufferDescriptor, BufferUsages, Device, ShaderModuleDescriptor, ShaderSource, util::BufferInitDescriptor}};
 
 use rand::{distributions::Distribution, SeedableRng};
-
-pub enum Compute {}
-pub enum Draw {}
-pub enum Vertex {}
-pub enum Uniform {}
-pub enum FrontBuffer {}
-pub enum BackBuffer {}
-
-pub type VertexBufferComponent = Usage<Vertex, BufferComponent>;
-pub type UniformBufferComponent = Usage<Uniform, BufferComponent>;
-
-pub type FrontBufferComponent = Usage<FrontBuffer, BufferComponent>;
-pub type BackBufferComponent = Usage<BackBuffer, BufferComponent>;
-
-pub type FrontBufferBindGroupComponent = Usage<FrontBuffer, BindGroupComponent>;
-pub type BackBufferBindGroupComponent = Usage<BackBuffer, BindGroupComponent>;
-
-pub type ComputeShaderModuleComponent = Usage<Compute, ShaderModuleComponent>;
-pub type DrawShaderModuleComponent = Usage<Draw, ShaderModuleComponent>;
 
 const NUM_PARTICLES: usize = 1500;
 const PARTICLES_PER_GROUP: usize = 64;
@@ -98,8 +72,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
 
     // Buffer data
     // Vertices
-    let vertex_buffer_data = [-0.01f32, -0.02, 0.01, -0.02, 0.00, 0.02];
-    assemble_buffer_data::<Vertex, _>(cmd, renderer_entity, RwLock::new(vertex_buffer_data), 0);
+    const VERTEX_BUFFER_DATA: [f32; 6] = [-0.01f32, -0.02, 0.01, -0.02, 0.00, 0.02];
 
     //  Particles
     let mut initial_particle_data = vec![0.0f32; (4 * NUM_PARTICLES) as usize];
@@ -119,7 +92,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     assemble_buffer_data::<BackBuffer, _>(cmd, renderer_entity, initial_particle_data, 0);
 
     // Uniforms
-    let sim_param_data = [
+    const SIM_PARAM_DATA: [f32; 7] = [
         0.04f32, // deltaT
         0.1,     // rule1Distance
         0.025,   // rule2Distance
@@ -129,28 +102,24 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         0.005,   // rule3Scale
     ];
 
-    assemble_buffer_data::<Uniform, _>(cmd, renderer_entity, RwLock::new(sim_param_data), 0);
-
     // Buffers
-    antigen_wgpu::assemble_buffer::<Vertex>(
+    antigen_wgpu::assemble_buffer_init::<Vertex>(
         cmd,
         renderer_entity,
-        BufferDescriptor {
+        BufferInitDescriptor {
             label: Some("Vertex Buffer"),
-            size: (6 * std::mem::size_of::<f32>()) as BufferAddress,
             usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
-            mapped_at_creation: false,
+            contents: bytemuck::cast_slice(&VERTEX_BUFFER_DATA),
         },
     );
 
-    antigen_wgpu::assemble_buffer::<Uniform>(
+    antigen_wgpu::assemble_buffer_init::<Uniform>(
         cmd,
         renderer_entity,
-        BufferDescriptor {
+        BufferInitDescriptor {
             label: Some("Simulation Parameter Buffer"),
-            size: 7 * std::mem::size_of::<f32>() as BufferAddress,
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-            mapped_at_creation: false,
+            usage: BufferUsages::UNIFORM,
+            contents: bytemuck::cast_slice(&SIM_PARAM_DATA),
         },
     );
 
@@ -182,14 +151,12 @@ pub fn prepare_schedule() -> ImmutableSchedule<Serial> {
         parallel![
             antigen_wgpu::create_shader_modules_usage_system::<Compute>(),
             antigen_wgpu::create_shader_modules_usage_system::<Draw>(),
-            antigen_wgpu::create_buffers_system::<Vertex>(),
-            antigen_wgpu::create_buffers_system::<Uniform>(),
+            antigen_wgpu::create_buffers_init_system::<Vertex>(),
+            antigen_wgpu::create_buffers_init_system::<Uniform>(),
             antigen_wgpu::create_buffers_system::<FrontBuffer>(),
             antigen_wgpu::create_buffers_system::<BackBuffer>(),
         ],
         parallel![
-            antigen_wgpu::buffer_write_system::<Vertex, RwLock<[f32; 6]>, [f32; 6]>(),
-            antigen_wgpu::buffer_write_system::<Uniform, RwLock<[f32; 7]>, [f32; 7]>(),
             antigen_wgpu::buffer_write_system::<FrontBuffer, Arc<RwLock<Vec<f32>>>, Vec<f32>>(),
             antigen_wgpu::buffer_write_system::<BackBuffer, Arc<RwLock<Vec<f32>>>, Vec<f32>>(),
         ],

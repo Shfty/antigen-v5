@@ -2,8 +2,8 @@ use antigen_core::{AddComponentWithChangedFlag, AddIndirectComponent, ChangedFla
 
 use legion::{storage::Component, systems::CommandBuffer, Entity, World};
 use wgpu::{
-    Adapter, Backends, BufferAddress, BufferDescriptor, Device, DeviceDescriptor,
-    ImageCopyTextureBase, ImageDataLayout, Instance, Queue, SamplerDescriptor,
+    util::BufferInitDescriptor, Adapter, Backends, BufferAddress, BufferDescriptor, Device,
+    DeviceDescriptor, ImageCopyTextureBase, ImageDataLayout, Instance, Queue, SamplerDescriptor,
     ShaderModuleDescriptor, Surface, SurfaceConfiguration, TextureDescriptor,
     TextureViewDescriptor,
 };
@@ -11,11 +11,12 @@ use wgpu::{
 use std::path::Path;
 
 use crate::{
-    BufferComponent, BufferDescriptorComponent, BufferWriteComponent, RenderAttachment,
-    SamplerComponent, SamplerDescriptorComponent, ShaderModuleComponent,
-    ShaderModuleDescriptorComponent, SurfaceComponent, SurfaceConfigurationComponent,
-    SurfaceTextureComponent, TextureComponent, TextureDescriptorComponent, TextureViewComponent,
-    TextureViewDescriptorComponent, TextureWriteComponent,
+    BufferComponent, BufferDescriptorComponent, BufferInitDescriptorComponent,
+    BufferWriteComponent, RenderAttachment, SamplerComponent, SamplerDescriptorComponent,
+    ShaderModuleComponent, ShaderModuleDescriptorComponent, SurfaceComponent,
+    SurfaceConfigurationComponent, SurfaceTextureComponent, TextureComponent,
+    TextureDescriptorComponent, TextureViewComponent, TextureViewDescriptorComponent,
+    TextureWriteComponent,
 };
 
 /// Create an entity to hold an Instance, Adapter, Device and Queue
@@ -84,7 +85,9 @@ pub fn assemble_window_surface(cmd: &mut CommandBuffer, #[state] (entity,): &(En
     );
     cmd.add_component(
         *entity,
-        Usage::<RenderAttachment, _>::new(ChangedFlag::<TextureViewDescriptorComponent>::new_clean()),
+        Usage::<RenderAttachment, _>::new(
+            ChangedFlag::<TextureViewDescriptorComponent>::new_clean(),
+        ),
     );
     cmd.add_component(
         *entity,
@@ -135,6 +138,25 @@ pub fn assemble_buffer<U: Send + Sync + 'static>(
     cmd.add_component(
         entity,
         Usage::<U, _>::new(ChangedFlag::<BufferDescriptorComponent>::new_clean()),
+    );
+
+    cmd.add_component(entity, Usage::<U, _>::new(BufferComponent::pending()));
+}
+
+/// Adds a usage-tagged buffer to an entity with initial data
+pub fn assemble_buffer_init<U: Send + Sync + 'static>(
+    cmd: &mut CommandBuffer,
+    entity: Entity,
+    desc: BufferInitDescriptor<'static>,
+) {
+    cmd.add_component(
+        entity,
+        Usage::<U, _>::new(BufferInitDescriptorComponent::new(desc)),
+    );
+
+    cmd.add_component(
+        entity,
+        Usage::<U, _>::new(ChangedFlag::<BufferInitDescriptorComponent>::new_clean()),
     );
 
     cmd.add_component(entity, Usage::<U, _>::new(BufferComponent::pending()));

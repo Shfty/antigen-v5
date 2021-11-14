@@ -15,7 +15,7 @@ use antigen_wgpu::{
         BufferAddress, BufferDescriptor, BufferUsages, Device, Extent3d, ShaderModuleDescriptor,
         ShaderSource, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
     },
-    BufferComponent, CommandBuffersComponent, MeshVertices, MsaaFramebuffer,
+    CommandBuffersComponent, MeshVertices, MsaaFramebuffer,
     MsaaFramebufferTextureDescriptor, MsaaFramebufferTextureView, PipelineLayoutComponent,
     RenderAttachmentTextureView, RenderBundleComponent, SurfaceConfigurationComponent,
     TextureDescriptorComponent, TextureViewDescriptorComponent,
@@ -29,10 +29,6 @@ struct Vertex {
     _pos: [f32; 2],
     _color: [f32; 4],
 }
-
-pub enum VertexBuffer {}
-
-pub type VertexBufferComponent = Usage<VertexBuffer, BufferComponent>;
 
 const LINE_COUNT: u32 = 50;
 const VERTEX_COUNT: u32 = LINE_COUNT * 2;

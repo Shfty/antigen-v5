@@ -1,9 +1,7 @@
 // TODO: Factor out Texels, MeshIndices, etc
 //       Implement with usage flags instead
 //
-// TODO: Move module-specific component type aliases into component submodules
-// TODO: Sweep through and use type aliases to construct Usages in renderer modules
-// TODO: Support for creating textures via buffer init
+// TODO: Support for creating buffers via init
 //       Could use a two-variant enum in the component to hold either
 //       Alternately, use descriptors as components
 //          This is probably better, since it separates it and allows for a changed flag
@@ -19,15 +17,17 @@
 //       [ ] Hello Windows(?)
 //       [ ] Hello(?)
 //       [ ] Mipmap
-//       [>] MSAA Line
+//       [✓] MSAA Line
 //           [✓] MSAA rendering
-//           [>] Recreate framebuffer on resize
-//           [ ] Render bundle recreation
+//           [✓] Recreate framebuffer on resize
+//           [✓] Render bundle recreation
 //       [ ] Shadow
 //       [ ] Texture Arrays
 //       [ ] Water
 //
 // TODO: Refactor Cube renderer to use original vertex layout
+//
+// TODO: Figure out a better way to assemble Usage<U, ChangedFlag<T>>
 //
 // TODO: Improve WindowEventComponent
 //

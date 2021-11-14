@@ -21,34 +21,14 @@ use antigen_wgpu::{
         ShaderSource, TextureAspect, TextureDescriptor, TextureDimension, TextureFormat,
         TextureUsages,
     },
-    BindGroupComponent, BufferComponent, CommandBuffersComponent, RenderAttachmentTextureView,
-    RenderPipelineComponent, SamplerComponent, Texels, TextureComponent,
-    TextureDescriptorComponent, TextureViewComponent, ToBytes,
-SurfaceConfigurationComponent,
+    BindGroupComponent, CommandBuffersComponent, RenderAttachmentTextureView,
+    RenderPipelineComponent, SurfaceConfigurationComponent, Texels, ToBytes,
 };
 
 const MAX_BUNNIES: usize = 1 << 20;
 const BUNNY_SIZE: f32 = 0.15 * 256.0;
 const GRAVITY: f32 = -9.8 * 100.0;
 const MAX_VELOCITY: f32 = 750.0;
-
-pub enum Logo {}
-pub enum Global {}
-pub enum Local {}
-pub enum PlayfieldExtent {}
-
-pub type GlobalBufferComponent = Usage<Global, BufferComponent>;
-pub type LocalBufferComponent = Usage<Local, BufferComponent>;
-
-pub type GlobalBindGroupComponent<'a> = Usage<Global, BindGroupComponent>;
-pub type LocalBindGroupComponent<'a> = Usage<Local, BindGroupComponent>;
-
-pub type PlayfieldExtentComponent = Usage<PlayfieldExtent, RwLock<(u32, u32)>>;
-
-pub type LogoTextureDescriptorComponent<'a> = Usage<Logo, TextureDescriptorComponent<'a>>;
-pub type LogoTextureComponent = Usage<Logo, TextureComponent>;
-pub type LogoTextureViewComponent = Usage<Logo, TextureViewComponent>;
-pub type LogoSamplerComponent = Usage<Logo, SamplerComponent>;
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]

@@ -5,56 +5,22 @@ pub use components::*;
 use legion::systems::CommandBuffer;
 pub use systems::*;
 
-use antigen_core::{AddIndirectComponent, ChangedFlag, ImmutableSchedule, RwLock, Serial, Single, Usage, parallel, serial, single};
+use antigen_core::{
+    parallel, serial, single, AddIndirectComponent, ChangedFlag, ImmutableSchedule, Serial, Single,
+    Usage,
+};
 use antigen_wgpu::{
     assemble_buffer_data, assemble_texture_data,
     wgpu::{
-        BufferAddress, BufferDescriptor, BufferUsages, Device, Extent3d, ImageCopyTextureBase,
-        ImageDataLayout, ShaderModuleDescriptor, ShaderSource, TextureAspect, TextureDescriptor,
-        TextureDimension, TextureFormat, TextureUsages,
+        util::BufferInitDescriptor, BufferAddress, BufferDescriptor, BufferUsages, Device,
+        Extent3d, ImageCopyTextureBase, ImageDataLayout, ShaderModuleDescriptor, ShaderSource,
+        TextureAspect, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
     },
-    BindGroupComponent, BufferComponent, CommandBuffersComponent, MeshIndices, MeshUvs,
-    MeshVertices, RenderAttachmentTextureView, RenderPipelineComponent,
-    SurfaceConfigurationComponent, Texels, TextureComponent, TextureDescriptorComponent,
-    TextureViewComponent,
+    BindGroupComponent, CommandBuffersComponent, MeshUvs, MeshVertices,
+    RenderAttachmentTextureView, RenderPipelineComponent, SurfaceConfigurationComponent, Texels,
 };
 
 use std::{borrow::Cow, num::NonZeroU32};
-
-#[derive(Debug)]
-pub enum OpaquePass {}
-
-#[derive(Debug)]
-pub enum WirePass {}
-
-#[derive(Debug)]
-pub enum Vertex {}
-
-#[derive(Debug)]
-pub enum Index {}
-
-#[derive(Debug)]
-pub enum Uniform {}
-
-#[derive(Debug)]
-pub enum Mandelbrot {}
-
-#[derive(Debug)]
-pub enum ViewProjection {}
-
-pub type OpaquePassRenderPipelineComponent = Usage<OpaquePass, RenderPipelineComponent>;
-pub type WirePassRenderPipelineComponent = Usage<WirePass, RenderPipelineComponent>;
-
-pub type ViewProjectionMatrix = Usage<ViewProjection, RwLock<[f32; 16]>>;
-
-pub type VertexBufferComponent = Usage<Vertex, BufferComponent>;
-pub type IndexBufferComponent = Usage<Index, BufferComponent>;
-pub type UniformBufferComponent = Usage<Uniform, BufferComponent>;
-
-pub type MandelbrotTextureDescriptorComponent<'a> =
-    Usage<Mandelbrot, TextureDescriptorComponent<'a>>;
-pub type MandelbrotTextureComponent = Usage<Mandelbrot, TextureComponent>;
-pub type MandelbrotTextureViewComponent = Usage<Mandelbrot, TextureViewComponent>;
 
 fn create_vertices() -> Vec<[f32; 3]> {
     vec![
@@ -126,16 +92,14 @@ fn create_uvs() -> Vec<[f32; 2]> {
     ]
 }
 
-fn create_indices() -> Vec<u16> {
-    vec![
-        0, 3, 2, 2, 1, 0, // top
-        4, 7, 6, 6, 5, 4, // bottom
-        8, 11, 10, 10, 9, 8, // right
-        12, 15, 14, 14, 13, 12, // left
-        16, 19, 18, 18, 17, 16, // front
-        20, 23, 22, 22, 21, 20, // back
-    ]
-}
+const INDICES: [u16; 36] = [
+    0, 3, 2, 2, 1, 0, // top
+    4, 7, 6, 6, 5, 4, // bottom
+    8, 11, 10, 10, 9, 8, // right
+    12, 15, 14, 14, 13, 12, // left
+    16, 19, 18, 18, 17, 16, // front
+    20, 23, 22, 22, 21, 20, // back
+];
 
 fn create_texels(size: usize) -> Vec<u8> {
     (0..size * size)
@@ -198,7 +162,10 @@ pub fn assemble(cmd: &mut CommandBuffer) {
     cmd.add_component(renderer_entity, CommandBuffersComponent::new());
 
     cmd.add_indirect_component::<SurfaceConfigurationComponent>(renderer_entity, window_entity);
-    cmd.add_indirect_component::<ChangedFlag<SurfaceConfigurationComponent>>(renderer_entity, window_entity);
+    cmd.add_indirect_component::<ChangedFlag<SurfaceConfigurationComponent>>(
+        renderer_entity,
+        window_entity,
+    );
     cmd.add_indirect_component::<RenderAttachmentTextureView>(renderer_entity, window_entity);
 
     // Shader
@@ -221,10 +188,6 @@ pub fn assemble(cmd: &mut CommandBuffer) {
     let uv_size = std::mem::size_of::<[f32; 2]>();
     let uvs_offset = (vertex_size * vertex_count) as BufferAddress;
     assemble_buffer_data::<Vertex, _>(cmd, renderer_entity, MeshUvs::new(cube_uvs), uvs_offset);
-
-    let cube_indices = create_indices();
-    let index_count = cube_indices.len();
-    assemble_buffer_data::<Index, _>(cmd, renderer_entity, MeshIndices::new(cube_indices), 0);
 
     // Texture data
     let texture_size = 256u32;
@@ -276,14 +239,13 @@ pub fn assemble(cmd: &mut CommandBuffer) {
         },
     );
 
-    antigen_wgpu::assemble_buffer::<Index>(
+    antigen_wgpu::assemble_buffer_init::<Index>(
         cmd,
         renderer_entity,
-        BufferDescriptor {
+        BufferInitDescriptor {
             label: Some("Index Buffer"),
-            usage: BufferUsages::INDEX | BufferUsages::COPY_DST,
-            size: (index_count * std::mem::size_of::<u16>()) as BufferAddress,
-            mapped_at_creation: false,
+            usage: BufferUsages::INDEX,
+            contents: bytemuck::cast_slice(&INDICES),
         },
     );
 
@@ -322,7 +284,7 @@ pub fn prepare_schedule() -> ImmutableSchedule<Serial> {
         parallel![
             antigen_wgpu::create_shader_modules_system(),
             antigen_wgpu::create_buffers_system::<Vertex>(),
-            antigen_wgpu::create_buffers_system::<Index>(),
+            antigen_wgpu::create_buffers_init_system::<Index>(),
             antigen_wgpu::create_buffers_system::<Uniform>(),
             antigen_wgpu::create_textures_system::<Mandelbrot>(),
             antigen_wgpu::create_texture_views_system::<
@@ -332,7 +294,6 @@ pub fn prepare_schedule() -> ImmutableSchedule<Serial> {
         parallel![
             antigen_wgpu::buffer_write_system::<Vertex, MeshVertices::<[f32; 3]>, Vec<[f32; 3]>>(),
             antigen_wgpu::buffer_write_system::<Vertex, MeshUvs::<[f32; 2]>, Vec<[f32; 2]>>(),
-            antigen_wgpu::buffer_write_system::<Index, MeshIndices::<u16>, Vec<u16>>(),
             antigen_wgpu::buffer_write_system::<Uniform, ViewProjectionMatrix, [f32; 16]>(),
             antigen_wgpu::texture_write_system::<Mandelbrot, Texels<Vec<u8>>, Vec<u8>>(),
         ],

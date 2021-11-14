@@ -9,8 +9,7 @@ use antigen_core::{serial, single, AddIndirectComponent, ImmutableSchedule, Seri
 use antigen_wgpu::{
     wgpu::{Device, ShaderModuleDescriptor, ShaderSource},
     CommandBuffersComponent, RenderAttachmentTextureView, RenderPipelineComponent,
-    
-SurfaceConfigurationComponent,
+    SurfaceConfigurationComponent,
 };
 
 #[legion::system]

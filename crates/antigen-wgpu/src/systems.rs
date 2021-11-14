@@ -1,7 +1,7 @@
 use super::{
     BufferWriteComponent, CommandBuffersComponent, RenderAttachmentTextureViewDescriptor,
     SurfaceComponent, SurfaceTextureComponent, TextureDescriptorComponent, TextureViewComponent,
-    TextureViewDescriptorComponent, TextureWriteComponent, ToBytes,
+    TextureViewDescriptorComponent, TextureWriteComponent, ToBytes, BufferInitDescriptorComponent,
 };
 use crate::{
     BufferComponent, BufferDescriptorComponent, RenderAttachmentTextureView, SamplerComponent,
@@ -15,7 +15,7 @@ use antigen_core::{
 use antigen_winit::{WindowComponent, WindowEntityMap, WindowEventComponent, WindowSizeComponent};
 
 use legion::{world::SubWorld, IntoQuery};
-use wgpu::{Adapter, Device, ImageCopyTextureBase, ImageDataLayout, Instance, Queue, Surface};
+use wgpu::{Adapter, Device, ImageCopyTextureBase, ImageDataLayout, Instance, Queue, Surface, util::DeviceExt};
 
 // Initialize pending surfaces that share an entity with a window
 #[legion::system(for_each)]
@@ -266,6 +266,29 @@ pub fn create_buffers<T: Send + Sync + 'static>(
     buffer_desc_changed.set(false);
 
     println!("Created {} buffer", std::any::type_name::<T>());
+}
+
+/// Create-initialize pending usage-tagged buffers, recreating them if a ChangedFlag is set
+#[legion::system(par_for_each)]
+#[read_component(Device)]
+pub fn create_buffers_init<T: Send + Sync + 'static>(
+    world: &SubWorld,
+    buffer_init_desc: &Usage<T, BufferInitDescriptorComponent>,
+    buffer: &Usage<T, BufferComponent>,
+    buffer_init_desc_changed: &Usage<T, ChangedFlag<BufferInitDescriptorComponent>>,
+) {
+    if !buffer.read().is_pending() && !buffer_init_desc_changed.get() {
+        return;
+    }
+
+    let device = <&Device>::query().iter(world).next().unwrap();
+    buffer
+        .write()
+        .set_ready(device.create_buffer_init(&buffer_init_desc.read()));
+
+    buffer_init_desc_changed.set(false);
+
+    println!("Create-initialized {} buffer", std::any::type_name::<T>());
 }
 
 /// Create pending usage-tagged textures, recreating them if a ChangedFlag is set
