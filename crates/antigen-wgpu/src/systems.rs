@@ -12,7 +12,7 @@ use crate::{
 use antigen_core::{
     ChangedFlag, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock, Usage,
 };
-use antigen_winit::{WindowComponent, WindowSizeComponent};
+use antigen_winit::{WindowComponent, WindowEntityMap, WindowEventComponent, WindowSizeComponent};
 
 use legion::{world::SubWorld, IntoQuery};
 use wgpu::{
@@ -204,25 +204,78 @@ pub fn surface_texture_present(
 #[legion::system(par_for_each)]
 pub fn surface_texture_view_drop(
     surface_texture: &SurfaceTextureComponent,
-    surface_texture_dirty: &ChangedFlag<SurfaceTextureComponent>,
+    surface_texture_changed: &ChangedFlag<SurfaceTextureComponent>,
     texture_view: &RenderAttachmentTextureView,
 ) {
-    if surface_texture_dirty.get() {
+    if surface_texture_changed.get() {
         if surface_texture.read().is_none() {
             texture_view.write().set_dropped();
-            surface_texture_dirty.set(false);
+            surface_texture_changed.set(false);
         }
     }
 }
 
-#[legion::system(par_for_each)]
+/// Create pending untagged shader modules,
+/// optionally recreating them if a ChangedFlag is present and set
+#[legion::system(for_each)]
+#[read_component(Device)]
+pub fn create_shader_modules(
+    world: &SubWorld,
+    shader_module_desc: &ShaderModuleDescriptorComponent,
+    shader_module: &ShaderModuleComponent,
+    shader_module_desc_changed: Option<&ChangedFlag<SamplerDescriptorComponent>>,
+) {
+    if shader_module.read().is_pending()
+        || shader_module_desc_changed
+            .map(|shader_module_desc_changed| shader_module_desc_changed.get())
+            .unwrap_or(false)
+    {
+        let device = <&Device>::query().iter(world).next().unwrap();
+        shader_module
+            .write()
+            .set_ready(device.create_shader_module(&shader_module_desc.read()));
+        println!("Created shader module");
+    }
+}
+
+/// Create pending usage-tagged shader modules,
+/// optionally recreating them if a ChangedFlag is present and set
+#[legion::system(for_each)]
+#[read_component(Device)]
+pub fn create_shader_modules_usage<T: Send + Sync + 'static>(
+    world: &SubWorld,
+    shader_module_desc: &Usage<T, ShaderModuleDescriptorComponent>,
+    shader_module: &Usage<T, ShaderModuleComponent>,
+    shader_module_desc_changed: Option<&Usage<T, ChangedFlag<SamplerDescriptorComponent>>>,
+) {
+    if shader_module.read().is_pending()
+        || shader_module_desc_changed
+            .map(|shader_module_desc_changed| shader_module_desc_changed.get())
+            .unwrap_or(false)
+    {
+        let device = <&Device>::query().iter(world).next().unwrap();
+        shader_module
+            .write()
+            .set_ready(device.create_shader_module(&shader_module_desc.read()));
+        println!("Created {} shader module", std::any::type_name::<T>());
+    }
+}
+
+/// Create pending usage-tagged buffers,
+/// optionally recreating them if a ChangedFlag is present and set
+#[legion::system(for_each)]
 #[read_component(Device)]
 pub fn create_buffers<T: Send + Sync + 'static>(
     world: &SubWorld,
     buffer_desc: &Usage<T, BufferDescriptorComponent>,
     buffer: &Usage<T, BufferComponent>,
+    buffer_desc_changed: Option<&Usage<T, ChangedFlag<TextureDescriptorComponent>>>,
 ) {
-    if buffer.read().is_pending() {
+    if buffer.read().is_pending()
+        || buffer_desc_changed
+            .map(|buffer_desc_changed| buffer_desc_changed.get())
+            .unwrap_or(false)
+    {
         let device = <&Device>::query().iter(world).next().unwrap();
         println!("Created {} buffer", std::any::type_name::<T>());
         buffer
@@ -231,14 +284,21 @@ pub fn create_buffers<T: Send + Sync + 'static>(
     }
 }
 
-#[legion::system(par_for_each)]
+/// Create pending usage-tagged textures,
+/// optionally recreating them if a ChangedFlag is present and set
+#[legion::system(for_each)]
 #[read_component(Device)]
 pub fn create_textures<T: Send + Sync + 'static>(
     world: &SubWorld,
     texture_descriptor: &Usage<T, TextureDescriptorComponent>,
     texture: &Usage<T, TextureComponent>,
+    texture_descriptor_changed: Option<&Usage<T, ChangedFlag<TextureDescriptorComponent>>>,
 ) {
-    if texture.read().is_pending() {
+    if texture.read().is_pending()
+        || texture_descriptor_changed
+            .map(|texture_descriptor_changed| texture_descriptor_changed.get())
+            .unwrap_or(false)
+    {
         let device = <&Device>::query().iter(world).next().unwrap();
         texture
             .write()
@@ -246,14 +306,21 @@ pub fn create_textures<T: Send + Sync + 'static>(
     }
 }
 
-#[legion::system(par_for_each)]
+/// Create pending usage-tagged texture views,
+/// optionally recreating them if a ChangedFlag is present and set
+#[legion::system(for_each)]
 #[read_component(Device)]
 pub fn create_texture_views<T: Send + Sync + 'static>(
     texture: &Usage<T, TextureComponent>,
     texture_view_desc: &Usage<T, TextureViewDescriptorComponent>,
     texture_view: &Usage<T, TextureViewComponent>,
+    texture_view_desc_changed: Option<&Usage<T, ChangedFlag<TextureViewDescriptorComponent>>>,
 ) {
-    if !texture_view.read().is_pending() {
+    if !texture_view.read().is_pending()
+        && !texture_view_desc_changed
+            .map(|texture_view_desc_changed| texture_view_desc_changed.get())
+            .unwrap_or(false)
+    {
         return;
     }
 
@@ -270,50 +337,25 @@ pub fn create_texture_views<T: Send + Sync + 'static>(
         .set_ready(texture.create_view(&texture_view_desc.read()));
 }
 
-#[legion::system(par_for_each)]
+/// Create pending usage-tagged samplers,
+/// optionally recreating them if a ChangedFlag is present and set
+#[legion::system(for_each)]
 #[read_component(Device)]
 pub fn create_samplers<T: Send + Sync + 'static>(
     world: &SubWorld,
     sampler_desc: &Usage<T, SamplerDescriptorComponent>,
     sampler: &Usage<T, SamplerComponent>,
+    sampler_desc_changed: Option<&Usage<T, ChangedFlag<SamplerDescriptorComponent>>>,
 ) {
-    if sampler.read().is_pending() {
+    if sampler.read().is_pending()
+        || sampler_desc_changed
+            .map(|sampler_desc_changed| sampler_desc_changed.get())
+            .unwrap_or(false)
+    {
         let device = <&Device>::query().iter(world).next().unwrap();
         sampler
             .write()
             .set_ready(device.create_sampler(&sampler_desc.read()));
-    }
-}
-
-#[legion::system(par_for_each)]
-#[read_component(Device)]
-pub fn create_shader_modules(
-    world: &SubWorld,
-    shader_module_desc: &ShaderModuleDescriptorComponent,
-    shader_module: &ShaderModuleComponent,
-) {
-    if shader_module.read().is_pending() {
-        let device = <&Device>::query().iter(world).next().unwrap();
-        shader_module
-            .write()
-            .set_ready(device.create_shader_module(&shader_module_desc.read()));
-        println!("Created shader module");
-    }
-}
-
-#[legion::system(par_for_each)]
-#[read_component(Device)]
-pub fn create_shader_modules_usage<T: Send + Sync + 'static>(
-    world: &SubWorld,
-    shader_module_desc: &Usage<T, ShaderModuleDescriptorComponent>,
-    shader_module: &Usage<T, ShaderModuleComponent>,
-) {
-    if shader_module.read().is_pending() {
-        let device = <&Device>::query().iter(world).next().unwrap();
-        shader_module
-            .write()
-            .set_ready(device.create_shader_module(&shader_module_desc.read()));
-        println!("Created {} shader module", std::any::type_name::<T>());
     }
 }
 
@@ -455,4 +497,35 @@ pub fn submit_command_buffers(world: &SubWorld, command_buffers: &CommandBuffers
     };
 
     queue.submit(command_buffers.write().drain(..));
+}
+
+// Create textures and corresponding texture views for surfaces
+#[legion::system]
+#[read_component(WindowEventComponent)]
+#[read_component(WindowEntityMap)]
+#[read_component(SurfaceComponent)]
+#[read_component(SurfaceTextureComponent)]
+#[read_component(ChangedFlag<SurfaceTextureComponent>)]
+#[read_component(RenderAttachmentTextureViewDescriptor)]
+#[read_component(RenderAttachmentTextureView)]
+pub fn surface_textures_views(world: &SubWorld) {
+    use legion::IntoQuery;
+
+    let window_event = <&WindowEventComponent>::query()
+        .iter(&*world)
+        .next()
+        .unwrap();
+    let window_event = window_event.read().0.expect("No window for current event");
+
+    let window_entity_map = <&WindowEntityMap>::query().iter(&*world).next().unwrap();
+    let window_entity_map = window_entity_map.read();
+
+    let entity = window_entity_map
+        .get(&window_event)
+        .expect("Redraw requested for window without entity");
+
+    // Create surface textures and views
+    // These will be rendered to and presented during RedrawEventsCleared
+    surface_texture_query(&world, entity);
+    surface_texture_view_query(&world, entity);
 }

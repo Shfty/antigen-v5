@@ -85,18 +85,21 @@ pub fn assemble_window_surface(cmd: &mut CommandBuffer, #[state] (entity,): &(En
     );
 }
 
+/// Extends an existing surface entity with the means to track its size
 #[legion::system]
 pub fn assemble_surface_size(cmd: &mut CommandBuffer, #[state] (entity,): &(Entity,)) {
     cmd.add_component(*entity, SurfaceSizeComponent::new(Default::default()));
     cmd.add_component(*entity, ChangedFlag::<SurfaceSizeComponent>::new_clean());
 }
 
+/// Extends an existing texture entity with the means to track its size
 #[legion::system]
 pub fn assemble_texture_size(cmd: &mut CommandBuffer, #[state] (entity,): &(Entity,)) {
     cmd.add_component(*entity, TextureSizeComponent::new(Default::default()));
     cmd.add_component(*entity, ChangedFlag::<TextureSizeComponent>::new_clean());
 }
 
+/// Adds an untagged shader to an entity
 pub fn assemble_shader(
     cmd: &mut CommandBuffer,
     entity: Entity,
@@ -106,6 +109,7 @@ pub fn assemble_shader(
     cmd.add_component(entity, ShaderModuleComponent::pending());
 }
 
+/// Adds a usage-tagged shader to an entity
 pub fn assemble_shader_usage<U: Send + Sync + 'static>(
     cmd: &mut CommandBuffer,
     entity: Entity,
@@ -119,6 +123,7 @@ pub fn assemble_shader_usage<U: Send + Sync + 'static>(
     cmd.add_component(entity, Usage::<U, _>::new(ShaderModuleComponent::pending()));
 }
 
+/// Adds a usage-tagged buffer to an entity
 pub fn assemble_buffer<U: Send + Sync + 'static>(
     cmd: &mut CommandBuffer,
     entity: Entity,
@@ -132,6 +137,7 @@ pub fn assemble_buffer<U: Send + Sync + 'static>(
     cmd.add_component(entity, Usage::<U, _>::new(BufferComponent::pending()));
 }
 
+/// Adds some usage-tagged data to be written to a buffer when its change flag is set
 pub fn assemble_buffer_data<U, T>(
     cmd: &mut CommandBuffer,
     entity: Entity,
@@ -149,6 +155,7 @@ pub fn assemble_buffer_data<U, T>(
     cmd.add_indirect_component_self::<Usage<U, BufferComponent>>(entity);
 }
 
+/// Adds a usage-tagged texture to an entity
 pub fn assemble_texture<U: Send + Sync + 'static>(
     cmd: &mut CommandBuffer,
     entity: Entity,
@@ -162,6 +169,7 @@ pub fn assemble_texture<U: Send + Sync + 'static>(
     cmd.add_component(entity, Usage::<U, _>::new(TextureComponent::pending()));
 }
 
+/// Adds some usage-tagged data to be written to a texture when its change flag is set
 pub fn assemble_texture_data<U, T>(
     cmd: &mut CommandBuffer,
     entity: Entity,
@@ -188,6 +196,7 @@ pub fn assemble_texture_data<U, T>(
     cmd.add_indirect_component_self::<Usage<U, TextureComponent>>(entity);
 }
 
+/// Adds a usage-tagged texture view to an entity
 pub fn assemble_texture_view<U: Send + Sync + 'static>(
     cmd: &mut CommandBuffer,
     entity: Entity,
@@ -201,6 +210,7 @@ pub fn assemble_texture_view<U: Send + Sync + 'static>(
     cmd.add_component(entity, Usage::<U, _>::new(TextureViewComponent::pending()));
 }
 
+/// Adds a usage-tagged sampler to an entity
 pub fn assemble_sampler<U: Send + Sync + 'static>(
     cmd: &mut CommandBuffer,
     entity: Entity,
