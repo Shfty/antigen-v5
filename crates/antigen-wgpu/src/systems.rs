@@ -6,7 +6,7 @@ use super::{
 use crate::{
     BufferComponent, BufferDescriptorComponent, RenderAttachmentTextureView, SamplerComponent,
     SamplerDescriptorComponent, ShaderModuleComponent, ShaderModuleDescriptorComponent,
-    SurfaceSizeComponent, TextureComponent, TextureSizeComponent,
+    SurfaceConfigurationComponent, SurfaceSizeComponent, TextureComponent, TextureSizeComponent,
 };
 
 use antigen_core::{
@@ -15,10 +15,7 @@ use antigen_core::{
 use antigen_winit::{WindowComponent, WindowEntityMap, WindowEventComponent, WindowSizeComponent};
 
 use legion::{world::SubWorld, IntoQuery};
-use wgpu::{
-    Adapter, Device, ImageCopyTextureBase, ImageDataLayout, Instance, Queue, Surface,
-    SurfaceConfiguration,
-};
+use wgpu::{Adapter, Device, ImageCopyTextureBase, ImageDataLayout, Instance, Queue, Surface};
 
 // Initialize pending surfaces that share an entity with a window
 #[legion::system(for_each)]
@@ -28,6 +25,7 @@ use wgpu::{
 pub fn create_window_surfaces(
     world: &SubWorld,
     window_component: &WindowComponent,
+    surface_configuration_component: &SurfaceConfigurationComponent,
     surface_component: &SurfaceComponent,
 ) {
     if let LazyComponent::Ready(window) = &*window_component.read() {
@@ -37,7 +35,7 @@ pub fn create_window_surfaces(
         if ReadWriteLock::<LazyComponent<Surface>>::read(surface_component).is_pending() {
             let instance = <&Instance>::query().iter(world).next().unwrap();
             let surface = unsafe { instance.create_surface(window) };
-            let mut config = ReadWriteLock::<SurfaceConfiguration>::write(surface_component);
+            let mut config = surface_configuration_component.write();
 
             let window_size = window.inner_size();
             config.width = window_size.width;
@@ -60,7 +58,7 @@ pub fn create_window_surfaces(
             };
 
             let mut reconfigure = false;
-            let mut config = ReadWriteLock::<SurfaceConfiguration>::write(surface_component);
+            let mut config = surface_configuration_component.write();
 
             let window_size = window.inner_size();
             if config.width != window_size.width {

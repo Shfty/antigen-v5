@@ -12,30 +12,31 @@ use wgpu::{
 
 use std::marker::PhantomData;
 
-// WGPU surface
-pub struct SurfaceComponent {
-    config: RwLock<SurfaceConfiguration>,
-    surface: RwLock<LazyComponent<Surface>>,
+// WGPU surface configuration
+pub struct SurfaceConfigurationComponent(RwLock<SurfaceConfiguration>);
+
+impl SurfaceConfigurationComponent {
+    pub fn new(config: SurfaceConfiguration) -> SurfaceConfigurationComponent {
+        SurfaceConfigurationComponent(RwLock::new(config))
+    }
 }
+
+impl_read_write_lock!(SurfaceConfigurationComponent, 0, SurfaceConfiguration);
+
+// WGPU surface
+pub struct SurfaceComponent(RwLock<LazyComponent<Surface>>);
 
 impl SurfaceComponent {
-    pub fn pending(config: SurfaceConfiguration) -> SurfaceComponent {
-        SurfaceComponent {
-            config: RwLock::new(config),
-            surface: RwLock::new(LazyComponent::Pending),
-        }
+    pub fn pending() -> SurfaceComponent {
+        SurfaceComponent(RwLock::new(LazyComponent::Pending))
     }
 
-    pub fn ready(config: SurfaceConfiguration, surface: Surface) -> SurfaceComponent {
-        SurfaceComponent {
-            config: RwLock::new(config),
-            surface: RwLock::new(LazyComponent::Ready(surface)),
-        }
+    pub fn ready(surface: Surface) -> SurfaceComponent {
+        SurfaceComponent(RwLock::new(LazyComponent::Ready(surface)))
     }
 }
 
-impl_read_write_lock!(SurfaceComponent, surface, LazyComponent<wgpu::Surface>);
-impl_read_write_lock!(SurfaceComponent, config, wgpu::SurfaceConfiguration);
+impl_read_write_lock!(SurfaceComponent, 0, LazyComponent<Surface>);
 
 // WGPU texture descriptor
 pub struct TextureDescriptorComponent<'a>(RwLock<TextureDescriptor<'a>>);

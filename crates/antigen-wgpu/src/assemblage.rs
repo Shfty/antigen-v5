@@ -12,9 +12,10 @@ use std::path::Path;
 use crate::{
     BufferComponent, BufferDescriptorComponent, BufferWriteComponent, RenderAttachment,
     SamplerComponent, SamplerDescriptorComponent, ShaderModuleComponent,
-    ShaderModuleDescriptorComponent, SurfaceComponent, SurfaceSizeComponent,
-    SurfaceTextureComponent, TextureComponent, TextureDescriptorComponent, TextureSizeComponent,
-    TextureViewComponent, TextureViewDescriptorComponent, TextureWriteComponent,
+    ShaderModuleDescriptorComponent, SurfaceComponent, SurfaceConfigurationComponent,
+    SurfaceSizeComponent, SurfaceTextureComponent, TextureComponent, TextureDescriptorComponent,
+    TextureSizeComponent, TextureViewComponent, TextureViewDescriptorComponent,
+    TextureWriteComponent,
 };
 
 /// Create an entity to hold an Instance, Adapter, Device and Queue
@@ -65,7 +66,7 @@ pub fn assemble_wgpu_entity_from_env(
 pub fn assemble_window_surface(cmd: &mut CommandBuffer, #[state] (entity,): &(Entity,)) {
     cmd.add_component(
         *entity,
-        SurfaceComponent::pending(wgpu::SurfaceConfiguration {
+        SurfaceConfigurationComponent::new(wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: wgpu::TextureFormat::Bgra8Unorm,
             width: 100,
@@ -73,6 +74,8 @@ pub fn assemble_window_surface(cmd: &mut CommandBuffer, #[state] (entity,): &(En
             present_mode: wgpu::PresentMode::Mailbox,
         }),
     );
+    cmd.add_component(*entity, SurfaceComponent::pending());
+
     cmd.add_component(*entity, SurfaceTextureComponent::pending());
     cmd.add_component(*entity, ChangedFlag::<SurfaceTextureComponent>::new_clean());
     cmd.add_component(

@@ -22,8 +22,9 @@ use antigen_wgpu::{
         TextureUsages,
     },
     BindGroupComponent, BufferComponent, CommandBuffersComponent, RenderAttachmentTextureView,
-    RenderPipelineComponent, SamplerComponent, SurfaceComponent, Texels, TextureComponent,
+    RenderPipelineComponent, SamplerComponent, Texels, TextureComponent,
     TextureDescriptorComponent, TextureViewComponent, ToBytes,
+SurfaceConfigurationComponent,
 };
 
 const MAX_BUNNIES: usize = 1 << 20;
@@ -112,7 +113,7 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
     cmd.add_component(renderer_entity, Bunnymark);
     cmd.add_component(renderer_entity, RenderPipelineComponent::pending());
     cmd.add_component(renderer_entity, CommandBuffersComponent::new());
-    cmd.add_indirect_component::<SurfaceComponent>(renderer_entity, window_entity);
+    cmd.add_indirect_component::<SurfaceConfigurationComponent>(renderer_entity, window_entity);
     cmd.add_indirect_component::<RenderAttachmentTextureView>(renderer_entity, window_entity);
 
     // Window reference for input handling

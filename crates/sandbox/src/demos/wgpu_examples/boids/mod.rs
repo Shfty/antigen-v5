@@ -18,7 +18,7 @@ use antigen_wgpu::{
         BufferAddress, BufferDescriptor, BufferUsages, Device, ShaderModuleDescriptor, ShaderSource,
     },
     BindGroupComponent, BufferComponent, CommandBuffersComponent, ComputePipelineComponent,
-    RenderAttachmentTextureView, RenderPipelineComponent, ShaderModuleComponent, SurfaceComponent,
+    RenderAttachmentTextureView, RenderPipelineComponent, ShaderModuleComponent, SurfaceConfigurationComponent,
 };
 
 use rand::{distributions::Distribution, SeedableRng};
@@ -74,7 +74,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         Usage::<BackBuffer, _>::new(BindGroupComponent::pending()),
     );
     cmd.add_component(renderer_entity, CommandBuffersComponent::new());
-    cmd.add_indirect_component::<SurfaceComponent>(renderer_entity, window_entity);
+    cmd.add_indirect_component::<SurfaceConfigurationComponent>(renderer_entity, window_entity);
     cmd.add_indirect_component::<RenderAttachmentTextureView>(renderer_entity, window_entity);
 
     // Shaders

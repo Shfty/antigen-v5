@@ -15,7 +15,8 @@ use antigen_wgpu::{
     },
     BufferComponent, CommandBuffersComponent, MeshVertices, MsaaFramebuffer,
     MsaaFramebufferTextureView, PipelineLayoutComponent, RenderAttachmentTextureView,
-    RenderBundleComponent, SurfaceComponent,
+    RenderBundleComponent,
+SurfaceConfigurationComponent,
 };
 
 use bytemuck::{Pod, Zeroable};
@@ -54,7 +55,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     cmd.add_component(renderer_entity, PipelineLayoutComponent::pending());
     cmd.add_component(renderer_entity, RenderBundleComponent::pending());
     cmd.add_component(renderer_entity, CommandBuffersComponent::new());
-    cmd.add_indirect_component::<SurfaceComponent>(renderer_entity, window_entity);
+    cmd.add_indirect_component::<SurfaceConfigurationComponent>(renderer_entity, window_entity);
     cmd.add_indirect_component::<RenderAttachmentTextureView>(renderer_entity, window_entity);
 
     // Shader

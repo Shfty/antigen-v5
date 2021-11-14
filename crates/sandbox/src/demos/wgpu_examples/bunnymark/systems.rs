@@ -12,26 +12,22 @@ use antigen_winit::{
     WindowComponent, WindowEventComponent,
 };
 
-use antigen_wgpu::{
-    wgpu::{
+use antigen_wgpu::{CommandBuffersComponent, RenderAttachmentTextureView, RenderPipelineComponent, ShaderModuleComponent, SurfaceConfigurationComponent, wgpu::{
         BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry,
         BindingResource, BindingType, BlendState, BufferAddress, BufferBinding, BufferBindingType,
         BufferSize, Color, ColorTargetState, ColorWrites, CommandEncoderDescriptor, Device,
         DynamicOffset, FragmentState, LoadOp, MultisampleState, Operations,
         PipelineLayoutDescriptor, PrimitiveState, PrimitiveTopology, RenderPassColorAttachment,
-        RenderPassDescriptor, RenderPipelineDescriptor, ShaderStages, SurfaceConfiguration,
+        RenderPassDescriptor, RenderPipelineDescriptor, ShaderStages,
         TextureSampleType, TextureViewDimension, VertexState,
-    },
-    CommandBuffersComponent, RenderAttachmentTextureView, RenderPipelineComponent,
-    ShaderModuleComponent, SurfaceComponent,
-};
+    }};
 
 use legion::{world::SubWorld, IntoQuery};
 
 // Initialize the hello triangle render pipeline
 #[legion::system(par_for_each)]
 #[read_component(Device)]
-#[read_component(SurfaceComponent)]
+#[read_component(SurfaceConfigurationComponent)]
 pub fn bunnymark_prepare(
     world: &legion::world::SubWorld,
     _: &Bunnymark,
@@ -43,15 +39,15 @@ pub fn bunnymark_prepare(
     sampler: &LogoSamplerComponent,
     global_bind_group: &GlobalBindGroupComponent,
     local_bind_group: &LocalBindGroupComponent,
-    surface_component: &IndirectComponent<SurfaceComponent>,
+    surface_configuration_component: &IndirectComponent<SurfaceConfigurationComponent>,
 ) {
     if !render_pipeline_component.read().is_pending() {
         return;
     }
 
     let device = <&Device>::query().iter(world).next().unwrap();
-    let surface_component = world.get_indirect(surface_component).unwrap();
-    let config = ReadWriteLock::<SurfaceConfiguration>::read(surface_component);
+    let surface_configuration_component = world.get_indirect(surface_configuration_component).unwrap();
+    let config = surface_configuration_component.read();
 
     let shader_module = shader_module.read();
     let shader_module = if let LazyComponent::Ready(shader_module) = &*shader_module {

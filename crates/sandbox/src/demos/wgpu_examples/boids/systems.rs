@@ -1,9 +1,9 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use super::{
-    BackBufferBindGroupComponent, BackBufferComponent, Boids, 
-    FrontBufferBindGroupComponent, FrontBufferComponent, UniformBufferComponent,
-    VertexBufferComponent, NUM_PARTICLES, ComputeShaderModuleComponent, DrawShaderModuleComponent,
+    BackBufferBindGroupComponent, BackBufferComponent, Boids, ComputeShaderModuleComponent,
+    DrawShaderModuleComponent, FrontBufferBindGroupComponent, FrontBufferComponent,
+    UniformBufferComponent, VertexBufferComponent, NUM_PARTICLES,
 };
 use antigen_core::{GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock};
 
@@ -14,10 +14,10 @@ use antigen_wgpu::{
         CommandEncoderDescriptor, ComputePassDescriptor, ComputePipelineDescriptor, Device,
         FragmentState, LoadOp, MultisampleState, Operations, PipelineLayoutDescriptor,
         PrimitiveState, RenderPassColorAttachment, RenderPassDescriptor, RenderPipelineDescriptor,
-        ShaderStages, SurfaceConfiguration, VertexBufferLayout, VertexState, VertexStepMode,
+        ShaderStages, VertexBufferLayout, VertexState, VertexStepMode,
     },
-    CommandBuffersComponent, ComputePipelineComponent,
-    RenderAttachmentTextureView, RenderPipelineComponent, SurfaceComponent,
+    CommandBuffersComponent, ComputePipelineComponent, RenderAttachmentTextureView,
+    RenderPipelineComponent, SurfaceConfigurationComponent,
 };
 
 use legion::IntoQuery;
@@ -25,7 +25,7 @@ use legion::IntoQuery;
 // Initialize the hello triangle render pipeline
 #[legion::system(par_for_each)]
 #[read_component(Device)]
-#[read_component(SurfaceComponent)]
+#[read_component(SurfaceConfigurationComponent)]
 pub fn boids_prepare(
     world: &legion::world::SubWorld,
     _: &Boids,
@@ -38,7 +38,7 @@ pub fn boids_prepare(
     back_buffer: &BackBufferComponent,
     front_buffer_bind_group: &FrontBufferBindGroupComponent,
     back_buffer_bind_group: &BackBufferBindGroupComponent,
-    surface_component: &IndirectComponent<SurfaceComponent>,
+    surface_configuration_component: &IndirectComponent<SurfaceConfigurationComponent>,
 ) {
     if !render_pipeline_component.read().is_pending() {
         return;
@@ -79,8 +79,9 @@ pub fn boids_prepare(
         return;
     };
 
-    let surface_component = world.get_indirect(surface_component).unwrap();
-    let config = ReadWriteLock::<SurfaceConfiguration>::read(surface_component);
+    let surface_configuration_component =
+        world.get_indirect(surface_configuration_component).unwrap();
+    let config = surface_configuration_component.read();
 
     let device = <&Device>::query().iter(world).next().unwrap();
 

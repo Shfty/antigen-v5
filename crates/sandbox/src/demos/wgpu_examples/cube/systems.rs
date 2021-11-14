@@ -13,11 +13,11 @@ use antigen_wgpu::{
         CommandEncoderDescriptor, Device, Face, Features, FragmentState, FrontFace, IndexFormat,
         LoadOp, MultisampleState, Operations, PipelineLayoutDescriptor, PolygonMode,
         PrimitiveState, RenderPassColorAttachment, RenderPassDescriptor, RenderPipelineDescriptor,
-        ShaderStages, SurfaceConfiguration, TextureSampleType, TextureViewDimension,
+        ShaderStages, TextureSampleType, TextureViewDimension,
         VertexAttribute, VertexBufferLayout, VertexFormat, VertexState, VertexStepMode,
     },
     BindGroupComponent, CommandBuffersComponent, RenderAttachmentTextureView,
-    ShaderModuleComponent, SurfaceComponent, TextureSizeComponent,
+    ShaderModuleComponent, SurfaceConfigurationComponent, TextureSizeComponent,
 };
 
 use legion::{world::SubWorld, IntoQuery};
@@ -25,7 +25,7 @@ use legion::{world::SubWorld, IntoQuery};
 // Initialize the hello triangle render pipeline
 #[legion::system(par_for_each)]
 #[read_component(Device)]
-#[read_component(SurfaceComponent)]
+#[read_component(SurfaceConfigurationComponent)]
 pub fn cube_prepare(
     world: &SubWorld,
     _: &Cube,
@@ -35,7 +35,7 @@ pub fn cube_prepare(
     texture_view: &MandelbrotTextureViewComponent,
     uniform_buffer: &UniformBufferComponent,
     bind_group_component: &BindGroupComponent,
-    surface_component: &IndirectComponent<SurfaceComponent>,
+    surface_configuration_component: &IndirectComponent<SurfaceConfigurationComponent>,
 ) {
     if !opaque_pipeline_component.read().is_pending() {
         return;
@@ -62,8 +62,9 @@ pub fn cube_prepare(
         return;
     };
 
-    let surface_component = world.get_indirect(surface_component).unwrap();
-    let config = ReadWriteLock::<SurfaceConfiguration>::read(surface_component);
+    let surface_configuration_component =
+        world.get_indirect(surface_configuration_component).unwrap();
+    let config = surface_configuration_component.read();
 
     let device = <&Device>::query().iter(world).next().unwrap();
 

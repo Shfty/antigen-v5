@@ -10,7 +10,8 @@ use antigen_wgpu::{
         SurfaceConfiguration, VertexBufferLayout, VertexState, VertexStepMode,
     },
     CommandBuffersComponent, MsaaFramebufferTextureView, PipelineLayoutComponent,
-    RenderAttachmentTextureView, RenderBundleComponent, ShaderModuleComponent, SurfaceComponent,
+    RenderAttachmentTextureView, RenderBundleComponent, ShaderModuleComponent,
+    SurfaceConfigurationComponent,
 };
 
 use legion::IntoQuery;
@@ -18,14 +19,14 @@ use legion::IntoQuery;
 // Initialize the hello triangle render pipeline
 #[legion::system(par_for_each)]
 #[read_component(Device)]
-#[read_component(SurfaceComponent)]
+#[read_component(SurfaceConfigurationComponent)]
 pub fn msaa_line_prepare(
     world: &legion::world::SubWorld,
     _: &MsaaLine,
     shader_module: &ShaderModuleComponent,
     pipeline_layout_component: &PipelineLayoutComponent,
     render_bundle_component: &RenderBundleComponent,
-    surface_component: &IndirectComponent<SurfaceComponent>,
+    surface_configuration_component: &IndirectComponent<SurfaceConfigurationComponent>,
     vertex_buffer_component: &VertexBufferComponent,
 ) {
     let device = <&Device>::query().iter(world).next().unwrap();
@@ -68,8 +69,9 @@ pub fn msaa_line_prepare(
         return;
     };
 
-    let surface_component = world.get_indirect(surface_component).unwrap();
-    let config = ReadWriteLock::<SurfaceConfiguration>::read(surface_component);
+    let surface_configuration_component =
+        world.get_indirect(surface_configuration_component).unwrap();
+    let config = ReadWriteLock::<SurfaceConfiguration>::read(surface_configuration_component);
 
     let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
         label: None,

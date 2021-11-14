@@ -17,8 +17,9 @@ use antigen_wgpu::{
         TextureDimension, TextureFormat, TextureUsages,
     },
     BindGroupComponent, BufferComponent, CommandBuffersComponent, MeshIndices, MeshUvs,
-    MeshVertices, RenderAttachmentTextureView, RenderPipelineComponent, SurfaceComponent, Texels,
+    MeshVertices, RenderAttachmentTextureView, RenderPipelineComponent, Texels,
     TextureComponent, TextureDescriptorComponent, TextureSizeComponent, TextureViewComponent,
+SurfaceConfigurationComponent,
 };
 
 use std::{borrow::Cow, num::NonZeroU32};
@@ -204,7 +205,7 @@ pub fn assemble(cmd: &mut CommandBuffer) {
 
     cmd.add_component(renderer_entity, CommandBuffersComponent::new());
 
-    cmd.add_indirect_component::<SurfaceComponent>(renderer_entity, window_entity);
+    cmd.add_indirect_component::<SurfaceConfigurationComponent>(renderer_entity, window_entity);
     cmd.add_indirect_component::<RenderAttachmentTextureView>(renderer_entity, window_entity);
     cmd.add_indirect_component::<TextureSizeComponent>(renderer_entity, window_entity);
     cmd.add_indirect_component::<ChangedFlag<TextureSizeComponent>>(renderer_entity, window_entity);

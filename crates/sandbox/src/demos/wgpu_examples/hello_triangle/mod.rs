@@ -9,7 +9,8 @@ use antigen_core::{serial, single, AddIndirectComponent, ImmutableSchedule, Seri
 use antigen_wgpu::{
     wgpu::{Device, ShaderModuleDescriptor, ShaderSource},
     CommandBuffersComponent, RenderAttachmentTextureView, RenderPipelineComponent,
-    SurfaceComponent,
+    
+SurfaceConfigurationComponent,
 };
 
 #[legion::system]
@@ -29,7 +30,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     cmd.add_component(renderer_entity, HelloTriangle);
     cmd.add_component(renderer_entity, RenderPipelineComponent::pending());
     cmd.add_component(renderer_entity, CommandBuffersComponent::new());
-    cmd.add_indirect_component::<SurfaceComponent>(renderer_entity, window_entity);
+    cmd.add_indirect_component::<SurfaceConfigurationComponent>(renderer_entity, window_entity);
     cmd.add_indirect_component::<RenderAttachmentTextureView>(renderer_entity, window_entity);
 
     antigen_wgpu::assemble_shader(

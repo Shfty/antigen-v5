@@ -5,10 +5,10 @@ use antigen_wgpu::{
     wgpu::{
         Color, CommandEncoderDescriptor, Device, FragmentState, LoadOp, MultisampleState,
         Operations, PipelineLayoutDescriptor, PrimitiveState, RenderPassColorAttachment,
-        RenderPassDescriptor, RenderPipelineDescriptor, SurfaceConfiguration, VertexState,
+        RenderPassDescriptor, RenderPipelineDescriptor, VertexState,
     },
     CommandBuffersComponent, RenderAttachmentTextureView, RenderPipelineComponent,
-    ShaderModuleComponent, SurfaceComponent,
+    ShaderModuleComponent, SurfaceConfigurationComponent,
 };
 
 use legion::IntoQuery;
@@ -16,13 +16,13 @@ use legion::IntoQuery;
 // Initialize the hello triangle render pipeline
 #[legion::system(par_for_each)]
 #[read_component(Device)]
-#[read_component(SurfaceComponent)]
+#[read_component(SurfaceConfigurationComponent)]
 pub fn hello_triangle_prepare(
     world: &legion::world::SubWorld,
     _: &HelloTriangle,
     shader_module: &ShaderModuleComponent,
     render_pipeline_component: &RenderPipelineComponent,
-    surface_component: &IndirectComponent<SurfaceComponent>,
+    surface_component: &IndirectComponent<SurfaceConfigurationComponent>,
 ) {
     if !render_pipeline_component.read().is_pending() {
         return;
@@ -37,7 +37,7 @@ pub fn hello_triangle_prepare(
     };
 
     let surface_component = world.get_indirect(surface_component).unwrap();
-    let format = ReadWriteLock::<SurfaceConfiguration>::read(surface_component).format;
+    let config = surface_component.read();
 
     let pipeline_layout = device.create_pipeline_layout(&mut PipelineLayoutDescriptor {
         label: None,
@@ -56,7 +56,7 @@ pub fn hello_triangle_prepare(
         fragment: Some(FragmentState {
             module: &shader_module,
             entry_point: "fs_main",
-            targets: &[format.into()],
+            targets: &[config.format.into()],
         }),
         primitive: PrimitiveState::default(),
         depth_stencil: None,
