@@ -107,6 +107,7 @@ pub fn resize_window(world: &SubWorld) {
 #[legion::system(par_for_each)]
 pub fn reset_resize_window_dirty_flags(dirty_flag: &ChangedFlag<WindowSizeComponent>) {
     if dirty_flag.get() {
+        println!("Resetting window size changed flag");
         dirty_flag.set(false);
     }
 }

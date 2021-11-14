@@ -39,6 +39,7 @@ impl SurfaceComponent {
 impl_read_write_lock!(SurfaceComponent, 0, LazyComponent<Surface>);
 
 // WGPU texture descriptor
+#[derive(Debug)]
 pub struct TextureDescriptorComponent<'a>(RwLock<TextureDescriptor<'a>>);
 
 impl<'a> ReadWriteLock<TextureDescriptor<'a>> for TextureDescriptorComponent<'a> {

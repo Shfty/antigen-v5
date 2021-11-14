@@ -1,11 +1,13 @@
 mod components;
 mod systems;
 
+use antigen_winit::WindowComponent;
 pub use components::*;
 pub use systems::*;
 
 use antigen_core::{
-    parallel, serial, single, AddIndirectComponent, ImmutableSchedule, Serial, Single, Usage,
+    parallel, serial, single, AddIndirectComponent, ChangedFlag, ImmutableSchedule, Serial, Single,
+    Usage,
 };
 
 use antigen_wgpu::{
@@ -14,9 +16,9 @@ use antigen_wgpu::{
         ShaderSource, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
     },
     BufferComponent, CommandBuffersComponent, MeshVertices, MsaaFramebuffer,
-    MsaaFramebufferTextureView, PipelineLayoutComponent, RenderAttachmentTextureView,
-    RenderBundleComponent,
-SurfaceConfigurationComponent,
+    MsaaFramebufferTextureDescriptor, MsaaFramebufferTextureView, PipelineLayoutComponent,
+    RenderAttachmentTextureView, RenderBundleComponent, SurfaceConfigurationComponent,
+    TextureDescriptorComponent, TextureViewDescriptorComponent,
 };
 
 use bytemuck::{Pod, Zeroable};
@@ -56,7 +58,14 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     cmd.add_component(renderer_entity, RenderBundleComponent::pending());
     cmd.add_component(renderer_entity, CommandBuffersComponent::new());
     cmd.add_indirect_component::<SurfaceConfigurationComponent>(renderer_entity, window_entity);
+    cmd.add_indirect_component::<ChangedFlag<SurfaceConfigurationComponent>>(
+        renderer_entity,
+        window_entity,
+    );
     cmd.add_indirect_component::<RenderAttachmentTextureView>(renderer_entity, window_entity);
+
+    // Window reference for input handling
+    cmd.add_indirect_component::<WindowComponent>(renderer_entity, window_entity);
 
     // Shader
     antigen_wgpu::assemble_shader(
@@ -129,6 +138,9 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         Default::default(),
     );
 
+    cmd.add_indirect_component_self::<MsaaFramebufferTextureDescriptor>(renderer_entity);
+    cmd.add_indirect_component_self::<Usage<MsaaFramebuffer, ChangedFlag<TextureDescriptorComponent>>>(renderer_entity);
+    cmd.add_indirect_component_self::<Usage<MsaaFramebuffer, ChangedFlag<TextureViewDescriptorComponent>>>(renderer_entity);
     cmd.add_indirect_component_self::<MsaaFramebufferTextureView>(renderer_entity);
 }
 
@@ -137,16 +149,22 @@ pub fn prepare_schedule() -> ImmutableSchedule<Serial> {
         parallel![
             antigen_wgpu::create_shader_modules_system(),
             antigen_wgpu::create_buffers_system::<VertexBuffer>(),
-            antigen_wgpu::create_textures_system::<MsaaFramebuffer>(),
-            antigen_wgpu::create_texture_views_system::<MsaaFramebuffer>(),
+            serial![
+                antigen_wgpu::create_textures_system::<MsaaFramebuffer>(),
+                antigen_wgpu::create_texture_views_system::<MsaaFramebuffer>(),
+            ]
         ],
-        parallel![antigen_wgpu::buffer_write_system::<
+        antigen_wgpu::buffer_write_system::<
             VertexBuffer,
             MeshVertices::<Vertex>,
             Vec<Vertex>,
-        >(),],
+        >(),
         msaa_line_prepare_system()
     ]
+}
+
+pub fn keyboard_event_schedule() -> ImmutableSchedule<Single> {
+    single![msaa_line_key_event_system()]
 }
 
 pub fn render_schedule() -> ImmutableSchedule<Single> {

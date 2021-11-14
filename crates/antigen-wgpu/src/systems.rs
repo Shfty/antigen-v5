@@ -15,9 +15,7 @@ use antigen_core::{
 use antigen_winit::{WindowComponent, WindowEntityMap, WindowEventComponent, WindowSizeComponent};
 
 use legion::{world::SubWorld, IntoQuery};
-use wgpu::{
-    Adapter, Device, ImageCopyTextureBase, ImageDataLayout, Instance, Queue, Surface,
-};
+use wgpu::{Adapter, Device, ImageCopyTextureBase, ImageDataLayout, Instance, Queue, Surface};
 
 // Initialize pending surfaces that share an entity with a window
 #[legion::system(for_each)]
@@ -75,12 +73,21 @@ pub fn reconfigure_surfaces(
     };
 
     if !surface_config_changed.get() {
-        return
+        return;
     }
 
     let config = surface_config.read();
     if config.width > 0 && config.height > 0 {
         surface.configure(device, &config);
+    }
+}
+
+#[legion::system(par_for_each)]
+pub fn reset_surface_config_changed(
+    surface_config_changed: &ChangedFlag<SurfaceConfigurationComponent>,
+) {
+    if surface_config_changed.get() {
+        surface_config_changed.set(false);
     }
 }
 
@@ -99,11 +106,9 @@ pub fn surface_texture_query(world: &legion::world::SubWorld, entity: &legion::E
     };
 
     let surface = surface.read();
-    let surface = if let LazyComponent::Ready(surface) = &*surface
-    {
+    let surface = if let LazyComponent::Ready(surface) = &*surface {
         surface
-    }
-    else {
+    } else {
         return;
     };
 
@@ -164,24 +169,6 @@ pub fn surface_size(
     }
 }
 
-#[legion::system(par_for_each)]
-pub fn reset_surface_config_changed_flag(
-    surface_config_changed: &ChangedFlag<SurfaceConfigurationComponent>,
-) {
-    if surface_config_changed.get() {
-        surface_config_changed.set(false);
-    }
-}
-
-#[legion::system(par_for_each)]
-pub fn reset_texture_descriptor_changed_flag(
-    texture_desc_changed: &ChangedFlag<TextureDescriptorComponent>,
-) {
-    if texture_desc_changed.get() {
-        texture_desc_changed.set(false);
-    }
-}
-
 // Present valid surface textures, setting their dirty flag
 #[legion::system(par_for_each)]
 pub fn surface_texture_present(
@@ -201,12 +188,16 @@ pub fn surface_texture_view_drop(
     surface_texture_changed: &ChangedFlag<SurfaceTextureComponent>,
     texture_view: &RenderAttachmentTextureView,
 ) {
-    if surface_texture_changed.get() {
-        if surface_texture.read().is_none() {
-            texture_view.write().set_dropped();
-            surface_texture_changed.set(false);
-        }
+    if !surface_texture_changed.get() {
+        return;
     }
+
+    if surface_texture.read().is_some() {
+        return;
+    }
+
+    texture_view.write().set_dropped();
+    surface_texture_changed.set(false);
 }
 
 /// Create pending untagged shader modules, recreating them if a ChangedFlag is set
@@ -218,15 +209,18 @@ pub fn create_shader_modules(
     shader_module: &ShaderModuleComponent,
     shader_module_desc_changed: &ChangedFlag<ShaderModuleDescriptorComponent>,
 ) {
-    if shader_module.read().is_pending()
-        || shader_module_desc_changed.get()
-    {
-        let device = <&Device>::query().iter(world).next().unwrap();
-        shader_module
-            .write()
-            .set_ready(device.create_shader_module(&shader_module_desc.read()));
-        println!("Created shader module");
+    if !shader_module.read().is_pending() && !shader_module_desc_changed.get() {
+        return;
     }
+
+    let device = <&Device>::query().iter(world).next().unwrap();
+    shader_module
+        .write()
+        .set_ready(device.create_shader_module(&shader_module_desc.read()));
+
+    shader_module_desc_changed.set(false);
+
+    println!("Created shader module");
 }
 
 /// Create pending usage-tagged shader modules, recreating them if a ChangedFlag is set
@@ -238,15 +232,17 @@ pub fn create_shader_modules_usage<T: Send + Sync + 'static>(
     shader_module: &Usage<T, ShaderModuleComponent>,
     shader_module_desc_changed: &Usage<T, ChangedFlag<ShaderModuleDescriptorComponent>>,
 ) {
-    if shader_module.read().is_pending()
-        || shader_module_desc_changed.get()
-    {
-        let device = <&Device>::query().iter(world).next().unwrap();
-        shader_module
-            .write()
-            .set_ready(device.create_shader_module(&shader_module_desc.read()));
-        println!("Created {} shader module", std::any::type_name::<T>());
+    if !shader_module.read().is_pending() && !shader_module_desc_changed.get() {
+        return;
     }
+
+    let device = <&Device>::query().iter(world).next().unwrap();
+    shader_module
+        .write()
+        .set_ready(device.create_shader_module(&shader_module_desc.read()));
+
+    shader_module_desc_changed.set(false);
+    println!("Created {} shader module", std::any::type_name::<T>());
 }
 
 /// Create pending usage-tagged buffers, recreating them if a ChangedFlag is set
@@ -258,15 +254,18 @@ pub fn create_buffers<T: Send + Sync + 'static>(
     buffer: &Usage<T, BufferComponent>,
     buffer_desc_changed: &Usage<T, ChangedFlag<BufferDescriptorComponent>>,
 ) {
-    if buffer.read().is_pending()
-        || buffer_desc_changed.get()
-    {
-        let device = <&Device>::query().iter(world).next().unwrap();
-        println!("Created {} buffer", std::any::type_name::<T>());
-        buffer
-            .write()
-            .set_ready(device.create_buffer(&buffer_desc.read()));
+    if !buffer.read().is_pending() && !buffer_desc_changed.get() {
+        return;
     }
+
+    let device = <&Device>::query().iter(world).next().unwrap();
+    buffer
+        .write()
+        .set_ready(device.create_buffer(&buffer_desc.read()));
+
+    buffer_desc_changed.set(false);
+
+    println!("Created {} buffer", std::any::type_name::<T>());
 }
 
 /// Create pending usage-tagged textures, recreating them if a ChangedFlag is set
@@ -278,14 +277,26 @@ pub fn create_textures<T: Send + Sync + 'static>(
     texture: &Usage<T, TextureComponent>,
     texture_descriptor_changed: &Usage<T, ChangedFlag<TextureDescriptorComponent>>,
 ) {
-    if texture.read().is_pending()
-        || texture_descriptor_changed.get()
-    {
-        let device = <&Device>::query().iter(world).next().unwrap();
-        texture
-            .write()
-            .set_ready(device.create_texture(&*texture_descriptor.read()));
+    if !texture.read().is_pending() && !texture_descriptor_changed.get() {
+        return;
     }
+
+    let texture_descriptor = texture_descriptor.read();
+    if texture_descriptor.size.width == 0
+        || texture_descriptor.size.height == 0
+        || texture_descriptor.size.depth_or_array_layers == 0
+    {
+        return;
+    }
+
+    let device = <&Device>::query().iter(world).next().unwrap();
+    texture
+        .write()
+        .set_ready(device.create_texture(&*texture_descriptor));
+
+    texture_descriptor_changed.set(false);
+
+    println!("Created texture: {:#?}", texture_descriptor);
 }
 
 /// Create pending usage-tagged texture views, recreating them if a ChangedFlag is set
@@ -297,9 +308,7 @@ pub fn create_texture_views<T: Send + Sync + 'static>(
     texture_view: &Usage<T, TextureViewComponent>,
     texture_view_desc_changed: &Usage<T, ChangedFlag<TextureViewDescriptorComponent>>,
 ) {
-    if !texture_view.read().is_pending()
-        && !texture_view_desc_changed.get()
-    {
+    if !texture_view.read().is_pending() && !texture_view_desc_changed.get() {
         return;
     }
 
@@ -313,6 +322,10 @@ pub fn create_texture_views<T: Send + Sync + 'static>(
     texture_view
         .write()
         .set_ready(texture.create_view(&texture_view_desc.read()));
+
+    texture_view_desc_changed.set(false);
+
+    println!("Created texture view: {:#?}", texture_view_desc.read());
 }
 
 /// Create pending usage-tagged samplers, recreating them if a ChangedFlag is set
@@ -324,14 +337,18 @@ pub fn create_samplers<T: Send + Sync + 'static>(
     sampler: &Usage<T, SamplerComponent>,
     sampler_desc_changed: &Usage<T, ChangedFlag<SamplerDescriptorComponent>>,
 ) {
-    if sampler.read().is_pending()
-        || sampler_desc_changed.get()
-    {
-        let device = <&Device>::query().iter(world).next().unwrap();
-        sampler
-            .write()
-            .set_ready(device.create_sampler(&sampler_desc.read()));
+    if !sampler.read().is_pending() && !sampler_desc_changed.get() {
+        return;
     }
+
+    let device = <&Device>::query().iter(world).next().unwrap();
+    sampler
+        .write()
+        .set_ready(device.create_sampler(&sampler_desc.read()));
+
+    sampler_desc_changed.set(false);
+
+    println!("Created sampler: {:#?}", sampler_desc.read());
 }
 
 // Write data to buffer

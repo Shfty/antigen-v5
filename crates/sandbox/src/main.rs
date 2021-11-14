@@ -21,7 +21,7 @@
 //       [ ] Mipmap
 //       [>] MSAA Line
 //           [✓] MSAA rendering
-//           [ ] MSAA framebuffer recreation
+//           [>] Recreate framebuffer on resize
 //           [ ] Render bundle recreation
 //       [ ] Shadow
 //       [ ] Texture Arrays
@@ -95,15 +95,16 @@ pub fn winit_thread(world: ImmutableWorld) -> ! {
     let surface_resize_schedule = || {
         serial![
             demos::wgpu_examples::cube::cube_resize_system()
+            demos::wgpu_examples::msaa_line::msaa_line_resize_system()
         ]
     };
 
     // Resets dirty flags that should only remain active for one frame
-    let reset_dirty_flags_schedule = parallel![
-        antigen_winit::reset_resize_window_dirty_flags_system(),
-        antigen_wgpu::reset_surface_config_changed_flag_system(),
-        antigen_wgpu::reset_texture_descriptor_changed_flag_system(),
-    ];
+    let reset_dirty_flags_schedule =
+        parallel![
+            antigen_winit::reset_resize_window_dirty_flags_system(),
+            antigen_wgpu::reset_surface_config_changed_system(),
+        ];
 
     // Create winit event schedules
     let mut main_events_cleared_schedule = serial![
@@ -130,8 +131,10 @@ pub fn winit_thread(world: ImmutableWorld) -> ! {
         antigen_winit::resize_window_system(),
         surface_resize_schedule(),
     ];
-    let mut window_keyboard_event_schedule =
-        serial![crate::demos::wgpu_examples::bunnymark::keyboard_event_schedule()];
+    let mut window_keyboard_event_schedule = parallel![
+        crate::demos::wgpu_examples::bunnymark::keyboard_event_schedule(),
+        crate::demos::wgpu_examples::msaa_line::keyboard_event_schedule(),
+    ];
     let mut window_close_requested_schedule = single![antigen_winit::close_window_system()];
 
     // Enter winit event loop
