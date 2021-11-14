@@ -5,10 +5,7 @@ pub use components::*;
 use legion::systems::CommandBuffer;
 pub use systems::*;
 
-use antigen_core::{
-    parallel, serial, single, AddIndirectComponent, ChangedFlag, ImmutableSchedule, RwLock, Serial,
-    Single, Usage,
-};
+use antigen_core::{AddIndirectComponent, ChangedFlag, ImmutableSchedule, RwLock, Serial, Single, Usage, parallel, serial, single};
 use antigen_wgpu::{
     assemble_buffer_data, assemble_texture_data,
     wgpu::{
@@ -17,9 +14,9 @@ use antigen_wgpu::{
         TextureDimension, TextureFormat, TextureUsages,
     },
     BindGroupComponent, BufferComponent, CommandBuffersComponent, MeshIndices, MeshUvs,
-    MeshVertices, RenderAttachmentTextureView, RenderPipelineComponent, Texels,
-    TextureComponent, TextureDescriptorComponent, TextureSizeComponent, TextureViewComponent,
-SurfaceConfigurationComponent,
+    MeshVertices, RenderAttachmentTextureView, RenderPipelineComponent,
+    SurfaceConfigurationComponent, Texels, TextureComponent, TextureDescriptorComponent,
+    TextureViewComponent,
 };
 
 use std::{borrow::Cow, num::NonZeroU32};
@@ -182,11 +179,6 @@ pub fn assemble(cmd: &mut CommandBuffer) {
     // Add title to window
     antigen_winit::assemble_window_title(cmd, &(window_entity,), &"Cube");
 
-    // Add size tracking components to window
-    antigen_winit::assemble_window_size(cmd, &(window_entity,));
-    antigen_wgpu::assemble_surface_size(cmd, &(window_entity,));
-    antigen_wgpu::assemble_texture_size(cmd, &(window_entity,));
-
     // Renderer
     let renderer_entity = cmd.push(());
 
@@ -206,9 +198,8 @@ pub fn assemble(cmd: &mut CommandBuffer) {
     cmd.add_component(renderer_entity, CommandBuffersComponent::new());
 
     cmd.add_indirect_component::<SurfaceConfigurationComponent>(renderer_entity, window_entity);
+    cmd.add_indirect_component::<ChangedFlag<SurfaceConfigurationComponent>>(renderer_entity, window_entity);
     cmd.add_indirect_component::<RenderAttachmentTextureView>(renderer_entity, window_entity);
-    cmd.add_indirect_component::<TextureSizeComponent>(renderer_entity, window_entity);
-    cmd.add_indirect_component::<ChangedFlag<TextureSizeComponent>>(renderer_entity, window_entity);
 
     // Shader
     antigen_wgpu::assemble_shader(

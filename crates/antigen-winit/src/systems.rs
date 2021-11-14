@@ -47,7 +47,6 @@ pub fn create_windows_thread_local<T>(
         *window_component.write() = LazyComponent::Ready(window);
 
         if let (Some(window_size), Some(size_dirty)) = (size_component, size_dirty) {
-            println!("Setting initial window size");
             *window_size.write() = size;
             size_dirty.set(true);
         }

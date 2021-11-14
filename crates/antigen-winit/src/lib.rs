@@ -25,6 +25,8 @@ pub fn assemble_window(
     #[state] (entity,): &(legion::Entity,),
 ) {
     cmd.add_component(*entity, WindowComponent::pending());
+    cmd.add_component(*entity, WindowSizeComponent::new(Default::default()));
+    cmd.add_component(*entity, ChangedFlag::<WindowSizeComponent>::new_clean());
 }
 
 #[legion::system]
@@ -35,16 +37,6 @@ pub fn assemble_window_title(
 ) {
     cmd.add_component(*entity, WindowTitleComponent::new((*title).into()));
     cmd.add_component(*entity, ChangedFlag::<WindowTitleComponent>::new_dirty());
-}
-
-#[legion::system]
-pub fn assemble_window_size(
-    cmd: &mut legion::systems::CommandBuffer,
-    #[state] (entity,): &(legion::Entity,),
-) {
-    // Add size tracking components to window
-    cmd.add_component(*entity, WindowSizeComponent::new(Default::default()));
-    cmd.add_component(*entity, ChangedFlag::<WindowSizeComponent>::new_clean());
 }
 
 /// Extend a winit event loop closure with a world reference and ECS event loop handling

@@ -94,8 +94,6 @@ pub fn winit_thread(world: ImmutableWorld) -> ! {
     // Runs on main events cleared and window resize
     let surface_resize_schedule = || {
         serial![
-            antigen_wgpu::surface_size_system()
-            antigen_wgpu::surface_texture_size_system()
             demos::wgpu_examples::cube::cube_resize_system()
         ]
     };
@@ -103,16 +101,16 @@ pub fn winit_thread(world: ImmutableWorld) -> ! {
     // Resets dirty flags that should only remain active for one frame
     let reset_dirty_flags_schedule = parallel![
         antigen_winit::reset_resize_window_dirty_flags_system(),
-        antigen_wgpu::reset_surface_size_dirty_flag_system(),
-        antigen_wgpu::reset_texture_size_dirty_flag_system(),
+        antigen_wgpu::reset_surface_config_changed_flag_system(),
+        antigen_wgpu::reset_texture_descriptor_changed_flag_system(),
     ];
 
     // Create winit event schedules
     let mut main_events_cleared_schedule = serial![
         antigen_winit::window_title_system(),
         antigen_winit::window_request_redraw_schedule(),
-        parallel![
-            antigen_wgpu::create_window_surfaces_schedule(),
+        serial![
+            antigen_wgpu::window_surfaces_schedule(),
             surface_resize_schedule(),
         ],
         parallel![

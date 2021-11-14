@@ -4,7 +4,8 @@ use legion::{storage::Component, systems::CommandBuffer, Entity, World};
 use wgpu::{
     Adapter, Backends, BufferAddress, BufferDescriptor, Device, DeviceDescriptor,
     ImageCopyTextureBase, ImageDataLayout, Instance, Queue, SamplerDescriptor,
-    ShaderModuleDescriptor, Surface, TextureDescriptor, TextureViewDescriptor,
+    ShaderModuleDescriptor, Surface, SurfaceConfiguration, TextureDescriptor,
+    TextureViewDescriptor,
 };
 
 use std::path::Path;
@@ -13,9 +14,8 @@ use crate::{
     BufferComponent, BufferDescriptorComponent, BufferWriteComponent, RenderAttachment,
     SamplerComponent, SamplerDescriptorComponent, ShaderModuleComponent,
     ShaderModuleDescriptorComponent, SurfaceComponent, SurfaceConfigurationComponent,
-    SurfaceSizeComponent, SurfaceTextureComponent, TextureComponent, TextureDescriptorComponent,
-    TextureSizeComponent, TextureViewComponent, TextureViewDescriptorComponent,
-    TextureWriteComponent,
+    SurfaceTextureComponent, TextureComponent, TextureDescriptorComponent, TextureViewComponent,
+    TextureViewDescriptorComponent, TextureWriteComponent,
 };
 
 /// Create an entity to hold an Instance, Adapter, Device and Queue
@@ -64,42 +64,32 @@ pub fn assemble_wgpu_entity_from_env(
 /// Extends an existing window entity with the means to render to a WGPU surface
 #[legion::system]
 pub fn assemble_window_surface(cmd: &mut CommandBuffer, #[state] (entity,): &(Entity,)) {
-    cmd.add_component(
+    cmd.add_component_with_changed_flag_clean(
         *entity,
-        SurfaceConfigurationComponent::new(wgpu::SurfaceConfiguration {
+        SurfaceConfigurationComponent::new(SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: wgpu::TextureFormat::Bgra8Unorm,
-            width: 100,
-            height: 100,
+            width: 0,
+            height: 0,
             present_mode: wgpu::PresentMode::Mailbox,
         }),
     );
     cmd.add_component(*entity, SurfaceComponent::pending());
 
-    cmd.add_component(*entity, SurfaceTextureComponent::pending());
-    cmd.add_component(*entity, ChangedFlag::<SurfaceTextureComponent>::new_clean());
+    cmd.add_component_with_changed_flag_clean(*entity, SurfaceTextureComponent::pending());
+
     cmd.add_component(
         *entity,
         Usage::<RenderAttachment, _>::new(TextureViewDescriptorComponent::new(Default::default())),
     );
     cmd.add_component(
         *entity,
+        Usage::<RenderAttachment, _>::new(ChangedFlag::<TextureViewDescriptorComponent>::new_clean()),
+    );
+    cmd.add_component(
+        *entity,
         Usage::<RenderAttachment, _>::new(TextureViewComponent::pending()),
     );
-}
-
-/// Extends an existing surface entity with the means to track its size
-#[legion::system]
-pub fn assemble_surface_size(cmd: &mut CommandBuffer, #[state] (entity,): &(Entity,)) {
-    cmd.add_component(*entity, SurfaceSizeComponent::new(Default::default()));
-    cmd.add_component(*entity, ChangedFlag::<SurfaceSizeComponent>::new_clean());
-}
-
-/// Extends an existing texture entity with the means to track its size
-#[legion::system]
-pub fn assemble_texture_size(cmd: &mut CommandBuffer, #[state] (entity,): &(Entity,)) {
-    cmd.add_component(*entity, TextureSizeComponent::new(Default::default()));
-    cmd.add_component(*entity, ChangedFlag::<TextureSizeComponent>::new_clean());
 }
 
 /// Adds an untagged shader to an entity
@@ -108,7 +98,7 @@ pub fn assemble_shader(
     entity: Entity,
     desc: ShaderModuleDescriptor<'static>,
 ) {
-    cmd.add_component(entity, ShaderModuleDescriptorComponent::new(desc));
+    cmd.add_component_with_changed_flag_clean(entity, ShaderModuleDescriptorComponent::new(desc));
     cmd.add_component(entity, ShaderModuleComponent::pending());
 }
 
@@ -123,6 +113,11 @@ pub fn assemble_shader_usage<U: Send + Sync + 'static>(
         Usage::<U, _>::new(ShaderModuleDescriptorComponent::new(desc)),
     );
 
+    cmd.add_component(
+        entity,
+        Usage::<U, _>::new(ChangedFlag::<ShaderModuleDescriptorComponent>::new_clean()),
+    );
+
     cmd.add_component(entity, Usage::<U, _>::new(ShaderModuleComponent::pending()));
 }
 
@@ -135,6 +130,11 @@ pub fn assemble_buffer<U: Send + Sync + 'static>(
     cmd.add_component(
         entity,
         Usage::<U, _>::new(BufferDescriptorComponent::new(desc)),
+    );
+
+    cmd.add_component(
+        entity,
+        Usage::<U, _>::new(ChangedFlag::<BufferDescriptorComponent>::new_clean()),
     );
 
     cmd.add_component(entity, Usage::<U, _>::new(BufferComponent::pending()));
@@ -167,6 +167,11 @@ pub fn assemble_texture<U: Send + Sync + 'static>(
     cmd.add_component(
         entity,
         Usage::<U, _>::new(TextureDescriptorComponent::new(desc)),
+    );
+
+    cmd.add_component(
+        entity,
+        Usage::<U, _>::new(ChangedFlag::<TextureDescriptorComponent>::new_clean()),
     );
 
     cmd.add_component(entity, Usage::<U, _>::new(TextureComponent::pending()));
@@ -210,6 +215,11 @@ pub fn assemble_texture_view<U: Send + Sync + 'static>(
         Usage::<U, _>::new(TextureViewDescriptorComponent::new(desc)),
     );
 
+    cmd.add_component(
+        entity,
+        Usage::<U, _>::new(ChangedFlag::<TextureViewDescriptorComponent>::new_clean()),
+    );
+
     cmd.add_component(entity, Usage::<U, _>::new(TextureViewComponent::pending()));
 }
 
@@ -222,6 +232,10 @@ pub fn assemble_sampler<U: Send + Sync + 'static>(
     cmd.add_component(
         entity,
         Usage::<U, _>::new(SamplerDescriptorComponent::new(desc)),
+    );
+    cmd.add_component(
+        entity,
+        Usage::<U, _>::new(ChangedFlag::<SamplerDescriptorComponent>::new_clean()),
     );
     cmd.add_component(entity, Usage::<U, _>::new(SamplerComponent::pending()));
 }

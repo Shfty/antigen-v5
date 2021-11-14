@@ -303,62 +303,67 @@ pub fn boids_render(
 
     let frame_num = frame_num_atomic.load(Ordering::Relaxed);
 
-    if let LazyComponent::Ready(texture_view) = &*texture_view.read() {
-        let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor { label: None });
+    let texture_view = texture_view.read();
+    let texture_view = if let LazyComponent::Ready(texture_view) = &*texture_view {
+        texture_view
+    } else {
+        return;
+    };
 
-        encoder.push_debug_group("compute boid movement");
-        {
-            // compute pass
-            let mut cpass = encoder.begin_compute_pass(&ComputePassDescriptor { label: None });
-            cpass.set_pipeline(&compute_pipeline);
-            cpass.set_bind_group(
-                0,
-                if frame_num % 2 == 0 {
-                    front_buffer_bind_group
-                } else {
-                    back_buffer_bind_group
-                },
-                &[],
-            );
-            cpass.dispatch(*work_group_count, 1, 1);
-        }
-        encoder.pop_debug_group();
+    let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor { label: None });
 
-        encoder.push_debug_group("render boids");
-        {
-            // render pass
-            let mut rpass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: None,
-                color_attachments: &[RenderPassColorAttachment {
-                    view: texture_view,
-                    resolve_target: None,
-                    ops: Operations {
-                        load: LoadOp::Clear(Color::BLACK),
-                        store: true,
-                    },
-                }],
-                depth_stencil_attachment: None,
-            });
-            rpass.set_pipeline(&render_pipeline);
-            // render dst particles
-            rpass.set_vertex_buffer(
-                0,
-                if (frame_num + 1) % 2 == 0 {
-                    front_buffer.slice(..)
-                } else {
-                    back_buffer.slice(..)
-                },
-            );
-            // the three instance-local vertices
-            rpass.set_vertex_buffer(1, vertex_buffer.slice(..));
-            rpass.draw(0..3, 0..NUM_PARTICLES as u32);
-        }
-        encoder.pop_debug_group();
-
-        // update frame count
-        frame_num_atomic.fetch_add(1, Ordering::Relaxed);
-
-        // done
-        command_buffers.write().push(encoder.finish());
+    encoder.push_debug_group("compute boid movement");
+    {
+        // compute pass
+        let mut cpass = encoder.begin_compute_pass(&ComputePassDescriptor { label: None });
+        cpass.set_pipeline(&compute_pipeline);
+        cpass.set_bind_group(
+            0,
+            if frame_num % 2 == 0 {
+                front_buffer_bind_group
+            } else {
+                back_buffer_bind_group
+            },
+            &[],
+        );
+        cpass.dispatch(*work_group_count, 1, 1);
     }
+    encoder.pop_debug_group();
+
+    encoder.push_debug_group("render boids");
+    {
+        // render pass
+        let mut rpass = encoder.begin_render_pass(&RenderPassDescriptor {
+            label: None,
+            color_attachments: &[RenderPassColorAttachment {
+                view: texture_view,
+                resolve_target: None,
+                ops: Operations {
+                    load: LoadOp::Clear(Color::BLACK),
+                    store: true,
+                },
+            }],
+            depth_stencil_attachment: None,
+        });
+        rpass.set_pipeline(&render_pipeline);
+        // render dst particles
+        rpass.set_vertex_buffer(
+            0,
+            if (frame_num + 1) % 2 == 0 {
+                front_buffer.slice(..)
+            } else {
+                back_buffer.slice(..)
+            },
+        );
+        // the three instance-local vertices
+        rpass.set_vertex_buffer(1, vertex_buffer.slice(..));
+        rpass.draw(0..3, 0..NUM_PARTICLES as u32);
+    }
+    encoder.pop_debug_group();
+
+    // update frame count
+    frame_num_atomic.fetch_add(1, Ordering::Relaxed);
+
+    // done
+    command_buffers.write().push(encoder.finish());
 }

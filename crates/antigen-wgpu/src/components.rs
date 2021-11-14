@@ -1,6 +1,6 @@
 use antigen_core::{
     impl_read_write_lock, LazyComponent, ReadWriteLock, RwLock, RwLockReadGuard, RwLockWriteGuard,
-    SizeComponent, Usage,
+    Usage,
 };
 
 use wgpu::{
@@ -439,10 +439,3 @@ impl<T> MeshIndices<T> {
     }
 }
 
-// Surface size
-pub enum SurfaceSize {}
-pub type SurfaceSizeComponent = Usage<TextureSize, SizeComponent<RwLock<(u32, u32)>>>;
-
-// Texture size
-pub enum TextureSize {}
-pub type TextureSizeComponent = Usage<TextureSize, SizeComponent<RwLock<(u32, u32)>>>;

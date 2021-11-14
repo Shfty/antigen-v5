@@ -13,11 +13,11 @@ use antigen_wgpu::{
         CommandEncoderDescriptor, Device, Face, Features, FragmentState, FrontFace, IndexFormat,
         LoadOp, MultisampleState, Operations, PipelineLayoutDescriptor, PolygonMode,
         PrimitiveState, RenderPassColorAttachment, RenderPassDescriptor, RenderPipelineDescriptor,
-        ShaderStages, TextureSampleType, TextureViewDimension,
-        VertexAttribute, VertexBufferLayout, VertexFormat, VertexState, VertexStepMode,
+        ShaderStages, TextureSampleType, TextureViewDimension, VertexAttribute, VertexBufferLayout,
+        VertexFormat, VertexState, VertexStepMode,
     },
     BindGroupComponent, CommandBuffersComponent, RenderAttachmentTextureView,
-    ShaderModuleComponent, SurfaceConfigurationComponent, TextureSizeComponent,
+    ShaderModuleComponent, SurfaceConfigurationComponent,
 };
 
 use legion::{world::SubWorld, IntoQuery};
@@ -201,22 +201,22 @@ pub fn cube_prepare(
 }
 
 #[legion::system(par_for_each)]
-#[read_component(TextureSizeComponent)]
-#[read_component(ChangedFlag<TextureSizeComponent>)]
+#[read_component(SurfaceConfigurationComponent)]
+#[read_component(ChangedFlag<SurfaceConfigurationComponent>)]
 pub fn cube_resize(
     world: &SubWorld,
     _: &Cube,
-    texture_size: &IndirectComponent<TextureSizeComponent>,
-    dirty_flag: &IndirectComponent<ChangedFlag<TextureSizeComponent>>,
+    surface_config: &IndirectComponent<SurfaceConfigurationComponent>,
+    surface_config_changed: &IndirectComponent<ChangedFlag<SurfaceConfigurationComponent>>,
     view_projection: &ViewProjectionMatrix,
     matrix_dirty: &ChangedFlag<ViewProjectionMatrix>,
 ) {
-    let dirty_flag = world.get_indirect(dirty_flag).unwrap();
-    let texture_size = world.get_indirect(texture_size).unwrap();
+    let surface_config_changed = world.get_indirect(surface_config_changed).unwrap();
+    let surface_config = world.get_indirect(surface_config).unwrap();
 
-    if dirty_flag.get() {
-        let texture_size = *texture_size.read();
-        let aspect = texture_size.0 as f32 / texture_size.1 as f32;
+    if surface_config_changed.get() {
+        let surface_config = surface_config.read();
+        let aspect = surface_config.width as f32 / surface_config.height as f32;
         let matrix = super::generate_matrix(aspect);
         view_projection.write().copy_from_slice(matrix.as_slice());
         matrix_dirty.set(true);

@@ -16,7 +16,7 @@ use antigen_wgpu::{
 
 use legion::IntoQuery;
 
-// Initialize the hello triangle render pipeline
+// Initialize the MSAA lines render pipeline
 #[legion::system(par_for_each)]
 #[read_component(Device)]
 #[read_component(SurfaceConfigurationComponent)]
@@ -120,7 +120,7 @@ pub fn msaa_line_prepare(
     render_bundle_component.write().set_ready(render_bundle);
 }
 
-// Render the hello triangle pipeline to the specified entity's surface
+// Render the MSAA lines pipeline to the specified entity's surface
 #[legion::system(par_for_each)]
 #[read_component(Device)]
 #[read_component(RenderAttachmentTextureView)]

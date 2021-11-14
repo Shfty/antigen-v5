@@ -9,10 +9,16 @@ pub use systems::*;
 pub use to_bytes::*;
 pub use wgpu;
 
-use antigen_core::{serial, single, ImmutableSchedule, Serial, Single};
+use antigen_core::{parallel, serial, ImmutableSchedule, Parallel, Serial};
 
-pub fn create_window_surfaces_schedule() -> ImmutableSchedule<Single> {
-    single![create_window_surfaces_system()]
+pub fn window_surfaces_schedule() -> ImmutableSchedule<Parallel> {
+    parallel![
+        create_window_surfaces_system(),
+        serial![
+            surface_size_system()
+            reconfigure_surfaces_system(),
+        ]
+    ]
 }
 
 pub fn submit_and_present_schedule() -> ImmutableSchedule<Serial> {
