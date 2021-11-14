@@ -6,30 +6,14 @@ use winit::{dpi::PhysicalSize, event::WindowEvent, window::WindowId};
 use std::collections::BTreeMap;
 
 // Winit window
-pub struct WindowComponent(RwLock<LazyComponent<winit::window::Window>>);
-
-impl WindowComponent {
-    pub fn pending() -> WindowComponent {
-        WindowComponent(RwLock::new(LazyComponent::Pending))
-    }
-}
-
-impl_read_write_lock!(WindowComponent, 0, LazyComponent<winit::window::Window>);
+pub type WindowComponent = RwLock<LazyComponent<winit::window::Window>>;
 
 // Tag component for a window that redraws unconditionally
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RedrawUnconditionally;
 
 // Window ID -> Entity ID map for winit event handling
-pub struct WindowEntityMap(RwLock<BTreeMap<WindowId, Entity>>);
-
-impl_read_write_lock!(WindowEntityMap, 0, BTreeMap<WindowId, Entity>);
-
-impl WindowEntityMap {
-    pub fn new() -> Self {
-        WindowEntityMap(RwLock::new(Default::default()))
-    }
-}
+pub type WindowEntityMap = RwLock<BTreeMap<WindowId, Entity>>;
 
 /// Window event wrapper
 pub struct WindowEventComponent(RwLock<(Option<WindowId>, Option<WindowEvent<'static>>)>);

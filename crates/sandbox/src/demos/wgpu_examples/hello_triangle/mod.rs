@@ -27,8 +27,8 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
 
     // Renderer
     cmd.add_component(renderer_entity, HelloTriangle);
-    cmd.add_component(renderer_entity, RenderPipelineComponent::pending());
-    cmd.add_component(renderer_entity, CommandBuffersComponent::new());
+    antigen_wgpu::assemble_render_pipeline(cmd, renderer_entity);
+    antigen_wgpu::assemble_command_buffers(cmd, renderer_entity);
     cmd.add_indirect_component::<SurfaceConfigurationComponent>(renderer_entity, window_entity);
     cmd.add_indirect_component::<RenderAttachmentTextureView>(renderer_entity, window_entity);
 

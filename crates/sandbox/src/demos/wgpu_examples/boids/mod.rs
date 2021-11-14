@@ -12,7 +12,15 @@ use antigen_core::{
     Usage,
 };
 
-use antigen_wgpu::{BindGroupComponent, CommandBuffersComponent, ComputePipelineComponent, RenderAttachmentTextureView, RenderPipelineComponent, SurfaceConfigurationComponent, assemble_buffer_data, wgpu::{BufferAddress, BufferDescriptor, BufferUsages, Device, ShaderModuleDescriptor, ShaderSource, util::BufferInitDescriptor}};
+use antigen_wgpu::{
+    assemble_buffer_data,
+    wgpu::{
+        util::BufferInitDescriptor, BufferAddress, BufferDescriptor, BufferUsages, Device,
+        ShaderModuleDescriptor, ShaderSource,
+    },
+    BindGroupComponent, CommandBuffersComponent, ComputePipelineComponent,
+    RenderAttachmentTextureView, RenderPipelineComponent, SurfaceConfigurationComponent,
+};
 
 use rand::{distributions::Distribution, SeedableRng};
 
@@ -37,17 +45,13 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
 
     // Renderer
     cmd.add_component(renderer_entity, Boids);
-    cmd.add_component(renderer_entity, RenderPipelineComponent::pending());
-    cmd.add_component(renderer_entity, ComputePipelineComponent::pending());
-    cmd.add_component(
-        renderer_entity,
-        Usage::<FrontBuffer, _>::new(BindGroupComponent::pending()),
-    );
-    cmd.add_component(
-        renderer_entity,
-        Usage::<BackBuffer, _>::new(BindGroupComponent::pending()),
-    );
-    cmd.add_component(renderer_entity, CommandBuffersComponent::new());
+
+    antigen_wgpu::assemble_render_pipeline(cmd, renderer_entity);
+    antigen_wgpu::assemble_compute_pipeline(cmd, renderer_entity);
+    antigen_wgpu::assemble_bind_group_usage::<FrontBuffer>(cmd, renderer_entity);
+    antigen_wgpu::assemble_bind_group_usage::<BackBuffer>(cmd, renderer_entity);
+    antigen_wgpu::assemble_command_buffers(cmd, renderer_entity);
+
     cmd.add_indirect_component::<SurfaceConfigurationComponent>(renderer_entity, window_entity);
     cmd.add_indirect_component::<RenderAttachmentTextureView>(renderer_entity, window_entity);
 

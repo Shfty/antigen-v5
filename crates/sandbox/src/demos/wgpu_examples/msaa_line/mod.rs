@@ -50,9 +50,9 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
 
     // Renderer
     cmd.add_component(renderer_entity, MsaaLine);
-    cmd.add_component(renderer_entity, PipelineLayoutComponent::pending());
-    cmd.add_component(renderer_entity, RenderBundleComponent::pending());
-    cmd.add_component(renderer_entity, CommandBuffersComponent::new());
+    antigen_wgpu::assemble_pipeline_layout(cmd, renderer_entity);
+    antigen_wgpu::assemble_render_bundle(cmd, renderer_entity);
+    antigen_wgpu::assemble_command_buffers(cmd, renderer_entity);
     cmd.add_indirect_component::<SurfaceConfigurationComponent>(renderer_entity, window_entity);
     cmd.add_indirect_component::<ChangedFlag<SurfaceConfigurationComponent>>(
         renderer_entity,

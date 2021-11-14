@@ -149,17 +149,10 @@ pub fn assemble(cmd: &mut CommandBuffer) {
     cmd.add_component(renderer_entity, Cube);
 
     // Renderer resources
-    cmd.add_component(renderer_entity, BindGroupComponent::pending());
-    cmd.add_component(
-        renderer_entity,
-        Usage::<OpaquePass, _>::new(RenderPipelineComponent::pending()),
-    );
-    cmd.add_component(
-        renderer_entity,
-        Usage::<WirePass, _>::new(RenderPipelineComponent::pending()),
-    );
-
-    cmd.add_component(renderer_entity, CommandBuffersComponent::new());
+    antigen_wgpu::assemble_bind_group(cmd, renderer_entity);
+    antigen_wgpu::assemble_render_pipeline_usage::<OpaquePass>(cmd, renderer_entity);
+    antigen_wgpu::assemble_render_pipeline_usage::<WirePass>(cmd, renderer_entity);
+    antigen_wgpu::assemble_command_buffers(cmd, renderer_entity);
 
     cmd.add_indirect_component::<SurfaceConfigurationComponent>(renderer_entity, window_entity);
     cmd.add_indirect_component::<ChangedFlag<SurfaceConfigurationComponent>>(

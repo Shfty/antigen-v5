@@ -1,4 +1,6 @@
-use antigen_core::{AddComponentWithChangedFlag, AddIndirectComponent, ChangedFlag, Usage};
+use antigen_core::{
+    AddComponentWithChangedFlag, AddIndirectComponent, ChangedFlag, LazyComponent, Usage,
+};
 
 use legion::{storage::Component, systems::CommandBuffer, Entity, World};
 use wgpu::{
@@ -10,14 +12,7 @@ use wgpu::{
 
 use std::path::Path;
 
-use crate::{
-    BufferComponent, BufferDescriptorComponent, BufferInitDescriptorComponent,
-    BufferWriteComponent, RenderAttachment, SamplerComponent, SamplerDescriptorComponent,
-    ShaderModuleComponent, ShaderModuleDescriptorComponent, SurfaceComponent,
-    SurfaceConfigurationComponent, SurfaceTextureComponent, TextureComponent,
-    TextureDescriptorComponent, TextureViewComponent, TextureViewDescriptorComponent,
-    TextureWriteComponent,
-};
+use crate::{BindGroupComponent, BufferComponent, BufferDescriptorComponent, BufferInitDescriptorComponent, BufferWriteComponent, CommandBuffersComponent, ComputePipelineComponent, PipelineLayoutComponent, RenderAttachment, RenderBundleComponent, RenderPipelineComponent, SamplerComponent, SamplerDescriptorComponent, ShaderModuleComponent, ShaderModuleDescriptorComponent, SurfaceComponent, SurfaceConfigurationComponent, SurfaceTextureComponent, TextureComponent, TextureDescriptorComponent, TextureViewComponent, TextureViewDescriptorComponent, TextureWriteComponent};
 
 /// Create an entity to hold an Instance, Adapter, Device and Queue
 pub fn assemble_wgpu_entity(
@@ -75,9 +70,9 @@ pub fn assemble_window_surface(cmd: &mut CommandBuffer, #[state] (entity,): &(En
             present_mode: wgpu::PresentMode::Mailbox,
         }),
     );
-    cmd.add_component(*entity, SurfaceComponent::pending());
+    cmd.add_component(*entity, SurfaceComponent::new(LazyComponent::Pending));
 
-    cmd.add_component_with_changed_flag_clean(*entity, SurfaceTextureComponent::pending());
+    cmd.add_component_with_changed_flag_clean(*entity, SurfaceTextureComponent::new(None));
 
     cmd.add_component(
         *entity,
@@ -91,8 +86,55 @@ pub fn assemble_window_surface(cmd: &mut CommandBuffer, #[state] (entity,): &(En
     );
     cmd.add_component(
         *entity,
-        Usage::<RenderAttachment, _>::new(TextureViewComponent::pending()),
+        Usage::<RenderAttachment, _>::new(TextureViewComponent::new(LazyComponent::Pending)),
     );
+}
+
+pub fn assemble_render_pipeline(cmd: &mut CommandBuffer, entity: Entity) {
+    cmd.add_component(entity, RenderPipelineComponent::new(LazyComponent::Pending));
+}
+
+pub fn assemble_pipeline_layout(cmd: &mut CommandBuffer, entity: Entity) {
+    cmd.add_component(entity, PipelineLayoutComponent::new(LazyComponent::Pending));
+}
+
+pub fn assemble_render_bundle(cmd: &mut CommandBuffer, entity: Entity) {
+    cmd.add_component(entity, RenderBundleComponent::new(LazyComponent::Pending));
+}
+
+pub fn assemble_render_pipeline_usage<U: Send + Sync + 'static>(
+    cmd: &mut CommandBuffer,
+    entity: Entity,
+) {
+    cmd.add_component(
+        entity,
+        Usage::<U, _>::new(RenderPipelineComponent::new(LazyComponent::Pending)),
+    );
+}
+
+pub fn assemble_compute_pipeline(cmd: &mut CommandBuffer, entity: Entity) {
+    cmd.add_component(
+        entity,
+        ComputePipelineComponent::new(LazyComponent::Pending),
+    );
+}
+
+pub fn assemble_bind_group(cmd: &mut CommandBuffer, entity: Entity) {
+    cmd.add_component(entity, BindGroupComponent::new(LazyComponent::Pending));
+}
+
+pub fn assemble_bind_group_usage<U: Send + Sync + 'static>(
+    cmd: &mut CommandBuffer,
+    entity: Entity,
+) {
+    cmd.add_component(
+        entity,
+        Usage::<U, _>::new(BindGroupComponent::new(LazyComponent::Pending)),
+    );
+}
+
+pub fn assemble_command_buffers(cmd: &mut CommandBuffer, entity: Entity) {
+    cmd.add_component(entity, CommandBuffersComponent::new(Default::default()));
 }
 
 /// Adds an untagged shader to an entity
@@ -102,7 +144,7 @@ pub fn assemble_shader(
     desc: ShaderModuleDescriptor<'static>,
 ) {
     cmd.add_component_with_changed_flag_clean(entity, ShaderModuleDescriptorComponent::new(desc));
-    cmd.add_component(entity, ShaderModuleComponent::pending());
+    cmd.add_component(entity, ShaderModuleComponent::new(LazyComponent::Pending));
 }
 
 /// Adds a usage-tagged shader to an entity
@@ -121,7 +163,10 @@ pub fn assemble_shader_usage<U: Send + Sync + 'static>(
         Usage::<U, _>::new(ChangedFlag::<ShaderModuleDescriptorComponent>::new_clean()),
     );
 
-    cmd.add_component(entity, Usage::<U, _>::new(ShaderModuleComponent::pending()));
+    cmd.add_component(
+        entity,
+        Usage::<U, _>::new(ShaderModuleComponent::new(LazyComponent::Pending)),
+    );
 }
 
 /// Adds a usage-tagged buffer to an entity
@@ -140,7 +185,10 @@ pub fn assemble_buffer<U: Send + Sync + 'static>(
         Usage::<U, _>::new(ChangedFlag::<BufferDescriptorComponent>::new_clean()),
     );
 
-    cmd.add_component(entity, Usage::<U, _>::new(BufferComponent::pending()));
+    cmd.add_component(
+        entity,
+        Usage::<U, _>::new(BufferComponent::new(LazyComponent::Pending)),
+    );
 }
 
 /// Adds a usage-tagged buffer to an entity with initial data
@@ -159,7 +207,10 @@ pub fn assemble_buffer_init<U: Send + Sync + 'static>(
         Usage::<U, _>::new(ChangedFlag::<BufferInitDescriptorComponent>::new_clean()),
     );
 
-    cmd.add_component(entity, Usage::<U, _>::new(BufferComponent::pending()));
+    cmd.add_component(
+        entity,
+        Usage::<U, _>::new(BufferComponent::new(LazyComponent::Pending)),
+    );
 }
 
 /// Adds some usage-tagged data to be written to a buffer when its change flag is set
@@ -196,7 +247,10 @@ pub fn assemble_texture<U: Send + Sync + 'static>(
         Usage::<U, _>::new(ChangedFlag::<TextureDescriptorComponent>::new_clean()),
     );
 
-    cmd.add_component(entity, Usage::<U, _>::new(TextureComponent::pending()));
+    cmd.add_component(
+        entity,
+        Usage::<U, _>::new(TextureComponent::new(LazyComponent::Pending)),
+    );
 }
 
 /// Adds some usage-tagged data to be written to a texture when its change flag is set
@@ -242,7 +296,10 @@ pub fn assemble_texture_view<U: Send + Sync + 'static>(
         Usage::<U, _>::new(ChangedFlag::<TextureViewDescriptorComponent>::new_clean()),
     );
 
-    cmd.add_component(entity, Usage::<U, _>::new(TextureViewComponent::pending()));
+    cmd.add_component(
+        entity,
+        Usage::<U, _>::new(TextureViewComponent::new(LazyComponent::Pending)),
+    );
 }
 
 /// Adds a usage-tagged sampler to an entity
@@ -259,5 +316,8 @@ pub fn assemble_sampler<U: Send + Sync + 'static>(
         entity,
         Usage::<U, _>::new(ChangedFlag::<SamplerDescriptorComponent>::new_clean()),
     );
-    cmd.add_component(entity, Usage::<U, _>::new(SamplerComponent::pending()));
+    cmd.add_component(
+        entity,
+        Usage::<U, _>::new(SamplerComponent::new(LazyComponent::Pending)),
+    );
 }

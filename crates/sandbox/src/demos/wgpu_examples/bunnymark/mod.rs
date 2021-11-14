@@ -91,8 +91,8 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
 
     // Renderer
     cmd.add_component(renderer_entity, Bunnymark);
-    cmd.add_component(renderer_entity, RenderPipelineComponent::pending());
-    cmd.add_component(renderer_entity, CommandBuffersComponent::new());
+    antigen_wgpu::assemble_render_pipeline(cmd, renderer_entity);
+    antigen_wgpu::assemble_command_buffers(cmd, renderer_entity);
     cmd.add_indirect_component::<SurfaceConfigurationComponent>(renderer_entity, window_entity);
     cmd.add_indirect_component::<RenderAttachmentTextureView>(renderer_entity, window_entity);
 
@@ -110,14 +110,8 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
     );
 
     // Bind groups
-    cmd.add_component(
-        renderer_entity,
-        Usage::<Global, _>::new(BindGroupComponent::pending()),
-    );
-    cmd.add_component(
-        renderer_entity,
-        Usage::<Local, _>::new(BindGroupComponent::pending()),
-    );
+    antigen_wgpu::assemble_bind_group_usage::<Global>(cmd, renderer_entity);
+    antigen_wgpu::assemble_bind_group_usage::<Local>(cmd, renderer_entity);
 
     // Playfield extent
     let extent = (640, 480);

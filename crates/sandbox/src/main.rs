@@ -1,11 +1,6 @@
 // TODO: Factor out Texels, MeshIndices, etc
 //       Implement with usage flags instead
 //
-// TODO: Support for creating buffers via init
-//       Could use a two-variant enum in the component to hold either
-//       Alternately, use descriptors as components
-//          This is probably better, since it separates it and allows for a changed flag
-//
 // TODO: Implement remaining WGPU demos using ECS pattern
 //       [✓] Boids
 //       [✓] Bunnymark
@@ -24,8 +19,6 @@
 //       [ ] Shadow
 //       [ ] Texture Arrays
 //       [ ] Water
-//
-// TODO: Refactor Cube renderer to use original vertex layout
 //
 // TODO: Figure out a better way to assemble Usage<U, ChangedFlag<T>>
 //
