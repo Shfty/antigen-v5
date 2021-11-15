@@ -12,15 +12,19 @@ use antigen_winit::{
     WindowComponent, WindowEventComponent,
 };
 
-use antigen_wgpu::{CommandBuffersComponent, RenderAttachmentTextureView, RenderPipelineComponent, ShaderModuleComponent, SurfaceConfigurationComponent, wgpu::{
+use antigen_wgpu::{
+    wgpu::{
         BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry,
         BindingResource, BindingType, BlendState, BufferAddress, BufferBinding, BufferBindingType,
         BufferSize, Color, ColorTargetState, ColorWrites, CommandEncoderDescriptor, Device,
         DynamicOffset, FragmentState, LoadOp, MultisampleState, Operations,
         PipelineLayoutDescriptor, PrimitiveState, PrimitiveTopology, RenderPassColorAttachment,
-        RenderPassDescriptor, RenderPipelineDescriptor, ShaderStages,
-        TextureSampleType, TextureViewDimension, VertexState,
-    }};
+        RenderPassDescriptor, RenderPipelineDescriptor, ShaderStages, TextureSampleType,
+        TextureViewDimension, VertexState,
+    },
+    CommandBuffersComponent, RenderAttachmentTextureView, RenderPipelineComponent,
+    ShaderModuleComponent, SurfaceConfigurationComponent,
+};
 
 use legion::{world::SubWorld, IntoQuery};
 
@@ -46,7 +50,8 @@ pub fn bunnymark_prepare(
     }
 
     let device = <&Device>::query().iter(world).next().unwrap();
-    let surface_configuration_component = world.get_indirect(surface_configuration_component).unwrap();
+    let surface_configuration_component =
+        world.get_indirect(surface_configuration_component).unwrap();
     let config = surface_configuration_component.read();
 
     let shader_module = shader_module.read();
@@ -325,8 +330,8 @@ pub fn bunnymark_key_event(
         .iter(world)
         .next()
         .expect("No WindowEventComponent");
-
-    if let (
+    let window_event = window_event.read();
+    let window_id = if let (
         Some(window_id),
         Some(WindowEvent::KeyboardInput {
             input:
@@ -337,31 +342,33 @@ pub fn bunnymark_key_event(
                 },
             ..
         }),
-    ) = &*window_event.read()
+    ) = &*window_event
     {
-        if window.id() != *window_id {
-            return;
-        }
+        window_id
+    } else {
+        return;
+    };
 
-        let spawn_count = 64 + bunnies.read().len() / 2;
-        let color = rand::random::<u32>();
-        println!(
-            "Spawning {} bunnies, total at {}",
-            spawn_count,
-            bunnies.read().len() + spawn_count
-        );
+    if window.id() != *window_id {
+        return;
+    }
 
-        {
-            let mut bunnies = bunnies.write();
-            for _ in 0..spawn_count {
-                let speed = rand::random::<f32>() * MAX_VELOCITY - (MAX_VELOCITY * 0.5);
-                bunnies.push(Locals {
-                    position: [0.0, 0.5 * (extent.read().0 as f32)],
-                    velocity: [speed, 0.0],
-                    color,
-                    _pad: [0; 3],
-                });
-            }
-        }
+    let spawn_count = 64 + bunnies.read().len() / 2;
+    let color = rand::random::<u32>();
+    println!(
+        "Spawning {} bunnies, total at {}",
+        spawn_count,
+        bunnies.read().len() + spawn_count
+    );
+
+    let mut bunnies = bunnies.write();
+    for _ in 0..spawn_count {
+        let speed = rand::random::<f32>() * MAX_VELOCITY - (MAX_VELOCITY * 0.5);
+        bunnies.push(Locals {
+            position: [0.0, 0.5 * (extent.read().0 as f32)],
+            velocity: [speed, 0.0],
+            color,
+            _pad: [0; 3],
+        });
     }
 }

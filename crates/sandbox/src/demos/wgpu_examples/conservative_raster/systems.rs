@@ -89,28 +89,32 @@ pub fn conservative_raster_render(
     } else {
         return;
     };
+
     let texture_view = world.get_indirect(texture_view).unwrap();
+    let texture_view = texture_view.read();
+    let texture_view = if let LazyComponent::Ready(texture_view) = &*texture_view {
+        texture_view
+    } else {
+        return;
+    };
 
-    if let LazyComponent::Ready(texture_view) = &*texture_view.read() {
-        let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor { label: None });
+    let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor { label: None });
 
-        {
-            let mut rpass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: None,
-                color_attachments: &[RenderPassColorAttachment {
-                    view: texture_view,
-                    resolve_target: None,
-                    ops: Operations {
-                        load: LoadOp::Clear(Color::GREEN),
-                        store: true,
-                    },
-                }],
-                depth_stencil_attachment: None,
-            });
-            rpass.set_pipeline(render_pipeline);
-            rpass.draw(0..3, 0..1);
-        }
+    let mut rpass = encoder.begin_render_pass(&RenderPassDescriptor {
+        label: None,
+        color_attachments: &[RenderPassColorAttachment {
+            view: texture_view,
+            resolve_target: None,
+            ops: Operations {
+                load: LoadOp::Clear(Color::GREEN),
+                store: true,
+            },
+        }],
+        depth_stencil_attachment: None,
+    });
+    rpass.set_pipeline(render_pipeline);
+    rpass.draw(0..3, 0..1);
+    drop(rpass);
 
-        command_buffers.write().push(encoder.finish());
-    }
+    command_buffers.write().push(encoder.finish());
 }

@@ -1,11 +1,8 @@
-// TODO: Factor out Texels, MeshIndices, etc
-//       Implement with usage flags instead
-//
 // TODO: Implement remaining WGPU demos using ECS pattern
 //       [✓] Boids
 //       [✓] Bunnymark
 //       [ ] Capture(?)
-//       [ ] Conservative Raster
+//       [>] Conservative Raster
 //       [✓] Cube
 //       [ ] Hello Compute
 //       [✓] Hello Triangle

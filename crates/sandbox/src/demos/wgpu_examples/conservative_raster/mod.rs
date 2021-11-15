@@ -33,13 +33,6 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     antigen_wgpu::assemble_render_pipeline_usage::<Lines>(cmd, renderer_entity);
     antigen_wgpu::assemble_render_pipeline_usage::<Upscale>(cmd, renderer_entity);
 
-    /*
-    cmd.add_component(
-        renderer_entity,
-        Usage::<Upscale, _>::new(BindGroupLayoutComponent::pending()),
-    );
-    */
-
     antigen_wgpu::assemble_command_buffers(cmd, renderer_entity);
     cmd.add_indirect_component::<SurfaceConfigurationComponent>(renderer_entity, window_entity);
     cmd.add_indirect_component::<RenderAttachmentTextureView>(renderer_entity, window_entity);
