@@ -17,6 +17,9 @@
 //       [ ] Texture Arrays
 //       [ ] Water
 //
+// TODO: Consider traits for module-specific assemblage
+//       Ex. a trait that extends &mut CommandBuffer and &mut World with WGPU assembly methods
+//
 // TODO: Figure out a better way to assemble Usage<U, ChangedFlag<T>>
 //
 // TODO: Improve WindowEventComponent

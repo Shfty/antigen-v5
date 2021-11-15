@@ -6,10 +6,9 @@ pub use systems::*;
 
 use antigen_core::{serial, single, AddIndirectComponent, ImmutableSchedule, Serial, Single};
 
-use antigen_wgpu::{
-    wgpu::{Device, ShaderModuleDescriptor, ShaderSource},
-    RenderAttachmentTextureView, SurfaceConfigurationComponent,
-};
+use antigen_wgpu::{RenderAttachmentTextureView, SurfaceConfigurationComponent, wgpu::{Device, ShaderModuleDescriptor, ShaderSource, TextureFormat}};
+
+const RENDER_TARGET_FORMAT: TextureFormat = TextureFormat::Rgba8UnormSrgb;
 
 #[legion::system]
 #[read_component(Device)]
