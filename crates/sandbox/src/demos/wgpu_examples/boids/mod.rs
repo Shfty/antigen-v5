@@ -3,7 +3,7 @@ mod systems;
 
 use std::sync::{atomic::AtomicUsize, Arc};
 
-use antigen_winit::RedrawUnconditionally;
+use antigen_winit::{AssembleWinit, RedrawUnconditionally};
 pub use components::*;
 pub use systems::*;
 
@@ -12,12 +12,11 @@ use antigen_core::{
 };
 
 use antigen_wgpu::{
-    assemble_buffer_data,
     wgpu::{
         util::BufferInitDescriptor, BufferAddress, BufferDescriptor, BufferUsages, Device,
         ShaderModuleDescriptor, ShaderSource,
     },
-    RenderAttachmentTextureView, SurfaceConfigurationComponent,
+    AssembleWgpu, RenderAttachmentTextureView, SurfaceConfigurationComponent,
 };
 
 use rand::{distributions::Distribution, SeedableRng};
@@ -32,11 +31,11 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     let renderer_entity = cmd.push(());
 
     // Assemble window
-    antigen_winit::assemble_window(cmd, &(window_entity,));
-    antigen_wgpu::assemble_window_surface(cmd, &(window_entity,));
+    cmd.assemble_winit_window(window_entity);
+    cmd.assemble_wgpu_window_surface(window_entity);
 
     // Add title to window
-    antigen_winit::assemble_window_title(cmd, &(window_entity,), &"Boids");
+    cmd.assemble_winit_window_title(window_entity, "Boids");
 
     // Redraw the window unconditionally
     cmd.add_component(window_entity, RedrawUnconditionally);
@@ -44,18 +43,17 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     // Renderer
     cmd.add_component(renderer_entity, Boids);
 
-    antigen_wgpu::assemble_render_pipeline(cmd, renderer_entity);
-    antigen_wgpu::assemble_compute_pipeline(cmd, renderer_entity);
-    antigen_wgpu::assemble_bind_group_usage::<FrontBuffer>(cmd, renderer_entity);
-    antigen_wgpu::assemble_bind_group_usage::<BackBuffer>(cmd, renderer_entity);
-    antigen_wgpu::assemble_command_buffers(cmd, renderer_entity);
+    cmd.assemble_wgpu_render_pipeline(renderer_entity);
+    cmd.assemble_wgpu_compute_pipeline(renderer_entity);
+    cmd.assemble_wgpu_bind_group_with_usage::<FrontBuffer>(renderer_entity);
+    cmd.assemble_wgpu_bind_group_with_usage::<BackBuffer>(renderer_entity);
+    cmd.assemble_wgpu_command_buffers(renderer_entity);
 
     cmd.add_indirect_component::<SurfaceConfigurationComponent>(renderer_entity, window_entity);
     cmd.add_indirect_component::<RenderAttachmentTextureView>(renderer_entity, window_entity);
 
     // Shaders
-    antigen_wgpu::assemble_shader_usage::<Compute>(
-        cmd,
+    cmd.assemble_wgpu_shader_with_usage::<Compute>(
         renderer_entity,
         ShaderModuleDescriptor {
             label: None,
@@ -63,8 +61,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         },
     );
 
-    antigen_wgpu::assemble_shader_usage::<Draw>(
-        cmd,
+    cmd.assemble_wgpu_shader_with_usage::<Draw>(
         renderer_entity,
         ShaderModuleDescriptor {
             label: None,
@@ -90,8 +87,16 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     // Wrap initial data in an arc so both buffers share the same underlying source
     let initial_particle_data = Arc::new(RwLock::new(initial_particle_data));
 
-    assemble_buffer_data::<FrontBuffer, _>(cmd, renderer_entity, initial_particle_data.clone(), 0);
-    assemble_buffer_data::<BackBuffer, _>(cmd, renderer_entity, initial_particle_data, 0);
+    cmd.assemble_wgpu_buffer_data_with_usage::<FrontBuffer, _>(
+        renderer_entity,
+        initial_particle_data.clone(),
+        0,
+    );
+    cmd.assemble_wgpu_buffer_data_with_usage::<BackBuffer, _>(
+        renderer_entity,
+        initial_particle_data,
+        0,
+    );
 
     // Uniforms
     const SIM_PARAM_DATA: [f32; 7] = [
@@ -105,8 +110,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     ];
 
     // Buffers
-    antigen_wgpu::assemble_buffer_init::<Vertex>(
-        cmd,
+    cmd.assemble_wgpu_buffer_init_with_usage::<Vertex>(
         renderer_entity,
         BufferInitDescriptor {
             label: Some("Vertex Buffer"),
@@ -115,8 +119,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         },
     );
 
-    antigen_wgpu::assemble_buffer_init::<Uniform>(
-        cmd,
+    cmd.assemble_wgpu_buffer_init_with_usage::<Uniform>(
         renderer_entity,
         BufferInitDescriptor {
             label: Some("Simulation Parameter Buffer"),
@@ -125,8 +128,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         },
     );
 
-    antigen_wgpu::assemble_buffer::<FrontBuffer>(
-        cmd,
+    cmd.assemble_wgpu_buffer_with_usage::<FrontBuffer>(
         renderer_entity,
         BufferDescriptor {
             label: Some("Front Particle Buffer"),
@@ -136,8 +138,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         },
     );
 
-    antigen_wgpu::assemble_buffer::<BackBuffer>(
-        cmd,
+    cmd.assemble_wgpu_buffer_with_usage::<BackBuffer>(
         renderer_entity,
         BufferDescriptor {
             label: Some("Back Particle Buffer"),

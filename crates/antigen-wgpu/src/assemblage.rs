@@ -2,7 +2,7 @@ use antigen_core::{
     AddComponentWithChangedFlag, AddIndirectComponent, ChangedFlag, LazyComponent, Usage,
 };
 
-use legion::{storage::Component, systems::CommandBuffer, Entity, World};
+use legion::{storage::Component, Entity, World};
 use wgpu::{
     util::BufferInitDescriptor, Adapter, Backends, BufferAddress, BufferDescriptor, Device,
     DeviceDescriptor, ImageCopyTextureBase, ImageDataLayout, Instance, Queue, SamplerDescriptor,
@@ -12,7 +12,15 @@ use wgpu::{
 
 use std::path::Path;
 
-use crate::{BindGroupComponent, BindGroupLayoutComponent, BufferComponent, BufferDescriptorComponent, BufferInitDescriptorComponent, BufferWriteComponent, CommandBuffersComponent, ComputePipelineComponent, PipelineLayoutComponent, RenderAttachment, RenderBundleComponent, RenderPipelineComponent, SamplerComponent, SamplerDescriptorComponent, ShaderModuleComponent, ShaderModuleDescriptorComponent, SurfaceComponent, SurfaceConfigurationComponent, SurfaceTextureComponent, TextureComponent, TextureDescriptorComponent, TextureViewComponent, TextureViewDescriptorComponent, TextureWriteComponent};
+use crate::{
+    BindGroupComponent, BindGroupLayoutComponent, BufferComponent, BufferDescriptorComponent,
+    BufferInitDescriptorComponent, BufferWriteComponent, CommandBuffersComponent,
+    ComputePipelineComponent, PipelineLayoutComponent, RenderAttachment, RenderBundleComponent,
+    RenderPipelineComponent, SamplerComponent, SamplerDescriptorComponent, ShaderModuleComponent,
+    ShaderModuleDescriptorComponent, SurfaceComponent, SurfaceConfigurationComponent,
+    SurfaceTextureComponent, TextureComponent, TextureDescriptorComponent, TextureViewComponent,
+    TextureViewDescriptorComponent, TextureWriteComponent,
+};
 
 /// Create an entity to hold an Instance, Adapter, Device and Queue
 pub fn assemble_wgpu_entity(
@@ -57,275 +65,369 @@ pub fn assemble_wgpu_entity_from_env(
     assemble_wgpu_entity(world, instance, adapter, device, queue);
 }
 
-/// Extends an existing window entity with the means to render to a WGPU surface
-#[legion::system]
-pub fn assemble_window_surface(cmd: &mut CommandBuffer, #[state] (entity,): &(Entity,)) {
-    cmd.add_component_with_changed_flag_clean(
-        *entity,
-        SurfaceConfigurationComponent::new(SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: wgpu::TextureFormat::Bgra8Unorm,
-            width: 0,
-            height: 0,
-            present_mode: wgpu::PresentMode::Mailbox,
-        }),
-    );
-    cmd.add_component(*entity, SurfaceComponent::new(LazyComponent::Pending));
+/// [`CommandBuffer`] extension trait containing WGPU-specific assembly methods
+pub trait AssembleWgpu {
+    /// Extends an existing window entity with the means to render to a WGPU surface
+    fn assemble_wgpu_window_surface(self, entity: Entity);
 
-    cmd.add_component_with_changed_flag_clean(*entity, SurfaceTextureComponent::new(None));
+    /// Adds a render pipeline to an entity
+    fn assemble_wgpu_render_pipeline(self, entity: Entity);
 
-    cmd.add_component(
-        *entity,
-        Usage::<RenderAttachment, _>::new(TextureViewDescriptorComponent::new(Default::default())),
-    );
-    cmd.add_component(
-        *entity,
-        Usage::<RenderAttachment, _>::new(
-            ChangedFlag::<TextureViewDescriptorComponent>::new_clean(),
-        ),
-    );
-    cmd.add_component(
-        *entity,
-        Usage::<RenderAttachment, _>::new(TextureViewComponent::new(LazyComponent::Pending)),
-    );
-}
+    /// Adds a pipeline layout to an entity
+    fn assemble_wgpu_pipeline_layout(self, entity: Entity);
 
-pub fn assemble_render_pipeline(cmd: &mut CommandBuffer, entity: Entity) {
-    cmd.add_component(entity, RenderPipelineComponent::new(LazyComponent::Pending));
-}
+    /// Adds a render bundle to and entity
+    fn assemble_wgpu_render_bundle(self, entity: Entity);
 
-pub fn assemble_pipeline_layout(cmd: &mut CommandBuffer, entity: Entity) {
-    cmd.add_component(entity, PipelineLayoutComponent::new(LazyComponent::Pending));
-}
+    /// Adds a usage-tagged render pipeline to an entity
+    fn assemble_wgpu_render_pipeline_with_usage<U: Send + Sync + 'static>(self, entity: Entity);
 
-pub fn assemble_render_bundle(cmd: &mut CommandBuffer, entity: Entity) {
-    cmd.add_component(entity, RenderBundleComponent::new(LazyComponent::Pending));
-}
+    /// Adds a compute pipeline to an entity
+    fn assemble_wgpu_compute_pipeline(self, entity: Entity);
 
-pub fn assemble_render_pipeline_usage<U: Send + Sync + 'static>(
-    cmd: &mut CommandBuffer,
-    entity: Entity,
-) {
-    cmd.add_component(
-        entity,
-        Usage::<U, _>::new(RenderPipelineComponent::new(LazyComponent::Pending)),
-    );
-}
+    /// Adds a bind group layout to an entity
+    fn assemble_wgpu_bind_group_layout(self, entity: Entity);
 
-pub fn assemble_compute_pipeline(cmd: &mut CommandBuffer, entity: Entity) {
-    cmd.add_component(
-        entity,
-        ComputePipelineComponent::new(LazyComponent::Pending),
-    );
-}
+    /// Adds a usage-tagged bind group to an entity
+    fn assemble_wgpu_bind_group_layout_with_usage<U: Send + Sync + 'static>(self, entity: Entity);
 
-pub fn assemble_bind_group_layout(cmd: &mut CommandBuffer, entity: Entity) {
-    cmd.add_component(entity, BindGroupLayoutComponent::new(LazyComponent::Pending));
-}
+    /// Adds a bind group to an entity
+    fn assemble_wgpu_bind_group(self, entity: Entity);
 
-pub fn assemble_bind_group_layout_usage<U: Send + Sync + 'static>(cmd: &mut CommandBuffer, entity: Entity) {
-    cmd.add_component(entity, Usage::<U, _>::new(BindGroupLayoutComponent::new(LazyComponent::Pending)));
-}
+    /// Adds a usage-tagged bind group to an entity
+    fn assemble_wgpu_bind_group_with_usage<U: Send + Sync + 'static>(self, entity: Entity);
 
-pub fn assemble_bind_group(cmd: &mut CommandBuffer, entity: Entity) {
-    cmd.add_component(entity, BindGroupComponent::new(LazyComponent::Pending));
-}
+    /// Adds command buffer storage to an entity
+    fn assemble_wgpu_command_buffers(self, entity: Entity);
 
-pub fn assemble_bind_group_usage<U: Send + Sync + 'static>(
-    cmd: &mut CommandBuffer,
-    entity: Entity,
-) {
-    cmd.add_component(
-        entity,
-        Usage::<U, _>::new(BindGroupComponent::new(LazyComponent::Pending)),
-    );
-}
+    /// Adds an untagged shader to an entity
+    fn assemble_wgpu_shader(self, entity: Entity, desc: ShaderModuleDescriptor<'static>);
 
-pub fn assemble_command_buffers(cmd: &mut CommandBuffer, entity: Entity) {
-    cmd.add_component(entity, CommandBuffersComponent::new(Default::default()));
-}
-
-/// Adds an untagged shader to an entity
-pub fn assemble_shader(
-    cmd: &mut CommandBuffer,
-    entity: Entity,
-    desc: ShaderModuleDescriptor<'static>,
-) {
-    cmd.add_component_with_changed_flag_clean(entity, ShaderModuleDescriptorComponent::new(desc));
-    cmd.add_component(entity, ShaderModuleComponent::new(LazyComponent::Pending));
-}
-
-/// Adds a usage-tagged shader to an entity
-pub fn assemble_shader_usage<U: Send + Sync + 'static>(
-    cmd: &mut CommandBuffer,
-    entity: Entity,
-    desc: ShaderModuleDescriptor<'static>,
-) {
-    cmd.add_component(
-        entity,
-        Usage::<U, _>::new(ShaderModuleDescriptorComponent::new(desc)),
+    /// Adds a usage-tagged shader to an entity
+    fn assemble_wgpu_shader_with_usage<U: Send + Sync + 'static>(
+        self,
+        entity: Entity,
+        desc: ShaderModuleDescriptor<'static>,
     );
 
-    cmd.add_component(
-        entity,
-        Usage::<U, _>::new(ChangedFlag::<ShaderModuleDescriptorComponent>::new_clean()),
+    /// Adds a usage-tagged buffer to an entity
+    fn assemble_wgpu_buffer_with_usage<U: Send + Sync + 'static>(
+        self,
+        entity: Entity,
+        desc: BufferDescriptor<'static>,
     );
 
-    cmd.add_component(
-        entity,
-        Usage::<U, _>::new(ShaderModuleComponent::new(LazyComponent::Pending)),
+    /// Adds a usage-tagged buffer to an entity with initial data
+    fn assemble_wgpu_buffer_init_with_usage<U: Send + Sync + 'static>(
+        self,
+        entity: Entity,
+        desc: BufferInitDescriptor<'static>,
+    );
+
+    /// Adds some usage-tagged data to be written to a buffer when its change flag is set
+    fn assemble_wgpu_buffer_data_with_usage<U, T>(
+        self,
+        entity: Entity,
+        data: T,
+        offset: BufferAddress,
+    ) where
+        U: Send + Sync + 'static,
+        T: Component;
+
+    /// Adds a usage-tagged texture to an entity
+    fn assemble_wgpu_texture_with_usage<U: Send + Sync + 'static>(
+        self,
+        entity: Entity,
+        desc: TextureDescriptor<'static>,
+    );
+
+    /// Adds some usage-tagged data to be written to a texture when its change flag is set
+    fn assemble_wgpu_texture_data_with_usage<U, T>(
+        self,
+        entity: Entity,
+        data: T,
+        image_copy_texture: ImageCopyTextureBase<()>,
+        image_data_layout: ImageDataLayout,
+    ) where
+        T: Component,
+        U: Send + Sync + 'static;
+
+    /// Adds a usage-tagged texture view to an entity
+    fn assemble_wgpu_texture_view_with_usage<U: Send + Sync + 'static>(
+        self,
+        entity: Entity,
+        desc: TextureViewDescriptor<'static>,
+    );
+
+    /// Adds a usage-tagged sampler to an entity
+    fn assemble_wgpu_sampler_with_usage<U: Send + Sync + 'static>(
+        self,
+        entity: Entity,
+        desc: SamplerDescriptor<'static>,
     );
 }
 
-/// Adds a usage-tagged buffer to an entity
-pub fn assemble_buffer<U: Send + Sync + 'static>(
-    cmd: &mut CommandBuffer,
-    entity: Entity,
-    desc: BufferDescriptor<'static>,
-) {
-    cmd.add_component(
-        entity,
-        Usage::<U, _>::new(BufferDescriptorComponent::new(desc)),
-    );
+impl AssembleWgpu for &mut legion::systems::CommandBuffer {
+    fn assemble_wgpu_window_surface(self, entity: Entity) {
+        self.add_component_with_changed_flag_clean(
+            entity,
+            SurfaceConfigurationComponent::new(SurfaceConfiguration {
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                format: wgpu::TextureFormat::Bgra8Unorm,
+                width: 0,
+                height: 0,
+                present_mode: wgpu::PresentMode::Mailbox,
+            }),
+        );
+        self.add_component(entity, SurfaceComponent::new(LazyComponent::Pending));
 
-    cmd.add_component(
-        entity,
-        Usage::<U, _>::new(ChangedFlag::<BufferDescriptorComponent>::new_clean()),
-    );
+        self.add_component_with_changed_flag_clean(entity, SurfaceTextureComponent::new(None));
 
-    cmd.add_component(
-        entity,
-        Usage::<U, _>::new(BufferComponent::new(LazyComponent::Pending)),
-    );
-}
+        self.add_component(
+            entity,
+            Usage::<RenderAttachment, _>::new(TextureViewDescriptorComponent::new(
+                Default::default(),
+            )),
+        );
+        self.add_component(
+            entity,
+            Usage::<RenderAttachment, _>::new(
+                ChangedFlag::<TextureViewDescriptorComponent>::new_clean(),
+            ),
+        );
+        self.add_component(
+            entity,
+            Usage::<RenderAttachment, _>::new(TextureViewComponent::new(LazyComponent::Pending)),
+        );
+    }
 
-/// Adds a usage-tagged buffer to an entity with initial data
-pub fn assemble_buffer_init<U: Send + Sync + 'static>(
-    cmd: &mut CommandBuffer,
-    entity: Entity,
-    desc: BufferInitDescriptor<'static>,
-) {
-    cmd.add_component(
-        entity,
-        Usage::<U, _>::new(BufferInitDescriptorComponent::new(desc)),
-    );
+    fn assemble_wgpu_render_pipeline(self, entity: Entity) {
+        self.add_component(entity, RenderPipelineComponent::new(LazyComponent::Pending));
+    }
 
-    cmd.add_component(
-        entity,
-        Usage::<U, _>::new(ChangedFlag::<BufferInitDescriptorComponent>::new_clean()),
-    );
+    fn assemble_wgpu_pipeline_layout(self, entity: Entity) {
+        self.add_component(entity, PipelineLayoutComponent::new(LazyComponent::Pending));
+    }
 
-    cmd.add_component(
-        entity,
-        Usage::<U, _>::new(BufferComponent::new(LazyComponent::Pending)),
-    );
-}
+    fn assemble_wgpu_render_bundle(self, entity: Entity) {
+        self.add_component(entity, RenderBundleComponent::new(LazyComponent::Pending));
+    }
 
-/// Adds some usage-tagged data to be written to a buffer when its change flag is set
-pub fn assemble_buffer_data<U, T>(
-    cmd: &mut CommandBuffer,
-    entity: Entity,
-    data: T,
-    offset: BufferAddress,
-) where
-    U: Send + Sync + 'static,
-    T: Component,
-{
-    cmd.add_component_with_changed_flag_dirty(entity, data);
-    cmd.add_component(
-        entity,
-        Usage::<U, _>::new(BufferWriteComponent::<T>::new(offset)),
-    );
-    cmd.add_indirect_component_self::<Usage<U, BufferComponent>>(entity);
-}
+    fn assemble_wgpu_render_pipeline_with_usage<U: Send + Sync + 'static>(self, entity: Entity) {
+        self.add_component(
+            entity,
+            Usage::<U, _>::new(RenderPipelineComponent::new(LazyComponent::Pending)),
+        );
+    }
 
-/// Adds a usage-tagged texture to an entity
-pub fn assemble_texture<U: Send + Sync + 'static>(
-    cmd: &mut CommandBuffer,
-    entity: Entity,
-    desc: TextureDescriptor<'static>,
-) {
-    cmd.add_component(
-        entity,
-        Usage::<U, _>::new(TextureDescriptorComponent::new(desc)),
-    );
+    fn assemble_wgpu_compute_pipeline(self, entity: Entity) {
+        self.add_component(
+            entity,
+            ComputePipelineComponent::new(LazyComponent::Pending),
+        );
+    }
 
-    cmd.add_component(
-        entity,
-        Usage::<U, _>::new(ChangedFlag::<TextureDescriptorComponent>::new_clean()),
-    );
+    fn assemble_wgpu_bind_group_layout(self, entity: Entity) {
+        self.add_component(
+            entity,
+            BindGroupLayoutComponent::new(LazyComponent::Pending),
+        );
+    }
 
-    cmd.add_component(
-        entity,
-        Usage::<U, _>::new(TextureComponent::new(LazyComponent::Pending)),
-    );
-}
+    fn assemble_wgpu_bind_group_layout_with_usage<U: Send + Sync + 'static>(self, entity: Entity) {
+        self.add_component(
+            entity,
+            Usage::<U, _>::new(BindGroupLayoutComponent::new(LazyComponent::Pending)),
+        );
+    }
 
-/// Adds some usage-tagged data to be written to a texture when its change flag is set
-pub fn assemble_texture_data<U, T>(
-    cmd: &mut CommandBuffer,
-    entity: Entity,
-    data: T,
-    image_copy_texture: ImageCopyTextureBase<()>,
-    image_data_layout: ImageDataLayout,
-) where
-    T: Component,
-    U: Send + Sync + 'static,
-{
-    cmd.add_component_with_changed_flag_dirty(entity, data);
+    fn assemble_wgpu_bind_group(self, entity: Entity) {
+        self.add_component(entity, BindGroupComponent::new(LazyComponent::Pending));
+    }
 
-    // Texture write
-    cmd.add_component(
-        entity,
-        Usage::<U, _>::new(TextureWriteComponent::<T>::new(
-            image_copy_texture,
-            image_data_layout,
-        )),
-    );
+    fn assemble_wgpu_bind_group_with_usage<U: Send + Sync + 'static>(self, entity: Entity) {
+        self.add_component(
+            entity,
+            Usage::<U, _>::new(BindGroupComponent::new(LazyComponent::Pending)),
+        );
+    }
 
-    // Texture write indirect
-    cmd.add_indirect_component_self::<Usage<U, TextureDescriptorComponent>>(entity);
-    cmd.add_indirect_component_self::<Usage<U, TextureComponent>>(entity);
-}
+    fn assemble_wgpu_command_buffers(self, entity: Entity) {
+        self.add_component(entity, CommandBuffersComponent::new(Default::default()));
+    }
 
-/// Adds a usage-tagged texture view to an entity
-pub fn assemble_texture_view<U: Send + Sync + 'static>(
-    cmd: &mut CommandBuffer,
-    entity: Entity,
-    desc: TextureViewDescriptor<'static>,
-) {
-    cmd.add_component(
-        entity,
-        Usage::<U, _>::new(TextureViewDescriptorComponent::new(desc)),
-    );
+    fn assemble_wgpu_shader(self, entity: Entity, desc: ShaderModuleDescriptor<'static>) {
+        self.add_component_with_changed_flag_clean(
+            entity,
+            ShaderModuleDescriptorComponent::new(desc),
+        );
+        self.add_component(entity, ShaderModuleComponent::new(LazyComponent::Pending));
+    }
 
-    cmd.add_component(
-        entity,
-        Usage::<U, _>::new(ChangedFlag::<TextureViewDescriptorComponent>::new_clean()),
-    );
+    fn assemble_wgpu_shader_with_usage<U: Send + Sync + 'static>(
+        self,
+        entity: Entity,
+        desc: ShaderModuleDescriptor<'static>,
+    ) {
+        self.add_component(
+            entity,
+            Usage::<U, _>::new(ShaderModuleDescriptorComponent::new(desc)),
+        );
 
-    cmd.add_component(
-        entity,
-        Usage::<U, _>::new(TextureViewComponent::new(LazyComponent::Pending)),
-    );
-}
+        self.add_component(
+            entity,
+            Usage::<U, _>::new(ChangedFlag::<ShaderModuleDescriptorComponent>::new_clean()),
+        );
 
-/// Adds a usage-tagged sampler to an entity
-pub fn assemble_sampler<U: Send + Sync + 'static>(
-    cmd: &mut CommandBuffer,
-    entity: Entity,
-    desc: SamplerDescriptor<'static>,
-) {
-    cmd.add_component(
-        entity,
-        Usage::<U, _>::new(SamplerDescriptorComponent::new(desc)),
-    );
-    cmd.add_component(
-        entity,
-        Usage::<U, _>::new(ChangedFlag::<SamplerDescriptorComponent>::new_clean()),
-    );
-    cmd.add_component(
-        entity,
-        Usage::<U, _>::new(SamplerComponent::new(LazyComponent::Pending)),
-    );
+        self.add_component(
+            entity,
+            Usage::<U, _>::new(ShaderModuleComponent::new(LazyComponent::Pending)),
+        );
+    }
+
+    fn assemble_wgpu_buffer_with_usage<U: Send + Sync + 'static>(
+        self,
+        entity: Entity,
+        desc: BufferDescriptor<'static>,
+    ) {
+        self.add_component(
+            entity,
+            Usage::<U, _>::new(BufferDescriptorComponent::new(desc)),
+        );
+
+        self.add_component(
+            entity,
+            Usage::<U, _>::new(ChangedFlag::<BufferDescriptorComponent>::new_clean()),
+        );
+
+        self.add_component(
+            entity,
+            Usage::<U, _>::new(BufferComponent::new(LazyComponent::Pending)),
+        );
+    }
+
+    fn assemble_wgpu_buffer_init_with_usage<U: Send + Sync + 'static>(
+        self,
+        entity: Entity,
+        desc: BufferInitDescriptor<'static>,
+    ) {
+        self.add_component(
+            entity,
+            Usage::<U, _>::new(BufferInitDescriptorComponent::new(desc)),
+        );
+
+        self.add_component(
+            entity,
+            Usage::<U, _>::new(ChangedFlag::<BufferInitDescriptorComponent>::new_clean()),
+        );
+
+        self.add_component(
+            entity,
+            Usage::<U, _>::new(BufferComponent::new(LazyComponent::Pending)),
+        );
+    }
+
+    fn assemble_wgpu_buffer_data_with_usage<U, T>(
+        self,
+        entity: Entity,
+        data: T,
+        offset: BufferAddress,
+    ) where
+        U: Send + Sync + 'static,
+        T: Component,
+    {
+        self.add_component_with_changed_flag_dirty(entity, data);
+        self.add_component(
+            entity,
+            Usage::<U, _>::new(BufferWriteComponent::<T>::new(offset)),
+        );
+        self.add_indirect_component_self::<Usage<U, BufferComponent>>(entity);
+    }
+
+    fn assemble_wgpu_texture_with_usage<U: Send + Sync + 'static>(
+        self,
+        entity: Entity,
+        desc: TextureDescriptor<'static>,
+    ) {
+        self.add_component(
+            entity,
+            Usage::<U, _>::new(TextureDescriptorComponent::new(desc)),
+        );
+
+        self.add_component(
+            entity,
+            Usage::<U, _>::new(ChangedFlag::<TextureDescriptorComponent>::new_clean()),
+        );
+
+        self.add_component(
+            entity,
+            Usage::<U, _>::new(TextureComponent::new(LazyComponent::Pending)),
+        );
+    }
+
+    fn assemble_wgpu_texture_data_with_usage<U, T>(
+        self,
+        entity: Entity,
+        data: T,
+        image_copy_texture: ImageCopyTextureBase<()>,
+        image_data_layout: ImageDataLayout,
+    ) where
+        T: Component,
+        U: Send + Sync + 'static,
+    {
+        self.add_component_with_changed_flag_dirty(entity, data);
+
+        // Texture write
+        self.add_component(
+            entity,
+            Usage::<U, _>::new(TextureWriteComponent::<T>::new(
+                image_copy_texture,
+                image_data_layout,
+            )),
+        );
+
+        // Texture write indirect
+        self.add_indirect_component_self::<Usage<U, TextureDescriptorComponent>>(entity);
+        self.add_indirect_component_self::<Usage<U, TextureComponent>>(entity);
+    }
+
+    fn assemble_wgpu_texture_view_with_usage<U: Send + Sync + 'static>(
+        self,
+        entity: Entity,
+        desc: TextureViewDescriptor<'static>,
+    ) {
+        self.add_component(
+            entity,
+            Usage::<U, _>::new(TextureViewDescriptorComponent::new(desc)),
+        );
+
+        self.add_component(
+            entity,
+            Usage::<U, _>::new(ChangedFlag::<TextureViewDescriptorComponent>::new_clean()),
+        );
+
+        self.add_component(
+            entity,
+            Usage::<U, _>::new(TextureViewComponent::new(LazyComponent::Pending)),
+        );
+    }
+
+    fn assemble_wgpu_sampler_with_usage<U: Send + Sync + 'static>(
+        self,
+        entity: Entity,
+        desc: SamplerDescriptor<'static>,
+    ) {
+        self.add_component(
+            entity,
+            Usage::<U, _>::new(SamplerDescriptorComponent::new(desc)),
+        );
+        self.add_component(
+            entity,
+            Usage::<U, _>::new(ChangedFlag::<SamplerDescriptorComponent>::new_clean()),
+        );
+        self.add_component(
+            entity,
+            Usage::<U, _>::new(SamplerComponent::new(LazyComponent::Pending)),
+        );
+    }
 }

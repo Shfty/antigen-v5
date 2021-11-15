@@ -17,9 +17,6 @@
 //       [ ] Texture Arrays
 //       [ ] Water
 //
-// TODO: Consider traits for module-specific assemblage
-//       Ex. a trait that extends &mut CommandBuffer and &mut World with WGPU assembly methods
-//
 // TODO: Boilerplate reduction for  reading and unwrapping RwLock<LazyComponent::Ready>
 //
 // TODO: Figure out a better way to assemble Usage<U, ChangedFlag<T>>
@@ -48,7 +45,7 @@ fn main() -> ! {
     let world = ImmutableWorld::default();
 
     // Assemble winit backend
-    antigen_winit::assemble_winit_entity(&mut world.write());
+    antigen_winit::assemble_winit_backend(&mut world.write());
 
     // Assemble WGPU backend
     antigen_wgpu::assemble_wgpu_entity_from_env(

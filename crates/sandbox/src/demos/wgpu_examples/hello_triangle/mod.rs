@@ -1,15 +1,13 @@
 mod components;
 mod systems;
 
+use antigen_winit::AssembleWinit;
 pub use components::*;
 pub use systems::*;
 
 use antigen_core::{serial, single, AddIndirectComponent, ImmutableSchedule, Serial, Single};
 
-use antigen_wgpu::{
-    wgpu::{Device, ShaderModuleDescriptor, ShaderSource},
-    RenderAttachmentTextureView, SurfaceConfigurationComponent,
-};
+use antigen_wgpu::{AssembleWgpu, RenderAttachmentTextureView, SurfaceConfigurationComponent, wgpu::{Device, ShaderModuleDescriptor, ShaderSource}};
 
 #[legion::system]
 #[read_component(Device)]
@@ -18,21 +16,20 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     let renderer_entity = cmd.push(());
 
     // Assemble window
-    antigen_winit::assemble_window(cmd, &(window_entity,));
-    antigen_wgpu::assemble_window_surface(cmd, &(window_entity,));
+    cmd.assemble_winit_window(window_entity);
+    cmd.assemble_wgpu_window_surface(window_entity);
 
     // Add title to window
-    antigen_winit::assemble_window_title(cmd, &(window_entity,), &"Hello Triangle");
+    cmd.assemble_winit_window_title(window_entity, "Hello Triangle");
 
     // Renderer
     cmd.add_component(renderer_entity, HelloTriangle);
-    antigen_wgpu::assemble_render_pipeline(cmd, renderer_entity);
-    antigen_wgpu::assemble_command_buffers(cmd, renderer_entity);
+    cmd.assemble_wgpu_render_pipeline(renderer_entity);
+    cmd.assemble_wgpu_command_buffers(renderer_entity);
     cmd.add_indirect_component::<SurfaceConfigurationComponent>(renderer_entity, window_entity);
     cmd.add_indirect_component::<RenderAttachmentTextureView>(renderer_entity, window_entity);
 
-    antigen_wgpu::assemble_shader(
-        cmd,
+    cmd.assemble_wgpu_shader(
         renderer_entity,
         ShaderModuleDescriptor {
             label: None,

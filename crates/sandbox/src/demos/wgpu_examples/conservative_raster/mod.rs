@@ -1,6 +1,7 @@
 mod components;
 mod systems;
 
+use antigen_winit::AssembleWinit;
 pub use components::*;
 pub use systems::*;
 
@@ -13,8 +14,8 @@ use antigen_wgpu::{
         Device, Extent3d, FilterMode, SamplerDescriptor, ShaderModuleDescriptor, ShaderSource,
         TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
     },
-    RenderAttachmentTextureView, SurfaceConfigurationComponent, TextureDescriptorComponent,
-    TextureViewDescriptorComponent,
+    AssembleWgpu, RenderAttachmentTextureView, SurfaceConfigurationComponent,
+    TextureDescriptorComponent, TextureViewDescriptorComponent,
 };
 
 const RENDER_TARGET_FORMAT: TextureFormat = TextureFormat::Rgba8UnormSrgb;
@@ -26,24 +27,24 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     let renderer_entity = cmd.push(());
 
     // Assemble window
-    antigen_winit::assemble_window(cmd, &(window_entity,));
-    antigen_wgpu::assemble_window_surface(cmd, &(window_entity,));
+    cmd.assemble_winit_window(window_entity);
+    cmd.assemble_wgpu_window_surface(window_entity);
 
     // Add title to window
-    antigen_winit::assemble_window_title(cmd, &(window_entity,), &"Conservative Raster");
+    cmd.assemble_winit_window_title(window_entity, "Conservative Raster");
 
     // Renderer
     cmd.add_component(renderer_entity, ConservativeRaster);
 
-    antigen_wgpu::assemble_render_pipeline_usage::<TriangleConservative>(cmd, renderer_entity);
-    antigen_wgpu::assemble_render_pipeline_usage::<TriangleRegular>(cmd, renderer_entity);
-    antigen_wgpu::assemble_render_pipeline_usage::<Upscale>(cmd, renderer_entity);
-    antigen_wgpu::assemble_render_pipeline_usage::<Lines>(cmd, renderer_entity);
+    cmd.assemble_wgpu_render_pipeline_with_usage::<TriangleConservative>(renderer_entity);
+    cmd.assemble_wgpu_render_pipeline_with_usage::<TriangleRegular>(renderer_entity);
+    cmd.assemble_wgpu_render_pipeline_with_usage::<Upscale>(renderer_entity);
+    cmd.assemble_wgpu_render_pipeline_with_usage::<Lines>(renderer_entity);
 
-    antigen_wgpu::assemble_bind_group_layout_usage::<Upscale>(cmd, renderer_entity);
-    antigen_wgpu::assemble_bind_group_usage::<Upscale>(cmd, renderer_entity);
+    cmd.assemble_wgpu_bind_group_layout_with_usage::<Upscale>(renderer_entity);
+    cmd.assemble_wgpu_bind_group_with_usage::<Upscale>(renderer_entity);
 
-    antigen_wgpu::assemble_command_buffers(cmd, renderer_entity);
+    cmd.assemble_wgpu_command_buffers(renderer_entity);
     cmd.add_indirect_component::<SurfaceConfigurationComponent>(renderer_entity, window_entity);
     cmd.add_indirect_component::<ChangedFlag<SurfaceConfigurationComponent>>(
         renderer_entity,
@@ -51,8 +52,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     );
     cmd.add_indirect_component::<RenderAttachmentTextureView>(renderer_entity, window_entity);
 
-    antigen_wgpu::assemble_shader_usage::<TriangleAndLines>(
-        cmd,
+    cmd.assemble_wgpu_shader_with_usage::<TriangleAndLines>(
         renderer_entity,
         ShaderModuleDescriptor {
             label: None,
@@ -62,8 +62,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         },
     );
 
-    antigen_wgpu::assemble_shader_usage::<Upscale>(
-        cmd,
+    cmd.assemble_wgpu_shader_with_usage::<Upscale>(
         renderer_entity,
         ShaderModuleDescriptor {
             label: None,
@@ -71,8 +70,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         },
     );
 
-    antigen_wgpu::assemble_texture::<LowResTarget>(
-        cmd,
+    cmd.assemble_wgpu_texture_with_usage::<LowResTarget>(
         renderer_entity,
         TextureDescriptor {
             label: Some("Low Resolution Target"),
@@ -89,10 +87,9 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         },
     );
 
-    antigen_wgpu::assemble_texture_view::<LowResTarget>(cmd, renderer_entity, Default::default());
+    cmd.assemble_wgpu_texture_view_with_usage::<LowResTarget>(renderer_entity, Default::default());
 
-    antigen_wgpu::assemble_sampler::<LowResTarget>(
-        cmd,
+    cmd.assemble_wgpu_sampler_with_usage::<LowResTarget>(
         renderer_entity,
         SamplerDescriptor {
             label: Some("Nearest Neighbor Sampler"),

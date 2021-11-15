@@ -1,6 +1,7 @@
 mod components;
 mod systems;
 
+use antigen_winit::AssembleWinit;
 pub use components::*;
 use legion::systems::CommandBuffer;
 pub use systems::*;
@@ -10,13 +11,13 @@ use antigen_core::{
     Single, Usage,
 };
 use antigen_wgpu::{
-    assemble_buffer_data, assemble_texture_data,
     wgpu::{
         util::BufferInitDescriptor, BufferAddress, BufferDescriptor, BufferUsages, Device,
         Extent3d, ImageCopyTextureBase, ImageDataLayout, ShaderModuleDescriptor, ShaderSource,
         TextureAspect, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
     },
-    MeshUvs, MeshVertices, RenderAttachmentTextureView, SurfaceConfigurationComponent, Texels,
+    AssembleWgpu, MeshUvs, MeshVertices, RenderAttachmentTextureView,
+    SurfaceConfigurationComponent, Texels,
 };
 
 use std::{borrow::Cow, num::NonZeroU32};
@@ -136,11 +137,11 @@ pub fn assemble(cmd: &mut CommandBuffer) {
     // Window
     let window_entity = cmd.push(());
 
-    antigen_winit::assemble_window(cmd, &(window_entity,));
-    antigen_wgpu::assemble_window_surface(cmd, &(window_entity,));
+    cmd.assemble_winit_window(window_entity);
+    cmd.assemble_wgpu_window_surface(window_entity);
 
     // Add title to window
-    antigen_winit::assemble_window_title(cmd, &(window_entity,), &"Cube");
+    cmd.assemble_winit_window_title(window_entity, "Cube");
 
     // Renderer
     let renderer_entity = cmd.push(());
@@ -148,10 +149,10 @@ pub fn assemble(cmd: &mut CommandBuffer) {
     cmd.add_component(renderer_entity, Cube);
 
     // Renderer resources
-    antigen_wgpu::assemble_bind_group(cmd, renderer_entity);
-    antigen_wgpu::assemble_render_pipeline_usage::<OpaquePass>(cmd, renderer_entity);
-    antigen_wgpu::assemble_render_pipeline_usage::<WirePass>(cmd, renderer_entity);
-    antigen_wgpu::assemble_command_buffers(cmd, renderer_entity);
+    cmd.assemble_wgpu_bind_group(renderer_entity);
+    cmd.assemble_wgpu_render_pipeline_with_usage::<OpaquePass>(renderer_entity);
+    cmd.assemble_wgpu_render_pipeline_with_usage::<WirePass>(renderer_entity);
+    cmd.assemble_wgpu_command_buffers(renderer_entity);
 
     cmd.add_indirect_component::<SurfaceConfigurationComponent>(renderer_entity, window_entity);
     cmd.add_indirect_component::<ChangedFlag<SurfaceConfigurationComponent>>(
@@ -161,8 +162,7 @@ pub fn assemble(cmd: &mut CommandBuffer) {
     cmd.add_indirect_component::<RenderAttachmentTextureView>(renderer_entity, window_entity);
 
     // Shader
-    antigen_wgpu::assemble_shader(
-        cmd,
+    cmd.assemble_wgpu_shader(
         renderer_entity,
         ShaderModuleDescriptor {
             label: None,
@@ -174,8 +174,7 @@ pub fn assemble(cmd: &mut CommandBuffer) {
     let cube_vertices = create_vertices();
     let vertex_count = cube_vertices.len();
     let vertex_size = std::mem::size_of::<[f32; 3]>();
-    assemble_buffer_data::<Vertex, _>(
-        cmd,
+    cmd.assemble_wgpu_buffer_data_with_usage::<Vertex, _>(
         renderer_entity,
         Usage::<MeshVertices, _>::new(RwLock::new(cube_vertices)),
         0,
@@ -184,8 +183,7 @@ pub fn assemble(cmd: &mut CommandBuffer) {
     let cube_uvs = create_uvs();
     let uv_size = std::mem::size_of::<[f32; 2]>();
     let uvs_offset = (vertex_size * vertex_count) as BufferAddress;
-    assemble_buffer_data::<Vertex, _>(
-        cmd,
+    cmd.assemble_wgpu_buffer_data_with_usage::<Vertex, _>(
         renderer_entity,
         Usage::<MeshUvs, _>::new(RwLock::new(cube_uvs)),
         uvs_offset,
@@ -200,8 +198,7 @@ pub fn assemble(cmd: &mut CommandBuffer) {
         depth_or_array_layers: 1,
     };
 
-    assemble_texture_data::<Mandelbrot, _>(
-        cmd,
+    cmd.assemble_wgpu_texture_data_with_usage::<Mandelbrot, _>(
         renderer_entity,
         Usage::<Texels, _>::new(RwLock::new(texels)),
         ImageCopyTextureBase {
@@ -222,16 +219,14 @@ pub fn assemble(cmd: &mut CommandBuffer) {
     let mut buf: [f32; 16] = [0.0; 16];
     buf.copy_from_slice(matrix.as_slice());
 
-    assemble_buffer_data::<Uniform, _>(
-        cmd,
+    cmd.assemble_wgpu_buffer_data_with_usage::<Uniform, _>(
         renderer_entity,
         ViewProjectionMatrix::new(buf.into()),
         0,
     );
 
     // Buffers
-    antigen_wgpu::assemble_buffer::<Vertex>(
-        cmd,
+    cmd.assemble_wgpu_buffer_with_usage::<Vertex>(
         renderer_entity,
         BufferDescriptor {
             label: Some("Vertex Buffer"),
@@ -241,8 +236,7 @@ pub fn assemble(cmd: &mut CommandBuffer) {
         },
     );
 
-    antigen_wgpu::assemble_buffer_init::<Index>(
-        cmd,
+    cmd.assemble_wgpu_buffer_init_with_usage::<Index>(
         renderer_entity,
         BufferInitDescriptor {
             label: Some("Index Buffer"),
@@ -251,8 +245,7 @@ pub fn assemble(cmd: &mut CommandBuffer) {
         },
     );
 
-    antigen_wgpu::assemble_buffer::<Uniform>(
-        cmd,
+    cmd.assemble_wgpu_buffer_with_usage::<Uniform>(
         renderer_entity,
         BufferDescriptor {
             label: Some("Uniform Buffer"),
@@ -263,8 +256,7 @@ pub fn assemble(cmd: &mut CommandBuffer) {
     );
 
     // Texture
-    antigen_wgpu::assemble_texture::<Mandelbrot>(
-        cmd,
+    cmd.assemble_wgpu_texture_with_usage::<Mandelbrot>(
         renderer_entity,
         TextureDescriptor {
             label: None,
@@ -278,7 +270,7 @@ pub fn assemble(cmd: &mut CommandBuffer) {
     );
 
     // Texture view
-    antigen_wgpu::assemble_texture_view::<Mandelbrot>(cmd, renderer_entity, Default::default());
+    cmd.assemble_wgpu_texture_view_with_usage::<Mandelbrot>(renderer_entity, Default::default());
 }
 
 pub fn prepare_schedule() -> ImmutableSchedule<Serial> {

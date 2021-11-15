@@ -1,12 +1,14 @@
+mod assemblage;
 mod components;
 mod systems;
 
+pub use assemblage::*;
 pub use components::*;
 pub use systems::*;
 
 pub use winit;
 
-use antigen_core::{ChangedFlag, ImmutableSchedule, ImmutableWorld, LazyComponent, ReadWriteLock, Single, single};
+use antigen_core::{single, ImmutableSchedule, ImmutableWorld, ReadWriteLock, Single};
 
 use winit::{
     event::Event,
@@ -14,33 +16,6 @@ use winit::{
 };
 
 use legion::IntoQuery;
-
-pub fn assemble_winit_entity(world: &mut legion::World) {
-    world.push((
-        WindowEntityMap::new(Default::default()),
-        WindowEventComponent::new(),
-    ));
-}
-
-#[legion::system]
-pub fn assemble_window(
-    cmd: &mut legion::systems::CommandBuffer,
-    #[state] (entity,): &(legion::Entity,),
-) {
-    cmd.add_component(*entity, WindowComponent::new(LazyComponent::Pending));
-    cmd.add_component(*entity, WindowSizeComponent::new(Default::default()));
-    cmd.add_component(*entity, ChangedFlag::<WindowSizeComponent>::new_clean());
-}
-
-#[legion::system]
-pub fn assemble_window_title(
-    cmd: &mut legion::systems::CommandBuffer,
-    #[state] (entity,): &(legion::Entity,),
-    #[state] title: &&'static str,
-) {
-    cmd.add_component(*entity, WindowTitleComponent::new((*title).into()));
-    cmd.add_component(*entity, ChangedFlag::<WindowTitleComponent>::new_dirty());
-}
 
 /// Extend a winit event loop closure with a world reference and ECS event loop handling
 pub fn event_loop_wrapper<T>(

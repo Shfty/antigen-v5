@@ -3,7 +3,7 @@ mod systems;
 
 use std::{borrow::Cow, num::NonZeroU32};
 
-use antigen_winit::{RedrawUnconditionally, WindowComponent};
+use antigen_winit::{AssembleWinit, RedrawUnconditionally, WindowComponent};
 pub use components::*;
 use legion::{world::SubWorld, IntoQuery};
 pub use systems::*;
@@ -14,14 +14,13 @@ use antigen_core::{
 };
 
 use antigen_wgpu::{
-    assemble_buffer_data, assemble_texture_data,
     wgpu::{
         AddressMode, BufferAddress, BufferDescriptor, BufferUsages, Device, Extent3d, FilterMode,
         ImageCopyTextureBase, ImageDataLayout, SamplerDescriptor, ShaderModuleDescriptor,
         ShaderSource, TextureAspect, TextureDescriptor, TextureDimension, TextureFormat,
         TextureUsages,
     },
-    RenderAttachmentTextureView, SurfaceConfigurationComponent, Texels, ToBytes,
+    AssembleWgpu, RenderAttachmentTextureView, SurfaceConfigurationComponent, Texels, ToBytes,
 };
 
 const MAX_BUNNIES: usize = 1 << 20;
@@ -79,19 +78,19 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
     let renderer_entity = cmd.push(());
 
     // Assemble window
-    antigen_winit::assemble_window(cmd, &(window_entity,));
-    antigen_wgpu::assemble_window_surface(cmd, &(window_entity,));
+    cmd.assemble_winit_window(window_entity);
+    cmd.assemble_wgpu_window_surface(window_entity);
 
     // Add title to window
-    antigen_winit::assemble_window_title(cmd, &(window_entity,), &"Bunnymark");
+    cmd.assemble_winit_window_title(window_entity, "Bunnymark");
 
     // Redraw the window unconditionally
     cmd.add_component(window_entity, RedrawUnconditionally);
 
     // Renderer
     cmd.add_component(renderer_entity, Bunnymark);
-    antigen_wgpu::assemble_render_pipeline(cmd, renderer_entity);
-    antigen_wgpu::assemble_command_buffers(cmd, renderer_entity);
+    cmd.assemble_wgpu_render_pipeline(renderer_entity);
+    cmd.assemble_wgpu_command_buffers(renderer_entity);
     cmd.add_indirect_component::<SurfaceConfigurationComponent>(renderer_entity, window_entity);
     cmd.add_indirect_component::<RenderAttachmentTextureView>(renderer_entity, window_entity);
 
@@ -99,8 +98,7 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
     cmd.add_indirect_component::<WindowComponent>(renderer_entity, window_entity);
 
     // Shader
-    antigen_wgpu::assemble_shader(
-        cmd,
+    cmd.assemble_wgpu_shader(
         renderer_entity,
         ShaderModuleDescriptor {
             label: None,
@@ -109,8 +107,8 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
     );
 
     // Bind groups
-    antigen_wgpu::assemble_bind_group_usage::<Global>(cmd, renderer_entity);
-    antigen_wgpu::assemble_bind_group_usage::<Local>(cmd, renderer_entity);
+    cmd.assemble_wgpu_bind_group_with_usage::<Global>(renderer_entity);
+    cmd.assemble_wgpu_bind_group_with_usage::<Local>(renderer_entity);
 
     // Playfield extent
     let extent = (640, 480);
@@ -123,9 +121,9 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
         size: [BUNNY_SIZE; 2],
         pad: [0.0; 2],
     };
-    assemble_buffer_data::<Global, _>(cmd, renderer_entity, RwLock::new(globals), 0);
+    cmd.assemble_wgpu_buffer_data_with_usage::<Global, _>(renderer_entity, RwLock::new(globals), 0);
 
-    assemble_buffer_data::<Local, _>(cmd, renderer_entity, Bunnies::new(), 0);
+    cmd.assemble_wgpu_buffer_data_with_usage::<Local, _>(renderer_entity, Bunnies::new(), 0);
 
     // Texture data
     let img_data = include_bytes!("logo.png");
@@ -140,8 +138,7 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
         depth_or_array_layers: 1,
     };
 
-    assemble_texture_data::<Logo, _>(
-        cmd,
+    cmd.assemble_wgpu_texture_data_with_usage::<Logo, _>(
         renderer_entity,
         Usage::<Texels, _>::new(RwLock::new(buf)),
         ImageCopyTextureBase {
@@ -158,8 +155,7 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
     );
 
     // Buffers
-    antigen_wgpu::assemble_buffer::<Global>(
-        cmd,
+    cmd.assemble_wgpu_buffer_with_usage::<Global>(
         renderer_entity,
         BufferDescriptor {
             label: Some("Global"),
@@ -171,8 +167,7 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
 
     let uniform_alignment = device.limits().min_uniform_buffer_offset_alignment as BufferAddress;
 
-    antigen_wgpu::assemble_buffer::<Local>(
-        cmd,
+    cmd.assemble_wgpu_buffer_with_usage::<Local>(
         renderer_entity,
         BufferDescriptor {
             label: Some("Local"),
@@ -183,8 +178,7 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
     );
 
     // Texture
-    antigen_wgpu::assemble_texture::<Logo>(
-        cmd,
+    cmd.assemble_wgpu_texture_with_usage::<Logo>(
         renderer_entity,
         TextureDescriptor {
             label: None,
@@ -198,11 +192,10 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
     );
 
     // Texture view
-    antigen_wgpu::assemble_texture_view::<Logo>(cmd, renderer_entity, Default::default());
+    cmd.assemble_wgpu_texture_view_with_usage::<Logo>(renderer_entity, Default::default());
 
     // Sampler
-    antigen_wgpu::assemble_sampler::<Logo>(
-        cmd,
+    cmd.assemble_wgpu_sampler_with_usage::<Logo>(
         renderer_entity,
         SamplerDescriptor {
             label: None,

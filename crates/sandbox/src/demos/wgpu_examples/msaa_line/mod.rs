@@ -1,20 +1,22 @@
 mod components;
 mod systems;
 
-use antigen_winit::WindowComponent;
+use antigen_winit::{AssembleWinit, WindowComponent};
 pub use components::*;
 pub use systems::*;
 
-use antigen_core::{AddIndirectComponent, ChangedFlag, ImmutableSchedule, RwLock, Serial, Single, Usage, parallel, serial, single};
+use antigen_core::{
+    parallel, serial, single, AddIndirectComponent, ChangedFlag, ImmutableSchedule, RwLock, Serial,
+    Single, Usage,
+};
 
 use antigen_wgpu::{
     wgpu::{
         BufferAddress, BufferDescriptor, BufferUsages, Device, Extent3d, ShaderModuleDescriptor,
         ShaderSource, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
     },
-     MeshVertices, MsaaFramebuffer,
-    MsaaFramebufferTextureDescriptor, MsaaFramebufferTextureView, 
-    RenderAttachmentTextureView,  SurfaceConfigurationComponent,
+    AssembleWgpu, MeshVertices, MsaaFramebuffer, MsaaFramebufferTextureDescriptor,
+    MsaaFramebufferTextureView, RenderAttachmentTextureView, SurfaceConfigurationComponent,
     TextureDescriptorComponent, TextureViewDescriptorComponent,
 };
 
@@ -39,17 +41,18 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     let renderer_entity = cmd.push(());
 
     // Assemble window
-    antigen_winit::assemble_window(cmd, &(window_entity,));
-    antigen_wgpu::assemble_window_surface(cmd, &(window_entity,));
+    cmd.assemble_winit_window(window_entity);
+    cmd.assemble_wgpu_window_surface(window_entity);
 
     // Add title to window
-    antigen_winit::assemble_window_title(cmd, &(window_entity,), &"MSAA Line");
+    cmd.assemble_winit_window_title(window_entity, "MSAA Line");
 
     // Renderer
     cmd.add_component(renderer_entity, MsaaLine);
-    antigen_wgpu::assemble_pipeline_layout(cmd, renderer_entity);
-    antigen_wgpu::assemble_render_bundle(cmd, renderer_entity);
-    antigen_wgpu::assemble_command_buffers(cmd, renderer_entity);
+    cmd.assemble_wgpu_pipeline_layout(renderer_entity);
+    cmd.assemble_wgpu_render_bundle(renderer_entity);
+    cmd.assemble_wgpu_command_buffers(renderer_entity);
+
     cmd.add_indirect_component::<SurfaceConfigurationComponent>(renderer_entity, window_entity);
     cmd.add_indirect_component::<ChangedFlag<SurfaceConfigurationComponent>>(
         renderer_entity,
@@ -61,8 +64,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     cmd.add_indirect_component::<WindowComponent>(renderer_entity, window_entity);
 
     // Shader
-    antigen_wgpu::assemble_shader(
-        cmd,
+    cmd.assemble_wgpu_shader(
         renderer_entity,
         ShaderModuleDescriptor {
             label: None,
@@ -86,16 +88,14 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         });
     }
 
-    antigen_wgpu::assemble_buffer_data::<VertexBuffer, _>(
-        cmd,
+    cmd.assemble_wgpu_buffer_data_with_usage::<VertexBuffer, _>(
         renderer_entity,
         Usage::<MeshVertices, _>::new(RwLock::new(vertex_data)),
         0,
     );
 
     // Vertex buffer
-    antigen_wgpu::assemble_buffer::<VertexBuffer>(
-        cmd,
+    cmd.assemble_wgpu_buffer_with_usage::<VertexBuffer>(
         renderer_entity,
         BufferDescriptor {
             label: Some("Vertex Buffer"),
@@ -106,8 +106,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     );
 
     // MSAA framebuffer
-    antigen_wgpu::assemble_texture::<MsaaFramebuffer>(
-        cmd,
+    cmd.assemble_wgpu_texture_with_usage::<MsaaFramebuffer>(
         renderer_entity,
         TextureDescriptor {
             label: None,
@@ -125,8 +124,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     );
 
     // Texture view
-    antigen_wgpu::assemble_texture_view::<MsaaFramebuffer>(
-        cmd,
+    cmd.assemble_wgpu_texture_view_with_usage::<MsaaFramebuffer>(
         renderer_entity,
         Default::default(),
     );
