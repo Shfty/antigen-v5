@@ -3,13 +3,7 @@ use antigen_core::{
     Usage,
 };
 
-use wgpu::{
-    util::BufferInitDescriptor, BindGroup, Buffer, BufferDescriptor, CommandBuffer,
-    ComputePipeline, ImageCopyTextureBase, ImageDataLayout, PipelineLayout, RenderBundle,
-    RenderPipeline, Sampler, SamplerDescriptor, ShaderModule, ShaderModuleDescriptor, Surface,
-    SurfaceConfiguration, SurfaceTexture, Texture, TextureDescriptor, TextureView,
-    TextureViewDescriptor,
-};
+use wgpu::{BindGroup, BindGroupLayout, Buffer, BufferDescriptor, CommandBuffer, ComputePipeline, ImageCopyTextureBase, ImageDataLayout, PipelineLayout, RenderBundle, RenderPipeline, Sampler, SamplerDescriptor, ShaderModule, ShaderModuleDescriptor, Surface, SurfaceConfiguration, SurfaceTexture, Texture, TextureDescriptor, TextureView, TextureViewDescriptor, util::BufferInitDescriptor};
 
 use std::marker::PhantomData;
 
@@ -78,6 +72,9 @@ pub type ComputePipelineComponent = RwLock<LazyComponent<ComputePipeline>>;
 
 // WGPU render bundle
 pub type RenderBundleComponent = RwLock<LazyComponent<RenderBundle>>;
+
+// WGPU bind group layout
+pub type BindGroupLayoutComponent = RwLock<LazyComponent<BindGroupLayout>>;
 
 // WGPU bind group
 pub type BindGroupComponent = RwLock<LazyComponent<BindGroup>>;

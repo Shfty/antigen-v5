@@ -1,17 +1,30 @@
-use std::borrow::Cow;
-
 use crate::wgpu_examples::conservative_raster::RENDER_TARGET_FORMAT;
 
 use super::{
-    ConservativeRaster, LinesPipelineComponent, LowResTextureViewComponent,
+    ConservativeRaster, LinesPipelineComponent, LowResSamplerComponent, LowResTarget,
+    LowResTextureDescriptorComponent, LowResTextureViewComponent, TriangleAndLinesShaderComponent,
     TriangleConservativePipelineComponent, TriangleRegularPipelineComponent,
-    UpscaleBindGroupComponent, UpscalePipelineComponent,
+    UpscaleBindGroupComponent, UpscaleBindGroupLayoutComponent, UpscalePipelineComponent,
+    UpscaleShaderComponent,
 };
-use antigen_core::{GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock};
+use antigen_core::{
+    ChangedFlag, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock, Usage,
+};
 
-use antigen_wgpu::{CommandBuffersComponent, RenderAttachmentTextureView, RenderPipelineComponent, ShaderModuleComponent, SurfaceConfigurationComponent, wgpu::{BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource, BindingType, Color, CommandEncoderDescriptor, Device, Extent3d, Features, FilterMode, FragmentState, LoadOp, MultisampleState, Operations, PipelineLayoutDescriptor, PolygonMode, PrimitiveState, PrimitiveTopology, RenderPassColorAttachment, RenderPassDescriptor, RenderPipelineDescriptor, SamplerDescriptor, ShaderModuleDescriptor, ShaderSource, ShaderStages, TextureDescriptor, TextureDimension, TextureSampleType, TextureUsages, TextureViewDimension, VertexState}};
+use antigen_wgpu::{
+    wgpu::{
+        BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry,
+        BindingResource, BindingType, Color, CommandEncoderDescriptor, Device, Extent3d, Features,
+        FragmentState, LoadOp, MultisampleState, Operations, PipelineLayoutDescriptor, PolygonMode,
+        PrimitiveState, PrimitiveTopology, RenderPassColorAttachment, RenderPassDescriptor,
+        RenderPipelineDescriptor, ShaderStages, TextureSampleType, TextureViewDimension,
+        VertexState,
+    },
+    CommandBuffersComponent, RenderAttachmentTextureView, SurfaceConfigurationComponent,
+    TextureDescriptorComponent, TextureViewDescriptorComponent,
+};
 
-use legion::IntoQuery;
+use legion::{world::SubWorld, IntoQuery};
 
 // Initialize the hello triangle render pipeline
 #[legion::system(par_for_each)]
@@ -20,18 +33,121 @@ use legion::IntoQuery;
 pub fn conservative_raster_prepare(
     world: &legion::world::SubWorld,
     _: &ConservativeRaster,
-    shader_module: &ShaderModuleComponent,
-    render_pipeline_component: &RenderPipelineComponent,
+    shader_triangle_and_lines: &TriangleAndLinesShaderComponent,
+    shader_upscale: &UpscaleShaderComponent,
+    pipeline_conservative_component: &TriangleConservativePipelineComponent,
+    pipeline_regular_component: &TriangleRegularPipelineComponent,
+    pipeline_upscale_component: &UpscalePipelineComponent,
+    pipeline_lines_component: &LinesPipelineComponent,
+    bind_group_layout_upscale_component: &UpscaleBindGroupLayoutComponent,
+    bind_group_upscale_component: &UpscaleBindGroupComponent,
+    low_res_view: &LowResTextureViewComponent,
+    low_res_sampler: &LowResSamplerComponent,
     surface_config_component: &IndirectComponent<SurfaceConfigurationComponent>,
 ) {
-    if !render_pipeline_component.read().is_pending() {
-        return;
-    }
     let device = <&Device>::query().iter(world).next().unwrap();
 
-    let surface_configuration_component =
-        world.get_indirect(surface_config_component).unwrap();
+    if bind_group_layout_upscale_component.read().is_pending() {
+        let bind_group_layout_upscale =
+            device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+                label: Some("upscale bindgroup"),
+                entries: &[
+                    BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Texture {
+                            sample_type: TextureSampleType::Float { filterable: false },
+                            view_dimension: TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Sampler {
+                            filtering: false,
+                            comparison: false,
+                        },
+                        count: None,
+                    },
+                ],
+            });
+
+        bind_group_layout_upscale_component
+            .write()
+            .set_ready(bind_group_layout_upscale);
+
+        println!("Created upscale bind group");
+    }
+
+    let bind_group_layout_upscale = bind_group_layout_upscale_component.read();
+    let bind_group_layout_upscale =
+        if let LazyComponent::Ready(bind_group_layout_upscale) = &*bind_group_layout_upscale {
+            bind_group_layout_upscale
+        } else {
+            unreachable!();
+        };
+
+    let low_res_view = low_res_view.read();
+    let low_res_view = if let LazyComponent::Ready(low_res_view) = &*low_res_view {
+        low_res_view
+    } else {
+        return;
+    };
+
+    let low_res_sampler = low_res_sampler.read();
+    let low_res_sampler = if let LazyComponent::Ready(low_res_sampler) = &*low_res_sampler {
+        low_res_sampler
+    } else {
+        return;
+    };
+
+    let shader_upscale = shader_upscale.read();
+    let shader_upscale = if let LazyComponent::Ready(shader_upscale) = &*shader_upscale {
+        shader_upscale
+    } else {
+        return;
+    };
+
+    // Create low-res target
+    if bind_group_upscale_component.read().is_pending() {
+        let low_res_bind_group = device.create_bind_group(&BindGroupDescriptor {
+            label: Some("upscale bind group"),
+            layout: &bind_group_layout_upscale,
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: BindingResource::TextureView(&low_res_view),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: BindingResource::Sampler(&low_res_sampler),
+                },
+            ],
+        });
+
+        bind_group_upscale_component
+            .write()
+            .set_ready(low_res_bind_group);
+
+        println!("Created low-res target");
+    }
+
+    if !pipeline_conservative_component.read().is_pending() {
+        return;
+    }
+
+    let surface_configuration_component = world.get_indirect(surface_config_component).unwrap();
     let config = surface_configuration_component.read();
+
+    let shader_triangle_and_lines = shader_triangle_and_lines.read();
+    let shader_triangle_and_lines =
+        if let LazyComponent::Ready(shader_triangle_and_lines) = &*shader_triangle_and_lines {
+            shader_triangle_and_lines
+        } else {
+            return;
+        };
 
     let pipeline_layout_empty = device.create_pipeline_layout(&PipelineLayoutDescriptor {
         label: None,
@@ -39,12 +155,7 @@ pub fn conservative_raster_prepare(
         push_constant_ranges: &[],
     });
 
-    let shader_triangle_and_lines = device.create_shader_module(&ShaderModuleDescriptor {
-        label: None,
-        source: ShaderSource::Wgsl(Cow::Borrowed(include_str!("triangle_and_lines.wgsl"))),
-    });
-
-    let pipeline_triangle_conservative = device.create_render_pipeline(&RenderPipelineDescriptor {
+    let pipeline_conservative = device.create_render_pipeline(&RenderPipelineDescriptor {
         label: Some("Conservative Rasterization"),
         layout: Some(&pipeline_layout_empty),
         vertex: VertexState {
@@ -64,8 +175,11 @@ pub fn conservative_raster_prepare(
         depth_stencil: None,
         multisample: MultisampleState::default(),
     });
+    pipeline_conservative_component
+        .write()
+        .set_ready(pipeline_conservative);
 
-    let pipeline_triangle_regular = device.create_render_pipeline(&RenderPipelineDescriptor {
+    let pipeline_regular = device.create_render_pipeline(&RenderPipelineDescriptor {
         label: Some("Regular Rasterization"),
         layout: Some(&pipeline_layout_empty),
         vertex: VertexState {
@@ -82,9 +196,12 @@ pub fn conservative_raster_prepare(
         depth_stencil: None,
         multisample: MultisampleState::default(),
     });
+    pipeline_regular_component
+        .write()
+        .set_ready(pipeline_regular);
 
-    let pipeline_lines = if device.features().contains(Features::POLYGON_MODE_LINE) {
-        Some(device.create_render_pipeline(&RenderPipelineDescriptor {
+    if device.features().contains(Features::POLYGON_MODE_LINE) {
+        let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
             label: Some("Lines"),
             layout: Some(&pipeline_layout_empty),
             vertex: VertexState {
@@ -104,107 +221,87 @@ pub fn conservative_raster_prepare(
             },
             depth_stencil: None,
             multisample: MultisampleState::default(),
-        }))
-    } else {
-        None
-    };
-
-    let (pipeline_upscale, bind_group_layout_upscale) = {
-        let bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            label: Some("upscale bindgroup"),
-            entries: &[
-                BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Texture {
-                        sample_type: TextureSampleType::Float { filterable: false },
-                        view_dimension: TextureViewDimension::D2,
-                        multisampled: false,
-                    },
-                    count: None,
-                },
-                BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Sampler {
-                        filtering: false,
-                        comparison: false,
-                    },
-                    count: None,
-                },
-            ],
         });
 
+        pipeline_lines_component.write().set_ready(pipeline);
+    }
+
+    let pipeline_upscale = {
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: None,
-            bind_group_layouts: &[&bind_group_layout],
+            bind_group_layouts: &[&bind_group_layout_upscale],
             push_constant_ranges: &[],
         });
-        let shader = device.create_shader_module(&ShaderModuleDescriptor {
-            label: None,
-            source: ShaderSource::Wgsl(Cow::Borrowed(include_str!("upscale.wgsl"))),
-        });
-        (
-            device.create_render_pipeline(&RenderPipelineDescriptor {
-                label: Some("Upscale"),
-                layout: Some(&pipeline_layout),
-                vertex: VertexState {
-                    module: &shader,
-                    entry_point: "vs_main",
-                    buffers: &[],
-                },
-                fragment: Some(FragmentState {
-                    module: &shader,
-                    entry_point: "fs_main",
-                    targets: &[config.format.into()],
-                }),
-                primitive: PrimitiveState::default(),
-                depth_stencil: None,
-                multisample: MultisampleState::default(),
+
+        device.create_render_pipeline(&RenderPipelineDescriptor {
+            label: Some("Upscale"),
+            layout: Some(&pipeline_layout),
+            vertex: VertexState {
+                module: &shader_upscale,
+                entry_point: "vs_main",
+                buffers: &[],
+            },
+            fragment: Some(FragmentState {
+                module: &shader_upscale,
+                entry_point: "fs_main",
+                targets: &[config.format.into()],
             }),
-            bind_group_layout,
-        )
+            primitive: PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: MultisampleState::default(),
+        })
     };
 
-    // Create low-res target
+    pipeline_upscale_component
+        .write()
+        .set_ready(pipeline_upscale);
 
-    let texture_view = device
-        .create_texture(&TextureDescriptor {
-            label: Some("Low Resolution Target"),
-            size: Extent3d {
-                width: config.width / 16,
-                height: config.width / 16,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: TextureDimension::D2,
-            format: RENDER_TARGET_FORMAT,
-            usage: TextureUsages::TEXTURE_BINDING | TextureUsages::RENDER_ATTACHMENT,
-        })
-        .create_view(&Default::default());
+    println!("Initialized conservative raster renderer");
+}
 
-    let sampler = device.create_sampler(&SamplerDescriptor {
-        label: Some("Nearest Neighbor Sampler"),
-        mag_filter: FilterMode::Nearest,
-        min_filter: FilterMode::Nearest,
-        ..Default::default()
-    });
+#[legion::system(par_for_each)]
+#[read_component(SurfaceConfigurationComponent)]
+#[read_component(ChangedFlag<SurfaceConfigurationComponent>)]
+#[read_component(LowResTextureDescriptorComponent<'static>)]
+#[read_component(Usage<LowResTarget, ChangedFlag<TextureDescriptorComponent<'static>>>)]
+#[read_component(Usage<LowResTarget, ChangedFlag<TextureViewDescriptorComponent<'static>>>)]
+pub fn conservative_raster_resize(
+    world: &SubWorld,
+    _: &ConservativeRaster,
+    bind_group_upscale_component: &UpscaleBindGroupComponent,
+    surface_config: &IndirectComponent<SurfaceConfigurationComponent>,
+    surface_config_changed: &IndirectComponent<ChangedFlag<SurfaceConfigurationComponent>>,
+    low_res_desc: &IndirectComponent<LowResTextureDescriptorComponent<'static>>,
+    low_res_desc_changed: &IndirectComponent<
+        Usage<LowResTarget, ChangedFlag<TextureDescriptorComponent<'static>>>,
+    >,
+    low_res_view_desc_changed: &IndirectComponent<
+        Usage<LowResTarget, ChangedFlag<TextureViewDescriptorComponent<'static>>>,
+    >,
+) {
+    let surface_config_changed = world.get_indirect(surface_config_changed).unwrap();
+    let surface_config = world.get_indirect(surface_config).unwrap();
 
-    let bind_group = device.create_bind_group(&BindGroupDescriptor {
-        label: Some("upscale bind group"),
-        layout: &bind_group_layout_upscale,
-        entries: &[
-            BindGroupEntry {
-                binding: 0,
-                resource: BindingResource::TextureView(&texture_view),
-            },
-            BindGroupEntry {
-                binding: 1,
-                resource: BindingResource::Sampler(&sampler),
-            },
-        ],
-    });
+    let low_res_desc = world.get_indirect(low_res_desc).unwrap();
+    let low_res_desc_changed = world.get_indirect(low_res_desc_changed).unwrap();
+    let low_res_view_desc_changed = world.get_indirect(low_res_view_desc_changed).unwrap();
+
+    if !surface_config_changed.get() {
+        return;
+    }
+
+    println!("Surface config changed, recreating low-res target, view and bind group");
+
+    let surface_config = surface_config.read();
+    low_res_desc.write().size = Extent3d {
+        width: surface_config.width / 16,
+        height: surface_config.height / 16,
+        depth_or_array_layers: 1,
+    };
+
+    low_res_desc_changed.set(true);
+    low_res_view_desc_changed.set(true);
+    bind_group_upscale_component.write().set_pending();
 }
 
 // Render the hello triangle pipeline to the specified entity's surface
@@ -220,8 +317,8 @@ pub fn conservative_raster_render(
     pipeline_lines: &LinesPipelineComponent,
     bind_group_upscale: &UpscaleBindGroupComponent,
     command_buffers: &CommandBuffersComponent,
-    texture_view: &IndirectComponent<RenderAttachmentTextureView>,
-    low_res_target: &IndirectComponent<LowResTextureViewComponent>,
+    low_res_view: &LowResTextureViewComponent,
+    render_attachment_view: &IndirectComponent<RenderAttachmentTextureView>,
 ) {
     let device = if let Some(components) = <&Device>::query().iter(world).next() {
         components
@@ -254,8 +351,6 @@ pub fn conservative_raster_render(
         return;
     };
 
-    let pipeline_lines = pipeline_lines.read();
-
     let bind_group_upscale = bind_group_upscale.read();
     let bind_group_upscale = if let LazyComponent::Ready(bind_group_upscale) = &*bind_group_upscale
     {
@@ -264,7 +359,7 @@ pub fn conservative_raster_render(
         return;
     };
 
-    let texture_view = world.get_indirect(texture_view).unwrap();
+    let texture_view = world.get_indirect(render_attachment_view).unwrap();
     let texture_view = texture_view.read();
     let texture_view = if let LazyComponent::Ready(texture_view) = &*texture_view {
         texture_view
@@ -272,13 +367,14 @@ pub fn conservative_raster_render(
         return;
     };
 
-    let low_res_target = world.get_indirect(low_res_target).unwrap();
-    let low_res_target = low_res_target.read();
-    let low_res_target = if let LazyComponent::Ready(low_res_target) = &*low_res_target {
-        low_res_target
+    let low_res_view = low_res_view.read();
+    let low_res_view = if let LazyComponent::Ready(low_res_view) = &*low_res_view {
+        low_res_view
     } else {
         return;
     };
+
+    let pipeline_lines = pipeline_lines.read();
 
     let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
         label: Some("primary"),
@@ -287,7 +383,7 @@ pub fn conservative_raster_render(
     let mut rpass = encoder.begin_render_pass(&RenderPassDescriptor {
         label: Some("low resolution"),
         color_attachments: &[RenderPassColorAttachment {
-            view: &low_res_target,
+            view: &low_res_view,
             resolve_target: None,
             ops: Operations {
                 load: LoadOp::Clear(Color::BLACK),

@@ -12,7 +12,7 @@ use wgpu::{
 
 use std::path::Path;
 
-use crate::{BindGroupComponent, BufferComponent, BufferDescriptorComponent, BufferInitDescriptorComponent, BufferWriteComponent, CommandBuffersComponent, ComputePipelineComponent, PipelineLayoutComponent, RenderAttachment, RenderBundleComponent, RenderPipelineComponent, SamplerComponent, SamplerDescriptorComponent, ShaderModuleComponent, ShaderModuleDescriptorComponent, SurfaceComponent, SurfaceConfigurationComponent, SurfaceTextureComponent, TextureComponent, TextureDescriptorComponent, TextureViewComponent, TextureViewDescriptorComponent, TextureWriteComponent};
+use crate::{BindGroupComponent, BindGroupLayoutComponent, BufferComponent, BufferDescriptorComponent, BufferInitDescriptorComponent, BufferWriteComponent, CommandBuffersComponent, ComputePipelineComponent, PipelineLayoutComponent, RenderAttachment, RenderBundleComponent, RenderPipelineComponent, SamplerComponent, SamplerDescriptorComponent, ShaderModuleComponent, ShaderModuleDescriptorComponent, SurfaceComponent, SurfaceConfigurationComponent, SurfaceTextureComponent, TextureComponent, TextureDescriptorComponent, TextureViewComponent, TextureViewDescriptorComponent, TextureWriteComponent};
 
 /// Create an entity to hold an Instance, Adapter, Device and Queue
 pub fn assemble_wgpu_entity(
@@ -117,6 +117,14 @@ pub fn assemble_compute_pipeline(cmd: &mut CommandBuffer, entity: Entity) {
         entity,
         ComputePipelineComponent::new(LazyComponent::Pending),
     );
+}
+
+pub fn assemble_bind_group_layout(cmd: &mut CommandBuffer, entity: Entity) {
+    cmd.add_component(entity, BindGroupLayoutComponent::new(LazyComponent::Pending));
+}
+
+pub fn assemble_bind_group_layout_usage<U: Send + Sync + 'static>(cmd: &mut CommandBuffer, entity: Entity) {
+    cmd.add_component(entity, Usage::<U, _>::new(BindGroupLayoutComponent::new(LazyComponent::Pending)));
 }
 
 pub fn assemble_bind_group(cmd: &mut CommandBuffer, entity: Entity) {

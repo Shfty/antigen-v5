@@ -2,7 +2,7 @@
 //       [✓] Boids
 //       [✓] Bunnymark
 //       [ ] Capture(?)
-//       [>] Conservative Raster
+//       [✓] Conservative Raster
 //       [✓] Cube
 //       [ ] Hello Compute
 //       [✓] Hello Triangle
@@ -19,6 +19,8 @@
 //
 // TODO: Consider traits for module-specific assemblage
 //       Ex. a trait that extends &mut CommandBuffer and &mut World with WGPU assembly methods
+//
+// TODO: Boilerplate reduction for  reading and unwrapping RwLock<LazyComponent::Ready>
 //
 // TODO: Figure out a better way to assemble Usage<U, ChangedFlag<T>>
 //
@@ -53,7 +55,9 @@ fn main() -> ! {
         &mut world.write(),
         &DeviceDescriptor {
             label: None,
-            features: Features::default() | Features::POLYGON_MODE_LINE,
+            features: Features::default()
+                | Features::POLYGON_MODE_LINE
+                | Features::CONSERVATIVE_RASTERIZATION,
             limits: Limits::downlevel_defaults(),
         },
         None,
@@ -89,15 +93,15 @@ pub fn winit_thread(world: ImmutableWorld) -> ! {
         serial![
             demos::wgpu_examples::cube::cube_resize_system()
             demos::wgpu_examples::msaa_line::msaa_line_resize_system()
+            demos::wgpu_examples::conservative_raster::conservative_raster_resize_system()
         ]
     };
 
     // Resets dirty flags that should only remain active for one frame
-    let reset_dirty_flags_schedule =
-        parallel![
-            antigen_winit::reset_resize_window_dirty_flags_system(),
-            antigen_wgpu::reset_surface_config_changed_system(),
-        ];
+    let reset_dirty_flags_schedule = parallel![
+        antigen_winit::reset_resize_window_dirty_flags_system(),
+        antigen_wgpu::reset_surface_config_changed_system(),
+    ];
 
     // Create winit event schedules
     let mut main_events_cleared_schedule = serial![
