@@ -9,7 +9,6 @@ pub use systems::*;
 
 use antigen_core::{
     parallel, serial, single, AddIndirectComponent, ImmutableSchedule, RwLock, Serial, Single,
-    Usage,
 };
 
 use antigen_wgpu::{
@@ -18,8 +17,7 @@ use antigen_wgpu::{
         util::BufferInitDescriptor, BufferAddress, BufferDescriptor, BufferUsages, Device,
         ShaderModuleDescriptor, ShaderSource,
     },
-    BindGroupComponent, CommandBuffersComponent, ComputePipelineComponent,
-    RenderAttachmentTextureView, RenderPipelineComponent, SurfaceConfigurationComponent,
+    RenderAttachmentTextureView, SurfaceConfigurationComponent,
 };
 
 use rand::{distributions::Distribution, SeedableRng};

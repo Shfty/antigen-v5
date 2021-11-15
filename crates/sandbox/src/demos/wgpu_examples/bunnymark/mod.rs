@@ -21,8 +21,7 @@ use antigen_wgpu::{
         ShaderSource, TextureAspect, TextureDescriptor, TextureDimension, TextureFormat,
         TextureUsages,
     },
-    BindGroupComponent, CommandBuffersComponent, RenderAttachmentTextureView,
-    RenderPipelineComponent, SurfaceConfigurationComponent, Texels, ToBytes,
+    RenderAttachmentTextureView, SurfaceConfigurationComponent, Texels, ToBytes,
 };
 
 const MAX_BUNNIES: usize = 1 << 20;
@@ -144,7 +143,7 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
     assemble_texture_data::<Logo, _>(
         cmd,
         renderer_entity,
-        Texels::new(buf),
+        Usage::<Texels, _>::new(RwLock::new(buf)),
         ImageCopyTextureBase {
             texture: (),
             mip_level: 0,
@@ -237,7 +236,7 @@ pub fn prepare_schedule() -> ImmutableSchedule<Serial> {
         parallel![
             antigen_wgpu::buffer_write_system::<Global, RwLock<Globals>, Globals>(),
             antigen_wgpu::buffer_write_system::<Local, Bunnies, Vec<Locals>>(),
-            antigen_wgpu::texture_write_system::<Logo, Texels<Vec<u8>>, Vec<u8>>(),
+            antigen_wgpu::texture_write_system::<Logo, Usage<Texels, RwLock<Vec<u8>>>, Vec<u8>>(),
         ],
         bunnymark_prepare_system(),
     ]

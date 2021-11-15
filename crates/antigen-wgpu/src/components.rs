@@ -165,78 +165,14 @@ pub type ShaderModuleDescriptorComponent<'a> = RwLock<ShaderModuleDescriptor<'a>
 // WGPU shader module
 pub type ShaderModuleComponent = RwLock<LazyComponent<ShaderModule>>;
 
-// Texture texels
-pub struct Texels<T>(RwLock<T>);
+// Texture texels usage tag
+pub enum Texels {}
 
-impl<T> ReadWriteLock<T> for Texels<T> {
-    fn read(&self) -> RwLockReadGuard<T> {
-        self.0.read()
-    }
+// Mesh vertices usage tag
+pub enum MeshVertices {}
 
-    fn write(&self) -> RwLockWriteGuard<T> {
-        self.0.write()
-    }
-}
+// Mesh UVs usage tag
+pub enum MeshUvs {}
 
-impl<T> Texels<T> {
-    pub fn new(texels: T) -> Self {
-        Texels(RwLock::new(texels))
-    }
-}
-
-// Mesh vertices
-pub struct MeshVertices<T>(RwLock<Vec<T>>);
-
-impl<T> ReadWriteLock<Vec<T>> for MeshVertices<T> {
-    fn read(&self) -> RwLockReadGuard<Vec<T>> {
-        self.0.read()
-    }
-
-    fn write(&self) -> RwLockWriteGuard<Vec<T>> {
-        self.0.write()
-    }
-}
-
-impl<T> MeshVertices<T> {
-    pub fn new(vertices: Vec<T>) -> Self {
-        MeshVertices(RwLock::new(vertices))
-    }
-}
-
-// Mesh UVs
-pub struct MeshUvs<T>(RwLock<Vec<T>>);
-
-impl<T> ReadWriteLock<Vec<T>> for MeshUvs<T> {
-    fn read(&self) -> RwLockReadGuard<Vec<T>> {
-        self.0.read()
-    }
-
-    fn write(&self) -> RwLockWriteGuard<Vec<T>> {
-        self.0.write()
-    }
-}
-
-impl<T> MeshUvs<T> {
-    pub fn new(uvs: Vec<T>) -> Self {
-        MeshUvs(RwLock::new(uvs))
-    }
-}
-
-// Mesh indices
-pub struct MeshIndices<T>(RwLock<Vec<T>>);
-
-impl<T> ReadWriteLock<Vec<T>> for MeshIndices<T> {
-    fn read(&self) -> RwLockReadGuard<Vec<T>> {
-        self.0.read()
-    }
-
-    fn write(&self) -> RwLockWriteGuard<Vec<T>> {
-        self.0.write()
-    }
-}
-
-impl<T> MeshIndices<T> {
-    pub fn new(indices: Vec<T>) -> Self {
-        MeshIndices(RwLock::new(indices))
-    }
-}
+// Mesh indices usage tag
+pub enum MeshIndices {}

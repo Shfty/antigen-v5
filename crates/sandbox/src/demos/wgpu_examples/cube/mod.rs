@@ -6,8 +6,8 @@ use legion::systems::CommandBuffer;
 pub use systems::*;
 
 use antigen_core::{
-    parallel, serial, single, AddIndirectComponent, ChangedFlag, ImmutableSchedule, Serial, Single,
-    Usage,
+    parallel, serial, single, AddIndirectComponent, ChangedFlag, ImmutableSchedule, RwLock, Serial,
+    Single, Usage,
 };
 use antigen_wgpu::{
     assemble_buffer_data, assemble_texture_data,
@@ -16,8 +16,7 @@ use antigen_wgpu::{
         Extent3d, ImageCopyTextureBase, ImageDataLayout, ShaderModuleDescriptor, ShaderSource,
         TextureAspect, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
     },
-    BindGroupComponent, CommandBuffersComponent, MeshUvs, MeshVertices,
-    RenderAttachmentTextureView, RenderPipelineComponent, SurfaceConfigurationComponent, Texels,
+    MeshUvs, MeshVertices, RenderAttachmentTextureView, SurfaceConfigurationComponent, Texels,
 };
 
 use std::{borrow::Cow, num::NonZeroU32};
@@ -175,12 +174,22 @@ pub fn assemble(cmd: &mut CommandBuffer) {
     let cube_vertices = create_vertices();
     let vertex_count = cube_vertices.len();
     let vertex_size = std::mem::size_of::<[f32; 3]>();
-    assemble_buffer_data::<Vertex, _>(cmd, renderer_entity, MeshVertices::new(cube_vertices), 0);
+    assemble_buffer_data::<Vertex, _>(
+        cmd,
+        renderer_entity,
+        Usage::<MeshVertices, _>::new(RwLock::new(cube_vertices)),
+        0,
+    );
 
     let cube_uvs = create_uvs();
     let uv_size = std::mem::size_of::<[f32; 2]>();
     let uvs_offset = (vertex_size * vertex_count) as BufferAddress;
-    assemble_buffer_data::<Vertex, _>(cmd, renderer_entity, MeshUvs::new(cube_uvs), uvs_offset);
+    assemble_buffer_data::<Vertex, _>(
+        cmd,
+        renderer_entity,
+        Usage::<MeshUvs, _>::new(RwLock::new(cube_uvs)),
+        uvs_offset,
+    );
 
     // Texture data
     let texture_size = 256u32;
@@ -194,7 +203,7 @@ pub fn assemble(cmd: &mut CommandBuffer) {
     assemble_texture_data::<Mandelbrot, _>(
         cmd,
         renderer_entity,
-        Texels::new(texels),
+        Usage::<Texels, _>::new(RwLock::new(texels)),
         ImageCopyTextureBase {
             texture: (),
             mip_level: 0,
@@ -285,10 +294,19 @@ pub fn prepare_schedule() -> ImmutableSchedule<Serial> {
             >(),
         ],
         parallel![
-            antigen_wgpu::buffer_write_system::<Vertex, MeshVertices::<[f32; 3]>, Vec<[f32; 3]>>(),
-            antigen_wgpu::buffer_write_system::<Vertex, MeshUvs::<[f32; 2]>, Vec<[f32; 2]>>(),
+            antigen_wgpu::buffer_write_system::<
+                Vertex,
+                Usage<MeshVertices, RwLock<Vec<[f32; 3]>>>,
+                Vec<[f32; 3]>,
+            >(),
+            antigen_wgpu::buffer_write_system::<
+                Vertex,
+                Usage<MeshUvs, RwLock<Vec<[f32; 2]>>>,
+                Vec<[f32; 2]>,
+            >(),
             antigen_wgpu::buffer_write_system::<Uniform, ViewProjectionMatrix, [f32; 16]>(),
-            antigen_wgpu::texture_write_system::<Mandelbrot, Texels<Vec<u8>>, Vec<u8>>(),
+            antigen_wgpu::texture_write_system::<Mandelbrot, Usage<Texels, RwLock<Vec<u8>>>, Vec<u8>>(
+            ),
         ],
         cube_prepare_system(),
     ]

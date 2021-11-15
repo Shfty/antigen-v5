@@ -5,19 +5,16 @@ use antigen_winit::WindowComponent;
 pub use components::*;
 pub use systems::*;
 
-use antigen_core::{
-    parallel, serial, single, AddIndirectComponent, ChangedFlag, ImmutableSchedule, Serial, Single,
-    Usage,
-};
+use antigen_core::{AddIndirectComponent, ChangedFlag, ImmutableSchedule, RwLock, Serial, Single, Usage, parallel, serial, single};
 
 use antigen_wgpu::{
     wgpu::{
         BufferAddress, BufferDescriptor, BufferUsages, Device, Extent3d, ShaderModuleDescriptor,
         ShaderSource, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
     },
-    CommandBuffersComponent, MeshVertices, MsaaFramebuffer,
-    MsaaFramebufferTextureDescriptor, MsaaFramebufferTextureView, PipelineLayoutComponent,
-    RenderAttachmentTextureView, RenderBundleComponent, SurfaceConfigurationComponent,
+     MeshVertices, MsaaFramebuffer,
+    MsaaFramebufferTextureDescriptor, MsaaFramebufferTextureView, 
+    RenderAttachmentTextureView,  SurfaceConfigurationComponent,
     TextureDescriptorComponent, TextureViewDescriptorComponent,
 };
 
@@ -92,7 +89,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     antigen_wgpu::assemble_buffer_data::<VertexBuffer, _>(
         cmd,
         renderer_entity,
-        MeshVertices::new(vertex_data),
+        Usage::<MeshVertices, _>::new(RwLock::new(vertex_data)),
         0,
     );
 
@@ -152,7 +149,7 @@ pub fn prepare_schedule() -> ImmutableSchedule<Serial> {
         ],
         antigen_wgpu::buffer_write_system::<
             VertexBuffer,
-            MeshVertices::<Vertex>,
+            Usage::<MeshVertices, RwLock<Vec<Vertex>>>,
             Vec<Vertex>,
         >(),
         msaa_line_prepare_system()

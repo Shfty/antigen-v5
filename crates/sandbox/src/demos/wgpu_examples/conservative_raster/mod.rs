@@ -4,12 +4,11 @@ mod systems;
 pub use components::*;
 pub use systems::*;
 
-use antigen_core::{serial, single, AddIndirectComponent, ImmutableSchedule, Serial, Single, Usage};
+use antigen_core::{serial, single, AddIndirectComponent, ImmutableSchedule, Serial, Single};
 
 use antigen_wgpu::{
     wgpu::{Device, ShaderModuleDescriptor, ShaderSource},
-    CommandBuffersComponent, RenderAttachmentTextureView, RenderPipelineComponent,
-    SurfaceConfigurationComponent, BindGroupComponent,
+    RenderAttachmentTextureView, SurfaceConfigurationComponent,
 };
 
 #[legion::system]
