@@ -559,8 +559,6 @@ where
                     ReadWriteLock::<wgpu::ImageDataLayout>::read(texture_write).offset,
                 );
 
-                println!("{:?}", bytes);
-
                 queue.write_texture(
                     wgpu::ImageCopyTexture {
                         texture: &*texture,
