@@ -5,23 +5,44 @@
 //       [✓] Conservative Raster
 //       [✓] Cube
 //       [ ] Hello Compute
+//           Need to account for non-window GPU work
 //       [✓] Hello Triangle
-//       [ ] Hello Windows(?)
-//       [ ] Hello(?)
-//       [ ] Mipmap
+//       [ ] Hello Windows
+//           Not interesting from a GPU standpoint,
+//           but useful to demonstrate ECS approach
+//       [✓] Mipmap
 //       [✓] MSAA Line
 //           [✓] MSAA rendering
 //           [✓] Recreate framebuffer on resize
 //           [✓] Render bundle recreation
+//       [ ] Skybox
 //       [ ] Shadow
 //       [ ] Texture Arrays
 //       [ ] Water
 //
-// TODO: Boilerplate reduction for  reading and unwrapping RwLock<LazyComponent::Ready>
+// TODO: Factor mipmap generation out of Mipmap renderer and into a generalized system
+//       Generator is effectively a renderer in and of itself
+//       Should be able to give TextureComponent a sibling GenerateMipmaps component,
+//       have everything be automatic from there
+//
+// TODO: Boilerplate reduction for reading and unwrapping RwLock<LazyComponent::Ready>
 //
 // TODO: Figure out a better way to assemble Usage<U, ChangedFlag<T>>
+//       add_component_with_usage_and_changed_flag?
 //
 // TODO: Improve WindowEventComponent
+//       Split into discrete components?
+//
+// TODO: Investigate Encoder::copy_buffer_to_texture
+//       What are its characteristics versus Queue::write_texture?
+//       Is Queue::write_texture just a wrapper for it?
+//       Is it worth writing an alternate texture writing system that uses it?
+//
+// TODO: StagingBelt integration
+//       Requires a command encoder, but doesn't have to be coupled to drawing
+//       Treat as its own 'data upload' step that occurs before draw
+//       StagingBelt itself isn't Send + Sync, will need to be thread-local
+//       Shouldn't be recreating it on every upload - point is efficient buffer reuse
 //
 // TODO: Reimplement map renderer
 //
@@ -54,8 +75,21 @@ fn main() -> ! {
             label: None,
             features: Features::default()
                 | Features::POLYGON_MODE_LINE
-                | Features::CONSERVATIVE_RASTERIZATION,
-            limits: Limits::downlevel_defaults(),
+                | Features::CONSERVATIVE_RASTERIZATION
+                | Features::TIMESTAMP_QUERY
+                | Features::PIPELINE_STATISTICS_QUERY
+                | Features::SPIRV_SHADER_PASSTHROUGH
+                | Features::TEXTURE_BINDING_ARRAY
+                | (
+                    // Features for texture arrays
+                    Features::PUSH_CONSTANTS
+                        | Features::SAMPLED_TEXTURE_AND_STORAGE_BUFFER_ARRAY_NON_UNIFORM_INDEXING
+                        | Features::UNSIZED_BINDING_ARRAY
+                ),
+            limits: Limits {
+                max_push_constant_size: 4,
+                ..Limits::downlevel_defaults()
+            },
         },
         None,
         None,
@@ -84,16 +118,6 @@ pub fn game_thread(world: ImmutableWorld) -> impl Fn() {
 }
 
 pub fn winit_thread(world: ImmutableWorld) -> ! {
-    // Reacts to changes in surface size
-    // Runs on main events cleared and window resize
-    let surface_resize_schedule = || {
-        serial![
-            demos::wgpu_examples::cube::cube_resize_system()
-            demos::wgpu_examples::msaa_line::msaa_line_resize_system()
-            demos::wgpu_examples::conservative_raster::conservative_raster_resize_system()
-        ]
-    };
-
     // Resets dirty flags that should only remain active for one frame
     let reset_dirty_flags_schedule = parallel![
         antigen_winit::reset_resize_window_dirty_flags_system(),
@@ -106,7 +130,7 @@ pub fn winit_thread(world: ImmutableWorld) -> ! {
         antigen_winit::window_request_redraw_schedule(),
         serial![
             antigen_wgpu::window_surfaces_schedule(),
-            surface_resize_schedule(),
+            demos::wgpu_examples::surface_resize_schedule(),
         ],
         parallel![
             crate::demos::wgpu_examples::prepare_schedule(),
@@ -123,7 +147,7 @@ pub fn winit_thread(world: ImmutableWorld) -> ! {
 
     let mut window_resized_schedule = serial![
         antigen_winit::resize_window_system(),
-        surface_resize_schedule(),
+        demos::wgpu_examples::surface_resize_schedule(),
     ];
     let mut window_keyboard_event_schedule = parallel![
         crate::demos::wgpu_examples::bunnymark::keyboard_event_schedule(),

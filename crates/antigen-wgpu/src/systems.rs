@@ -1,12 +1,13 @@
 use super::{
-    BufferWriteComponent, CommandBuffersComponent, RenderAttachmentTextureViewDescriptor,
-    SurfaceComponent, SurfaceTextureComponent, TextureDescriptorComponent, TextureViewComponent,
-    TextureViewDescriptorComponent, TextureWriteComponent, ToBytes, BufferInitDescriptorComponent,
+    BufferInitDescriptorComponent, BufferWriteComponent, CommandBuffersComponent,
+    RenderAttachmentTextureViewDescriptor, SurfaceComponent, SurfaceTextureComponent,
+    TextureDescriptorComponent, TextureViewComponent, TextureViewDescriptorComponent,
+    TextureWriteComponent, ToBytes,
 };
 use crate::{
     BufferComponent, BufferDescriptorComponent, RenderAttachmentTextureView, SamplerComponent,
     SamplerDescriptorComponent, ShaderModuleComponent, ShaderModuleDescriptorComponent,
-    SurfaceConfigurationComponent, TextureComponent,
+    ShaderModuleDescriptorSpirVComponent, SurfaceConfigurationComponent, TextureComponent,
 };
 
 use antigen_core::{
@@ -15,7 +16,10 @@ use antigen_core::{
 use antigen_winit::{WindowComponent, WindowEntityMap, WindowEventComponent, WindowSizeComponent};
 
 use legion::{world::SubWorld, IntoQuery};
-use wgpu::{Adapter, Device, ImageCopyTextureBase, ImageDataLayout, Instance, Queue, Surface, util::DeviceExt};
+use wgpu::{
+    util::DeviceExt, Adapter, Device, ImageCopyTextureBase, ImageDataLayout, Instance, Queue,
+    Surface,
+};
 
 // Initialize pending surfaces that share an entity with a window
 #[legion::system(for_each)]
@@ -245,6 +249,55 @@ pub fn create_shader_modules_usage<T: Send + Sync + 'static>(
     println!("Created {} shader module", std::any::type_name::<T>());
 }
 
+/// Create pending untagged shader modules, recreating them if a ChangedFlag is set
+#[legion::system(par_for_each)]
+#[read_component(Device)]
+pub fn create_shader_modules_spirv(
+    world: &SubWorld,
+    shader_module_desc: &ShaderModuleDescriptorSpirVComponent,
+    shader_module: &ShaderModuleComponent,
+    shader_module_desc_changed: &ChangedFlag<ShaderModuleDescriptorSpirVComponent>,
+) {
+    println!("Create shader modules spirv");
+    if !shader_module.read().is_pending() && !shader_module_desc_changed.get() {
+        return;
+    }
+
+    let device = <&Device>::query().iter(world).next().unwrap();
+    shader_module
+        .write()
+        .set_ready(unsafe { device.create_shader_module_spirv(&shader_module_desc.read()) });
+
+    shader_module_desc_changed.set(false);
+
+    println!("Created spir-v shader module");
+}
+
+/// Create pending usage-tagged shader modules, recreating them if a ChangedFlag is set
+#[legion::system(par_for_each)]
+#[read_component(Device)]
+pub fn create_shader_modules_usage_spirv<T: Send + Sync + 'static>(
+    world: &SubWorld,
+    shader_module_desc: &Usage<T, ShaderModuleDescriptorSpirVComponent>,
+    shader_module: &Usage<T, ShaderModuleComponent>,
+    shader_module_desc_changed: &Usage<T, ChangedFlag<ShaderModuleDescriptorSpirVComponent>>,
+) {
+    if !shader_module.read().is_pending() && !shader_module_desc_changed.get() {
+        return;
+    }
+
+    let device = <&Device>::query().iter(world).next().unwrap();
+    shader_module
+        .write()
+        .set_ready(unsafe { device.create_shader_module_spirv(&shader_module_desc.read()) });
+
+    shader_module_desc_changed.set(false);
+    println!(
+        "Created {} spir-v shader module",
+        std::any::type_name::<T>()
+    );
+}
+
 /// Create pending usage-tagged buffers, recreating them if a ChangedFlag is set
 #[legion::system(par_for_each)]
 #[read_component(Device)]
@@ -351,10 +404,33 @@ pub fn create_texture_views<T: Send + Sync + 'static>(
     println!("Created texture view: {:#?}", texture_view_desc.read());
 }
 
+/// Create pending samplers, recreating them if a ChangedFlag is set
+#[legion::system(par_for_each)]
+#[read_component(Device)]
+pub fn create_samplers(
+    world: &SubWorld,
+    sampler_desc: &SamplerDescriptorComponent,
+    sampler: &SamplerComponent,
+    sampler_desc_changed: &ChangedFlag<SamplerDescriptorComponent>,
+) {
+    if !sampler.read().is_pending() && !sampler_desc_changed.get() {
+        return;
+    }
+
+    let device = <&Device>::query().iter(world).next().unwrap();
+    sampler
+        .write()
+        .set_ready(device.create_sampler(&sampler_desc.read()));
+
+    sampler_desc_changed.set(false);
+
+    println!("Created sampler: {:#?}", sampler_desc.read());
+}
+
 /// Create pending usage-tagged samplers, recreating them if a ChangedFlag is set
 #[legion::system(par_for_each)]
 #[read_component(Device)]
-pub fn create_samplers<T: Send + Sync + 'static>(
+pub fn create_samplers_with_usage<T: Send + Sync + 'static>(
     world: &SubWorld,
     sampler_desc: &Usage<T, SamplerDescriptorComponent>,
     sampler: &Usage<T, SamplerComponent>,

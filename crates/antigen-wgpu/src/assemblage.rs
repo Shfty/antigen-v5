@@ -6,8 +6,8 @@ use legion::{storage::Component, Entity, World};
 use wgpu::{
     util::BufferInitDescriptor, Adapter, Backends, BufferAddress, BufferDescriptor, Device,
     DeviceDescriptor, ImageCopyTextureBase, ImageDataLayout, Instance, Queue, SamplerDescriptor,
-    ShaderModuleDescriptor, Surface, SurfaceConfiguration, TextureDescriptor,
-    TextureViewDescriptor,
+    ShaderModuleDescriptor, ShaderModuleDescriptorSpirV, Surface, SurfaceConfiguration,
+    TextureDescriptor, TextureViewDescriptor,
 };
 
 use std::path::Path;
@@ -17,9 +17,10 @@ use crate::{
     BufferInitDescriptorComponent, BufferWriteComponent, CommandBuffersComponent,
     ComputePipelineComponent, PipelineLayoutComponent, RenderAttachment, RenderBundleComponent,
     RenderPipelineComponent, SamplerComponent, SamplerDescriptorComponent, ShaderModuleComponent,
-    ShaderModuleDescriptorComponent, SurfaceComponent, SurfaceConfigurationComponent,
-    SurfaceTextureComponent, TextureComponent, TextureDescriptorComponent, TextureViewComponent,
-    TextureViewDescriptorComponent, TextureWriteComponent,
+    ShaderModuleDescriptorComponent, ShaderModuleDescriptorSpirVComponent, SurfaceComponent,
+    SurfaceConfigurationComponent, SurfaceTextureComponent, TextureComponent,
+    TextureDescriptorComponent, TextureViewComponent, TextureViewDescriptorComponent,
+    TextureWriteComponent,
 };
 
 /// Create an entity to hold an Instance, Adapter, Device and Queue
@@ -110,6 +111,16 @@ pub trait AssembleWgpu {
         desc: ShaderModuleDescriptor<'static>,
     );
 
+    /// Adds an untagged shader to an entity
+    fn assemble_wgpu_shader_spirv(self, entity: Entity, desc: ShaderModuleDescriptorSpirV<'static>);
+
+    /// Adds a usage-tagged shader to an entity
+    fn assemble_wgpu_shader_spirv_with_usage<U: Send + Sync + 'static>(
+        self,
+        entity: Entity,
+        desc: ShaderModuleDescriptorSpirV<'static>,
+    );
+
     /// Adds a usage-tagged buffer to an entity
     fn assemble_wgpu_buffer_with_usage<U: Send + Sync + 'static>(
         self,
@@ -157,6 +168,13 @@ pub trait AssembleWgpu {
         self,
         entity: Entity,
         desc: TextureViewDescriptor<'static>,
+    );
+
+    /// Adds a usage-tagged sampler to an entity
+    fn assemble_wgpu_sampler(
+        self,
+        entity: Entity,
+        desc: SamplerDescriptor<'static>,
     );
 
     /// Adds a usage-tagged sampler to an entity
@@ -277,6 +295,39 @@ impl AssembleWgpu for &mut legion::systems::CommandBuffer {
         self.add_component(
             entity,
             Usage::<U, _>::new(ChangedFlag::<ShaderModuleDescriptorComponent>::new_clean()),
+        );
+
+        self.add_component(
+            entity,
+            Usage::<U, _>::new(ShaderModuleComponent::new(LazyComponent::Pending)),
+        );
+    }
+
+    fn assemble_wgpu_shader_spirv(
+        self,
+        entity: Entity,
+        desc: ShaderModuleDescriptorSpirV<'static>,
+    ) {
+        self.add_component_with_changed_flag_clean(
+            entity,
+            ShaderModuleDescriptorSpirVComponent::new(desc),
+        );
+        self.add_component(entity, ShaderModuleComponent::new(LazyComponent::Pending));
+    }
+
+    fn assemble_wgpu_shader_spirv_with_usage<U: Send + Sync + 'static>(
+        self,
+        entity: Entity,
+        desc: ShaderModuleDescriptorSpirV<'static>,
+    ) {
+        self.add_component(
+            entity,
+            Usage::<U, _>::new(ShaderModuleDescriptorSpirVComponent::new(desc)),
+        );
+
+        self.add_component(
+            entity,
+            Usage::<U, _>::new(ChangedFlag::<ShaderModuleDescriptorSpirVComponent>::new_clean()),
         );
 
         self.add_component(
@@ -409,6 +460,25 @@ impl AssembleWgpu for &mut legion::systems::CommandBuffer {
         self.add_component(
             entity,
             Usage::<U, _>::new(TextureViewComponent::new(LazyComponent::Pending)),
+        );
+    }
+
+    fn assemble_wgpu_sampler(
+        self,
+        entity: Entity,
+        desc: SamplerDescriptor<'static>,
+    ) {
+        self.add_component(
+            entity,
+            SamplerDescriptorComponent::new(desc),
+        );
+        self.add_component(
+            entity,
+            ChangedFlag::<SamplerDescriptorComponent>::new_clean(),
+        );
+        self.add_component(
+            entity,
+            SamplerComponent::new(LazyComponent::Pending),
         );
     }
 

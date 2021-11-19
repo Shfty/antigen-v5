@@ -82,3 +82,24 @@ where
         self.data.write()
     }
 }
+
+/// Trait for adding some component T to a world alongside a DirtyFlag<T>
+pub trait AddComponentWithUsage<T> {
+    fn add_component_with_usage<U: Send + Sync + 'static>(
+        self,
+        entity: legion::Entity,
+        component: T,
+    );
+}
+
+impl<T: legion::storage::Component> AddComponentWithUsage<T>
+    for &mut legion::systems::CommandBuffer
+{
+    fn add_component_with_usage<U: Send + Sync + 'static>(
+        self,
+        entity: legion::Entity,
+        component: T,
+    ) {
+        self.add_component(entity, Usage::<U, T>::new(component));
+    }
+}

@@ -3,7 +3,7 @@ use antigen_core::{
     Usage,
 };
 
-use wgpu::{BindGroup, BindGroupLayout, Buffer, BufferDescriptor, CommandBuffer, ComputePipeline, ImageCopyTextureBase, ImageDataLayout, PipelineLayout, RenderBundle, RenderPipeline, Sampler, SamplerDescriptor, ShaderModule, ShaderModuleDescriptor, Surface, SurfaceConfiguration, SurfaceTexture, Texture, TextureDescriptor, TextureView, TextureViewDescriptor, util::BufferInitDescriptor};
+use wgpu::{BindGroup, BindGroupLayout, Buffer, BufferDescriptor, CommandBuffer, ComputePipeline, ImageCopyTextureBase, ImageDataLayout, PipelineLayout, RenderBundle, RenderPipeline, Sampler, SamplerDescriptor, ShaderModule, ShaderModuleDescriptor, ShaderModuleDescriptorSpirV, Surface, SurfaceConfiguration, SurfaceTexture, Texture, TextureDescriptor, TextureView, TextureViewDescriptor, util::BufferInitDescriptor};
 
 use std::marker::PhantomData;
 
@@ -158,6 +158,9 @@ impl<T> TextureWriteComponent<T> {
 
 // WGPU shader module descriptor
 pub type ShaderModuleDescriptorComponent<'a> = RwLock<ShaderModuleDescriptor<'a>>;
+
+// WGPU shader module descriptor
+pub type ShaderModuleDescriptorSpirVComponent<'a> = RwLock<ShaderModuleDescriptorSpirV<'a>>;
 
 // WGPU shader module
 pub type ShaderModuleComponent = RwLock<LazyComponent<ShaderModule>>;

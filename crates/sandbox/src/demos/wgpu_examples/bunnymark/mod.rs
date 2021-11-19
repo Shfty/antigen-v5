@@ -224,7 +224,7 @@ pub fn prepare_schedule() -> ImmutableSchedule<Serial> {
             antigen_wgpu::create_buffers_system::<Local>(),
             antigen_wgpu::create_textures_system::<Logo>(),
             antigen_wgpu::create_texture_views_system::<Logo>(),
-            antigen_wgpu::create_samplers_system::<Logo>(),
+            antigen_wgpu::create_samplers_with_usage_system::<Logo>(),
         ],
         parallel![
             antigen_wgpu::buffer_write_system::<Global, RwLock<Globals>, Globals>(),

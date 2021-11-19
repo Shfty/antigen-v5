@@ -111,7 +111,7 @@ pub fn prepare_schedule() -> ImmutableSchedule<Serial> {
         antigen_wgpu::create_shader_modules_usage_system::<Upscale>(),
         antigen_wgpu::create_textures_system::<LowResTarget>(),
         antigen_wgpu::create_texture_views_system::<LowResTarget>(),
-        antigen_wgpu::create_samplers_system::<LowResTarget>(),
+        antigen_wgpu::create_samplers_with_usage_system::<LowResTarget>(),
         conservative_raster_prepare_system()
     ]
 }
