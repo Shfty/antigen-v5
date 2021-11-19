@@ -27,8 +27,10 @@ pub type FragmentShaderComponent = Usage<Fragment, ShaderModuleComponent>;
 
 pub type UniformWorkaroundComponent = Usage<UniformWorkaround, RwLock<bool>>;
 
+pub type RedTexelComponent = Usage<Red, RwLock<[u8; 4]>>;
 pub type RedTextureComponent = Usage<Red, TextureComponent>;
 pub type RedTextureViewComponent = Usage<Red, TextureViewComponent>;
 
+pub type GreenTexelComponent = Usage<Green, RwLock<[u8; 4]>>;
 pub type GreenTextureComponent = Usage<Green, TextureComponent>;
 pub type GreenTextureViewComponent = Usage<Green, TextureViewComponent>;

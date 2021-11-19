@@ -15,8 +15,8 @@ use antigen_core::{
 use antigen_wgpu::{
     wgpu::{
         include_spirv_raw, BufferAddress, BufferDescriptor, BufferUsages, Device, Extent3d,
-        ImageCopyTextureBase, ImageDataLayout, IndexFormat, TextureAspect,
-        TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
+        ImageCopyTextureBase, ImageDataLayout, IndexFormat, TextureAspect, TextureDescriptor,
+        TextureDimension, TextureFormat, TextureUsages,
     },
     AssembleWgpu, RenderAttachmentTextureView, SurfaceConfigurationComponent,
 };
@@ -158,7 +158,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     let red_texture_data = create_texture_data(Color::Red);
     cmd.assemble_wgpu_texture_data_with_usage::<Red, _>(
         renderer_entity,
-        RwLock::new(red_texture_data),
+        RedTexelComponent::new(RwLock::new(red_texture_data)),
         ImageCopyTextureBase {
             texture: (),
             mip_level: 0,
@@ -175,7 +175,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     let green_texture_data = create_texture_data(Color::Green);
     cmd.assemble_wgpu_texture_data_with_usage::<Green, _>(
         renderer_entity,
-        RwLock::new(green_texture_data),
+        GreenTexelComponent::new(RwLock::new(green_texture_data)),
         ImageCopyTextureBase {
             texture: (),
             mip_level: 0,
@@ -226,8 +226,8 @@ pub fn prepare_schedule() -> ImmutableSchedule<Serial> {
         parallel![
             antigen_wgpu::buffer_write_system::<Vertex, RwLock<Vec<Vertex>>, Vec<Vertex>>(),
             antigen_wgpu::buffer_write_system::<Index, RwLock<Vec<Index>>, Vec<Index>>(),
-            antigen_wgpu::texture_write_system::<Red, RwLock<[u8; 4]>, [u8; 4]>(),
-            antigen_wgpu::texture_write_system::<Green, RwLock<[u8; 4]>, [u8; 4]>(),
+            antigen_wgpu::texture_write_system::<Red, RedTexelComponent, [u8; 4]>(),
+            antigen_wgpu::texture_write_system::<Green, GreenTexelComponent, [u8; 4]>(),
         ],
         texture_arrays_prepare_system()
     ]

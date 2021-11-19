@@ -17,7 +17,9 @@
 //           [✓] Render bundle recreation
 //       [ ] Skybox
 //       [ ] Shadow
-//       [ ] Texture Arrays
+//       [✓] Texture Arrays
+//          [✓] Base implementation
+//          [✓] Fix red texture not rendering
 //       [ ] Water
 //
 // TODO: Factor mipmap generation out of Mipmap renderer and into a generalized system
