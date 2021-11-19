@@ -16,10 +16,12 @@ use antigen_core::{
 use antigen_winit::{WindowComponent, WindowEntityMap, WindowEventComponent, WindowSizeComponent};
 
 use legion::{world::SubWorld, IntoQuery};
-use wgpu::{
-    util::DeviceExt, Adapter, Device, ImageCopyTextureBase, ImageDataLayout, Instance, Queue,
-    Surface,
-};
+use wgpu::{Adapter, Device, ImageCopyTextureBase, ImageDataLayout, Instance, Maintain, Queue, Surface, util::DeviceExt};
+
+#[legion::system(par_for_each)]
+pub fn device_poll(device: &Device, #[state] maintain: &Maintain) {
+    device.poll(*maintain)
+}
 
 // Initialize pending surfaces that share an entity with a window
 #[legion::system(for_each)]
@@ -491,12 +493,14 @@ pub fn buffer_write<
             let value = value.read();
             let bytes = value.to_bytes();
 
+            /*
             println!(
                 "Writing {} bytes to {} buffer at offset {}",
                 bytes.len(),
                 std::any::type_name::<T>(),
                 *buffer_write.read()
             );
+            */
             queue.write_buffer(buffer, *buffer_write.read(), bytes);
 
             dirty_flag.set(false);

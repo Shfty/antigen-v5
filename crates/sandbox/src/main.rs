@@ -145,6 +145,7 @@ pub fn winit_thread(world: ImmutableWorld) -> ! {
     let mut redraw_events_cleared_schedule = serial![
         crate::demos::wgpu_examples::render_schedule(),
         antigen_wgpu::submit_and_present_schedule(),
+        antigen_wgpu::device_poll_system(antigen_wgpu::wgpu::Maintain::Poll),
     ];
 
     let mut window_resized_schedule = serial![
