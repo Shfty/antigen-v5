@@ -3,7 +3,13 @@ use antigen_core::{
     Usage,
 };
 
-use wgpu::{BindGroup, BindGroupLayout, Buffer, BufferDescriptor, CommandBuffer, ComputePipeline, ImageCopyTextureBase, ImageDataLayout, PipelineLayout, RenderBundle, RenderPipeline, Sampler, SamplerDescriptor, ShaderModule, ShaderModuleDescriptor, ShaderModuleDescriptorSpirV, Surface, SurfaceConfiguration, SurfaceTexture, Texture, TextureDescriptor, TextureView, TextureViewDescriptor, util::BufferInitDescriptor};
+use wgpu::{
+    util::BufferInitDescriptor, BindGroup, BindGroupLayout, Buffer, BufferAddress,
+    BufferDescriptor, CommandBuffer, ComputePipeline, ImageCopyTextureBase, ImageDataLayout,
+    PipelineLayout, RenderBundle, RenderPipeline, Sampler, SamplerDescriptor, ShaderModule,
+    ShaderModuleDescriptor, ShaderModuleDescriptorSpirV, Surface, SurfaceConfiguration,
+    SurfaceTexture, Texture, TextureDescriptor, TextureView, TextureViewDescriptor,
+};
 
 use std::marker::PhantomData;
 
@@ -93,22 +99,22 @@ pub type BufferComponent = RwLock<LazyComponent<Buffer>>;
 
 // Buffer write operation
 pub struct BufferWriteComponent<T> {
-    offset: RwLock<wgpu::BufferAddress>,
+    offset: RwLock<BufferAddress>,
     _phantom: PhantomData<T>,
 }
 
-impl<T> ReadWriteLock<wgpu::BufferAddress> for BufferWriteComponent<T> {
-    fn read(&self) -> RwLockReadGuard<wgpu::BufferAddress> {
+impl<T> ReadWriteLock<BufferAddress> for BufferWriteComponent<T> {
+    fn read(&self) -> RwLockReadGuard<BufferAddress> {
         self.offset.read()
     }
 
-    fn write(&self) -> RwLockWriteGuard<wgpu::BufferAddress> {
+    fn write(&self) -> RwLockWriteGuard<BufferAddress> {
         self.offset.write()
     }
 }
 
 impl<T> BufferWriteComponent<T> {
-    pub fn new(offset: wgpu::BufferAddress) -> Self {
+    pub fn new(offset: BufferAddress) -> Self {
         BufferWriteComponent {
             offset: RwLock::new(offset),
             _phantom: Default::default(),

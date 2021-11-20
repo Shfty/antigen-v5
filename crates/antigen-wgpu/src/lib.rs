@@ -2,11 +2,13 @@ mod assemblage;
 mod components;
 mod systems;
 mod to_bytes;
+mod staging_belt;
 
 pub use assemblage::*;
 pub use components::*;
 pub use systems::*;
 pub use to_bytes::*;
+pub use staging_belt::*;
 pub use wgpu;
 
 use antigen_core::{parallel, serial, ImmutableSchedule, Parallel, Serial};

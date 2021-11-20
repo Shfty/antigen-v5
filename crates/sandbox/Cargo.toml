@@ -13,6 +13,8 @@ nalgebra-glm = "0.15.0"
 bytemuck = { version = "1.7.2", features = ["derive", "min_const_generics"] }
 rand = "0.8.4"
 png = "0.17.2"
+obj = "0.10.2"
+ddsfile = "0.4.0"
 
 antigen-core = { path = "../antigen-core" }
 antigen-winit = { path = "../antigen-winit" }

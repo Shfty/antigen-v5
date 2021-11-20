@@ -493,14 +493,12 @@ pub fn buffer_write<
             let value = value.read();
             let bytes = value.to_bytes();
 
-            /*
             println!(
                 "Writing {} bytes to {} buffer at offset {}",
                 bytes.len(),
                 std::any::type_name::<T>(),
                 *buffer_write.read()
             );
-            */
             queue.write_buffer(buffer, *buffer_write.read(), bytes);
 
             dirty_flag.set(false);

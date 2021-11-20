@@ -15,7 +15,13 @@
 //           [✓] MSAA rendering
 //           [✓] Recreate framebuffer on resize
 //           [✓] Render bundle recreation
-//       [ ] Skybox
+//       [>] Skybox
+//          [✓] First working implementation
+//          [✓] Window resize support
+//          [ ] Fix thread hang when dragging-sizing to zero
+//          [ ] Upload buffer data using staging belt
+//          [ ] Input handling
+//              Will need to refactor camera into a component
 //       [ ] Shadow
 //       [✓] Texture Arrays
 //          [✓] Base implementation
@@ -58,7 +64,10 @@ mod demos;
 pub use demos::*;
 
 use antigen_core::*;
-use antigen_wgpu::wgpu::{DeviceDescriptor, Features, Limits};
+use antigen_wgpu::{
+    wgpu::{DeviceDescriptor, Features, Limits},
+    StagingBeltManager,
+};
 use antigen_winit::winit::event::{Event, WindowEvent};
 
 const GAME_TICK_DURATION: std::time::Duration = std::time::Duration::from_secs(1);
@@ -87,9 +96,16 @@ fn main() -> ! {
                     Features::PUSH_CONSTANTS
                         | Features::SAMPLED_TEXTURE_AND_STORAGE_BUFFER_ARRAY_NON_UNIFORM_INDEXING
                         | Features::UNSIZED_BINDING_ARRAY
+                )
+                | (
+                    // Features for skybox texture compression
+                    Features::TEXTURE_COMPRESSION_BC
+                    //    | Features::TEXTURE_COMPRESSION_ETC2
+                    //    | Features::TEXTURE_COMPRESSION_ASTC_LDR
                 ),
             limits: Limits {
                 max_push_constant_size: 4,
+                max_texture_dimension_2d: 4096,
                 ..Limits::downlevel_defaults()
             },
         },
@@ -120,6 +136,8 @@ pub fn game_thread(world: ImmutableWorld) -> impl Fn() {
 }
 
 pub fn winit_thread(world: ImmutableWorld) -> ! {
+    let mut staging_belt_manager = StagingBeltManager::new();
+
     // Resets dirty flags that should only remain active for one frame
     let reset_dirty_flags_schedule = parallel![
         antigen_winit::reset_resize_window_dirty_flags_system(),
@@ -145,8 +163,11 @@ pub fn winit_thread(world: ImmutableWorld) -> ! {
     let mut redraw_events_cleared_schedule = serial![
         crate::demos::wgpu_examples::render_schedule(),
         antigen_wgpu::submit_and_present_schedule(),
-        antigen_wgpu::device_poll_system(antigen_wgpu::wgpu::Maintain::Poll),
     ];
+
+    let mut post_redraw_events_cleared_schedule = serial![antigen_wgpu::device_poll_system(
+        antigen_wgpu::wgpu::Maintain::Wait
+    ),];
 
     let mut window_resized_schedule = serial![
         antigen_winit::resize_window_system(),
@@ -179,7 +200,20 @@ pub fn winit_thread(world: ImmutableWorld) -> ! {
                 _ => (),
             },
             Event::RedrawEventsCleared => {
+                antigen_wgpu::staging_belt_write_thread_local::<(), RwLock<Vec<u8>>, Vec<u8>>(
+                    &world.read(),
+                    &mut staging_belt_manager,
+                );
+                antigen_wgpu::staging_belt_finish_thread_local::<()>(
+                    &world.read(),
+                    &mut staging_belt_manager,
+                );
                 redraw_events_cleared_schedule.execute(world);
+                antigen_wgpu::staging_belt_recall_thread_local::<()>(
+                    &world.read(),
+                    &mut staging_belt_manager,
+                );
+                post_redraw_events_cleared_schedule.execute(world);
             }
             _ => (),
         },
