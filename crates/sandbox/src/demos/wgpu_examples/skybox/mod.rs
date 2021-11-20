@@ -1,18 +1,23 @@
 mod components;
 mod systems;
 
-use antigen_winit::AssembleWinit;
+use antigen_winit::{AssembleWinit, WindowComponent};
 pub use components::*;
+use legion::World;
 pub use systems::*;
 
-use antigen_core::{AddIndirectComponent, ChangedFlag, ImmutableSchedule, LazyComponent, RwLock, Serial, Single, parallel, serial, single};
+use antigen_core::{
+    parallel, serial, single, AddIndirectComponent, ChangedFlag, ImmutableSchedule, LazyComponent,
+    RwLock, Serial, Single,
+};
 
 use antigen_wgpu::{
     wgpu::{
-        AddressMode, BufferAddress, BufferDescriptor, BufferUsages, Device, FilterMode,
+        AddressMode, BufferAddress, BufferDescriptor, BufferSize, BufferUsages, Device, FilterMode,
         SamplerDescriptor, ShaderModuleDescriptor, ShaderSource, TextureFormat,
     },
-    AssembleWgpu, RenderAttachmentTextureView, SurfaceConfigurationComponent, ToBytes,
+    AssembleWgpu, RenderAttachmentTextureView, StagingBeltManager, SurfaceConfigurationComponent,
+    ToBytes,
 };
 
 use bytemuck::{Pod, Zeroable};
@@ -32,9 +37,9 @@ impl Camera {
     fn to_uniform_data(&self, aspect: f32) -> [f32; 52] {
         let projection = nalgebra_glm::perspective_lh_zo(aspect, 45.0, 1.0, 50.0);
         let cam_pos = nalgebra::vector![
-            self.angle_xz.cos() * self.angle_y.sin() * self.dist,
-            self.angle_xz.sin() * self.dist + MODEL_CENTER_Y,
-            self.angle_xz.cos() * self.angle_y.cos() * self.dist
+            self.angle_y.cos() * self.angle_xz.sin() * self.dist,
+            self.angle_y.sin() * self.dist + MODEL_CENTER_Y,
+            self.angle_y.cos() * self.angle_xz.cos() * self.dist
         ];
         let view = nalgebra_glm::look_at_lh(
             &cam_pos,
@@ -92,6 +97,10 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     );
     cmd.add_indirect_component::<RenderAttachmentTextureView>(renderer_entity, window_entity);
 
+    // Window reference for input handling
+    cmd.add_indirect_component::<WindowComponent>(renderer_entity, window_entity);
+
+    // Shader
     cmd.assemble_wgpu_shader(
         renderer_entity,
         ShaderModuleDescriptor {
@@ -147,11 +156,14 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     };
 
     let raw_uniforms = camera.to_uniform_data(1.0);
-    cmd.assemble_wgpu_buffer_data_with_usage::<Uniform, _>(
+    antigen_wgpu::assemble_staging_belt_data_with_usage::<Uniform, _>(
+        cmd,
         renderer_entity,
         RwLock::new(raw_uniforms),
         0,
+        BufferSize::new(std::mem::size_of::<[f32; 52]>() as u64).unwrap(),
     );
+    antigen_wgpu::assemble_staging_belt_with_usage::<Uniform>(cmd, renderer_entity, 0x100);
     cmd.assemble_wgpu_buffer_with_usage::<Uniform>(
         renderer_entity,
         BufferDescriptor {
@@ -196,6 +208,25 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     );
 }
 
+pub fn update_thread_local(world: &World, staging_belt_manager: &mut StagingBeltManager) {
+    antigen_wgpu::create_staging_belt_thread_local::<crate::demos::wgpu_examples::skybox::Uniform>(
+        world,
+        staging_belt_manager,
+    );
+}
+
+pub fn prepare_thread_local(world: &World, staging_belt_manager: &mut StagingBeltManager) {
+    antigen_wgpu::staging_belt_write_thread_local::<
+        crate::demos::wgpu_examples::skybox::Uniform,
+        RwLock<[f32; 52]>,
+        [f32; 52],
+    >(world, staging_belt_manager);
+    antigen_wgpu::staging_belt_finish_thread_local::<crate::demos::wgpu_examples::skybox::Uniform>(
+        world,
+        staging_belt_manager,
+    );
+}
+
 pub fn prepare_schedule() -> ImmutableSchedule<Serial> {
     serial![
         parallel![
@@ -204,14 +235,26 @@ pub fn prepare_schedule() -> ImmutableSchedule<Serial> {
             antigen_wgpu::create_buffers_system::<Uniform>(),
             antigen_wgpu::create_samplers_system(),
         ],
-        parallel![
-            antigen_wgpu::buffer_write_system::<Vertex, RwLock<Vec<Vertex>>, Vec<Vertex>>(),
-            antigen_wgpu::buffer_write_system::<Uniform, RwLock<[f32; 52]>, [f32; 52]>(),
-        ],
+        parallel![antigen_wgpu::buffer_write_system::<
+            Vertex,
+            RwLock<Vec<Vertex>>,
+            Vec<Vertex>,
+        >(),],
         skybox_prepare_system()
     ]
 }
 
 pub fn render_schedule() -> ImmutableSchedule<Single> {
     single![skybox_render_system()]
+}
+
+pub fn post_render_thread_local(world: &World, staging_belt_manager: &mut StagingBeltManager) {
+    antigen_wgpu::staging_belt_recall_thread_local::<crate::demos::wgpu_examples::skybox::Uniform>(
+        world,
+        staging_belt_manager,
+    );
+}
+
+pub fn cursor_moved_schedule() -> ImmutableSchedule<Single> {
+    single![skybox_cursor_moved_system()]
 }

@@ -15,12 +15,12 @@
 //           [✓] MSAA rendering
 //           [✓] Recreate framebuffer on resize
 //           [✓] Render bundle recreation
-//       [>] Skybox
+//       [✓] Skybox
 //          [✓] First working implementation
 //          [✓] Window resize support
 //          [✓] Fix thread hang when dragging-sizing to zero
-//          [ ] Upload buffer data using staging belt
-//          [ ] Input handling
+//          [✓] Upload buffer data using staging belt
+//          [✓] Input handling
 //              Will need to refactor camera into a component
 //       [ ] Shadow
 //       [✓] Texture Arrays
@@ -52,16 +52,18 @@
 //       StagingBelt itself isn't Send + Sync, will need to be thread-local
 //       Shouldn't be recreating it on every upload - point is efficient buffer reuse
 //       [✓] Initial manager + component + system implementation
-//       [ ] Assemly implementation
-//       [ ] First renderer integration
+//       [✓] Assemly implementation
+//       [✓] First renderer integration
+//       [✓] Compose thread-local functions similar to schedules
 //       [ ] Figure out how best to handle reclaiming / device polling
 //           Currently uploading everything at once and polling in wait mode to avoid futures
-//           Ideally should use poll mode, use futures to block associated render system
+//           Ideally should use poll mode, use futures to block associated render systems?
 //
 // TODO: Reimplement map renderer
 //
 // TODO: Investigate frame drops on window events
 //       Ex. Obvious framerate dip when moving mouse over bunnymark window in release mode
+//       Seems to have changed since implementing cursor move handling - needs more investigation
 //       [ ] Test rendering inside of RedrawRequested instead of RedrawEventsCleared
 //       [ ] Test rendering at the end of MainEventsCleared
 
@@ -183,13 +185,32 @@ pub fn winit_thread(world: ImmutableWorld) -> ! {
         crate::demos::wgpu_examples::bunnymark::keyboard_event_schedule(),
         crate::demos::wgpu_examples::msaa_line::keyboard_event_schedule(),
     ];
+    let mut window_cursor_moved_schedule =
+        parallel![crate::demos::wgpu_examples::skybox::cursor_moved_schedule(),];
     let mut window_close_requested_schedule = single![antigen_winit::close_window_system()];
+
+    // Thread-local functions
+    let main_events_cleared_thread_local =
+        |world: &legion::World, staging_belt_manager: &mut StagingBeltManager| {
+            crate::demos::wgpu_examples::update_thread_local(world, staging_belt_manager);
+        };
+
+    let redraw_events_cleared_thread_local =
+        |world: &legion::World, staging_belt_manager: &mut StagingBeltManager| {
+            crate::demos::wgpu_examples::prepare_thread_local(world, staging_belt_manager);
+        };
+
+    let post_redraw_events_cleared_thread_local =
+        |world: &legion::World, staging_belt_manager: &mut StagingBeltManager| {
+            crate::demos::wgpu_examples::post_render_thread_local(world, staging_belt_manager);
+        };
 
     // Enter winit event loop
     antigen_winit::winit::event_loop::EventLoop::new().run(antigen_winit::event_loop_wrapper(
         world,
         move |world, event, _, _control_flow| match &event {
             Event::MainEventsCleared => {
+                main_events_cleared_thread_local(&world.read(), &mut staging_belt_manager);
                 main_events_cleared_schedule.execute(world);
             }
             Event::RedrawRequested(_) => {
@@ -203,22 +224,14 @@ pub fn winit_thread(world: ImmutableWorld) -> ! {
                     window_close_requested_schedule.execute(world);
                 }
                 WindowEvent::KeyboardInput { .. } => window_keyboard_event_schedule.execute(world),
+                WindowEvent::CursorMoved { .. } => window_cursor_moved_schedule.execute(world),
                 _ => (),
             },
             Event::RedrawEventsCleared => {
-                antigen_wgpu::staging_belt_write_thread_local::<(), RwLock<Vec<u8>>, Vec<u8>>(
-                    &world.read(),
-                    &mut staging_belt_manager,
-                );
-                antigen_wgpu::staging_belt_finish_thread_local::<()>(
-                    &world.read(),
-                    &mut staging_belt_manager,
-                );
+                redraw_events_cleared_thread_local(&world.read(), &mut staging_belt_manager);
                 redraw_events_cleared_schedule.execute(world);
-                antigen_wgpu::staging_belt_recall_thread_local::<()>(
-                    &world.read(),
-                    &mut staging_belt_manager,
-                );
+
+                post_redraw_events_cleared_thread_local(&world.read(), &mut staging_belt_manager);
                 post_redraw_events_cleared_schedule.execute(world);
             }
             _ => (),

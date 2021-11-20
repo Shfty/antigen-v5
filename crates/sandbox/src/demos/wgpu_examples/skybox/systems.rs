@@ -26,6 +26,7 @@ use antigen_wgpu::{
     ShaderModuleComponent, SurfaceConfigurationComponent,
 };
 
+use antigen_winit::{winit::event::WindowEvent, WindowComponent, WindowEventComponent};
 use legion::{world::SubWorld, IntoQuery};
 
 fn create_depth_texture(config: &SurfaceConfiguration, device: &Device) -> TextureView {
@@ -453,4 +454,67 @@ pub fn skybox_render(
     drop(rpass);
 
     command_buffers.write().push(encoder.finish());
+}
+
+#[legion::system(par_for_each)]
+#[read_component(WindowComponent)]
+#[read_component(SurfaceConfigurationComponent)]
+#[read_component(WindowEventComponent)]
+pub fn skybox_cursor_moved(
+    world: &SubWorld,
+    _: &Skybox,
+    camera_data: &RwLock<[f32; 52]>,
+    camera_data_changed: &ChangedFlag<RwLock<[f32; 52]>>,
+    window: &IndirectComponent<WindowComponent>,
+    surface_component: &IndirectComponent<SurfaceConfigurationComponent>,
+) {
+    let window = world
+        .get_indirect(window)
+        .expect("No indirect WindowComponent");
+    let window = window.read();
+    let window = if let LazyComponent::Ready(window) = &*window {
+        window
+    } else {
+        return;
+    };
+
+    let surface_component = world
+        .get_indirect(surface_component)
+        .expect("No indirect SurfaceConfigurationComponent");
+    let config = surface_component.read();
+
+    let window_event = <&WindowEventComponent>::query()
+        .iter(world)
+        .next()
+        .expect("No WindowEventComponent");
+
+    let window_event = window_event.read();
+    let (window_id, position) = if let (
+        Some(window_id),
+        Some(WindowEvent::CursorMoved { position, .. }),
+    ) = &*window_event
+    {
+        (window_id, position)
+    } else {
+        return;
+    };
+
+    if window.id() != *window_id {
+        return;
+    }
+
+    let norm_x = position.x as f32 / config.width as f32;
+    let norm_y = position.y as f32 / config.height as f32;
+
+    let camera = Camera {
+        angle_xz: norm_x * 5.0,
+        angle_y: norm_y,
+        dist: 30.0,
+    };
+
+    *camera_data.write() =
+        camera.to_uniform_data(config.width as f32 / config.height as f32);
+    camera_data_changed.set(true);
+
+    window.request_redraw();
 }

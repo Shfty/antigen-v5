@@ -1,6 +1,7 @@
 use antigen_core::{
-    ChangedFlag, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock, RwLock,
-    RwLockReadGuard, RwLockWriteGuard, Usage,
+    impl_read_write_lock, AddComponentWithChangedFlag, AddIndirectComponent, ChangedFlag,
+    GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock, RwLock, RwLockReadGuard,
+    RwLockWriteGuard, Usage,
 };
 use legion::{IntoQuery, World};
 use wgpu::{
@@ -66,7 +67,30 @@ impl StagingBeltManager {
 
 // Staging belt handle
 pub enum StagingBeltTag {}
-pub type StagingBeltComponent = Usage<StagingBeltTag, RwLock<StagingBeltId>>;
+
+pub struct StagingBeltComponent {
+    chunk_size: BufferAddress,
+    staging_belt: RwLock<LazyComponent<StagingBeltId>>,
+}
+
+impl_read_write_lock!(
+    StagingBeltComponent,
+    staging_belt,
+    LazyComponent<StagingBeltId>
+);
+
+impl StagingBeltComponent {
+    pub fn new(chunk_size: BufferAddress) -> Self {
+        StagingBeltComponent {
+            chunk_size,
+            staging_belt: RwLock::new(LazyComponent::Pending),
+        }
+    }
+
+    pub fn chunk_size(&self) -> &BufferAddress {
+        &self.chunk_size
+    }
+}
 
 // Staging belt buffer write operation
 pub struct StagingBeltWriteComponent<T> {
@@ -105,6 +129,53 @@ impl<T> StagingBeltWriteComponent<T> {
     }
 }
 
+pub fn assemble_staging_belt_with_usage<U: Send + Sync + 'static>(
+    cmd: &mut legion::systems::CommandBuffer,
+    entity: legion::Entity,
+    chunk_size: BufferAddress,
+) {
+    cmd.add_component_with_changed_flag_clean(
+        entity,
+        Usage::<U, _>::new(StagingBeltComponent::new(chunk_size)),
+    )
+}
+
+pub fn assemble_staging_belt_data_with_usage<U, T>(
+    cmd: &mut legion::systems::CommandBuffer,
+    entity: legion::Entity,
+    data: T,
+    offset: BufferAddress,
+    size: BufferSize,
+) where
+    U: Send + Sync + 'static,
+    T: legion::storage::Component,
+{
+    cmd.add_component_with_changed_flag_dirty(entity, data);
+    cmd.add_component(
+        entity,
+        Usage::<U, _>::new(StagingBeltWriteComponent::<T>::new(offset, size)),
+    );
+    cmd.add_indirect_component_self::<Usage<U, StagingBeltComponent>>(entity);
+    cmd.add_indirect_component_self::<ChangedFlag<Usage<U, StagingBeltComponent>>>(entity);
+    cmd.add_indirect_component_self::<Usage<U, BufferComponent>>(entity);
+    cmd.add_indirect_component_self::<CommandBuffersComponent>(entity);
+}
+
+// Initialize staging belts
+pub fn create_staging_belt_thread_local<T: Send + Sync + 'static>(
+    world: &World,
+    staging_belt_manager: &mut StagingBeltManager,
+) {
+    <&Usage<T, StagingBeltComponent>>::query().for_each(world, |staging_belt| {
+        if staging_belt.read().is_pending() {
+            let staging_belt_id =
+                staging_belt_manager.create_staging_belt(*staging_belt.chunk_size());
+            staging_belt.write().set_ready(staging_belt_id);
+            println!("Created staging belt with ID {:?}", staging_belt_id);
+        }
+    })
+}
+
 // Write data to buffer via staging belt
 pub fn staging_belt_write_thread_local<
     T: Send + Sync + 'static,
@@ -120,64 +191,102 @@ pub fn staging_belt_write_thread_local<
         return;
     };
 
-    <(
+    for (
+        staging_belt_write,
+        value,
+        data_changed,
+        staging_belt,
+        staging_belt_changed,
+        buffer,
+        command_buffers,
+    ) in <(
         &Usage<T, StagingBeltWriteComponent<L>>,
         &L,
         &ChangedFlag<L>,
         &IndirectComponent<Usage<T, StagingBeltComponent>>,
+        &IndirectComponent<ChangedFlag<Usage<T, StagingBeltComponent>>>,
         &IndirectComponent<Usage<T, BufferComponent>>,
-        &IndirectComponent<Usage<T, CommandBuffersComponent>>,
+        &IndirectComponent<CommandBuffersComponent>,
     )>::query()
-    .for_each(
-        world,
-        |(staging_belt_write, value, dirty_flag, staging_belt, buffer, command_buffers)| {
-            let staging_belt = world.get_indirect(staging_belt).unwrap();
-            let buffer = world.get_indirect(buffer).unwrap();
-            let command_buffers = world.get_indirect(command_buffers).unwrap();
+    .iter(world)
+    {
+        let staging_belt = world.get_indirect(staging_belt).unwrap();
+        let staging_belt_changed = world.get_indirect(staging_belt_changed).unwrap();
+        let buffer = world.get_indirect(buffer).unwrap();
+        let command_buffers = world.get_indirect(command_buffers).unwrap();
 
-            if dirty_flag.get() {
-                let staging_belt = staging_belt.read();
+        if data_changed.get() {
+            let staging_belt = staging_belt.read();
+            let staging_belt = if let LazyComponent::Ready(staging_belt) = &*staging_belt {
+                staging_belt
+            } else {
+                return;
+            };
 
-                let buffer = buffer.read();
-                let buffer = if let LazyComponent::Ready(buffer) = &*buffer {
-                    buffer
-                } else {
-                    return;
-                };
+            let buffer = buffer.read();
+            let buffer = if let LazyComponent::Ready(buffer) = &*buffer {
+                buffer
+            } else {
+                return;
+            };
 
-                let offset = *ReadWriteLock::<BufferAddress>::read(staging_belt_write);
-                let size = *ReadWriteLock::<BufferSize>::read(staging_belt_write);
+            let offset = *ReadWriteLock::<BufferAddress>::read(staging_belt_write);
+            let size = *ReadWriteLock::<BufferSize>::read(staging_belt_write);
 
-                let value = value.read();
-                let bytes = value.to_bytes();
+            let value = value.read();
+            let bytes = value.to_bytes();
 
-                let mut encoder =
-                    device.create_command_encoder(&CommandEncoderDescriptor { label: None });
+            let mut encoder =
+                device.create_command_encoder(&CommandEncoderDescriptor { label: None });
 
-                staging_belt_manager.write_buffer(
-                    device,
-                    &mut encoder,
-                    buffer,
+            println!(
+                    "Writing {} bytes to {} buffer at offset {} with size {} via staging belt with id {:?}",
+                    bytes.len(),
+                    std::any::type_name::<T>(),
                     offset,
                     size,
-                    &*staging_belt,
-                    bytes,
+                    staging_belt,
                 );
 
-                command_buffers.write().push(encoder.finish());
+            staging_belt_manager.write_buffer(
+                device,
+                &mut encoder,
+                buffer,
+                offset,
+                size,
+                &*staging_belt,
+                bytes,
+            );
 
-                dirty_flag.set(false);
-            }
-        },
-    );
+            command_buffers.write().push(encoder.finish());
+
+            data_changed.set(false);
+            staging_belt_changed.set(true);
+        }
+    }
 }
 
 pub fn staging_belt_finish_thread_local<T: Send + Sync + 'static>(
     world: &World,
     staging_belt_manager: &mut StagingBeltManager,
 ) {
-    <&Usage<T, StagingBeltComponent>>::query().for_each(world, |staging_belt| {
-        staging_belt_manager.finish(&*staging_belt.read());
+    <(
+        &Usage<T, StagingBeltComponent>,
+        &ChangedFlag<Usage<T, StagingBeltComponent>>,
+    )>::query()
+    .for_each(world, |(staging_belt, changed_flag)| {
+        if !changed_flag.get() {
+            return;
+        }
+
+        let staging_belt = staging_belt.read();
+        let staging_belt = if let LazyComponent::Ready(staging_belt) = &*staging_belt {
+            staging_belt
+        } else {
+            return;
+        };
+        staging_belt_manager.finish(staging_belt);
+        println!("Finished staging belt with id {:?}", staging_belt);
     });
 }
 
@@ -185,8 +294,25 @@ pub fn staging_belt_recall_thread_local<T: Send + Sync + 'static>(
     world: &World,
     staging_belt_manager: &mut StagingBeltManager,
 ) {
-    <&Usage<T, StagingBeltComponent>>::query().for_each(world, |staging_belt| {
+    <(
+        &Usage<T, StagingBeltComponent>,
+        &ChangedFlag<Usage<T, StagingBeltComponent>>,
+    )>::query()
+    .for_each(world, |(staging_belt, changed_flag)| {
+        if !changed_flag.get() {
+            return;
+        }
+
+        let staging_belt = staging_belt.read();
+        let staging_belt = if let LazyComponent::Ready(staging_belt) = &*staging_belt {
+            staging_belt
+        } else {
+            return;
+        };
+
         // Ignore resulting future - this assumes the wgpu device is being polled in wait mode
-        let _ = staging_belt_manager.recall(&*staging_belt.read());
+        let _ = staging_belt_manager.recall(staging_belt);
+        changed_flag.set(false);
+        println!("Recalled staging belt with id {:?}", staging_belt);
     });
 }

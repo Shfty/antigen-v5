@@ -1,3 +1,6 @@
+use antigen_wgpu::StagingBeltManager;
+use legion::World;
+
 use crate::{parallel, ImmutableSchedule, Parallel};
 
 pub mod boids;
@@ -22,6 +25,14 @@ pub fn assemble_schedule() -> ImmutableSchedule<Parallel> {
         texture_arrays::assemble_system(),
         skybox::assemble_system(),
     ]
+}
+
+pub fn update_thread_local(world: &World, staging_belt_manager: &mut StagingBeltManager) {
+    skybox::update_thread_local(world, staging_belt_manager);
+}
+
+pub fn prepare_thread_local(world: &World, staging_belt_manager: &mut StagingBeltManager) {
+    skybox::prepare_thread_local(world, staging_belt_manager);
 }
 
 pub fn prepare_schedule() -> ImmutableSchedule<Parallel> {
@@ -50,6 +61,10 @@ pub fn render_schedule() -> ImmutableSchedule<Parallel> {
         texture_arrays::render_schedule(),
         skybox::render_schedule(),
     ]
+}
+
+pub fn post_render_thread_local(world: &World, staging_belt_manager: &mut StagingBeltManager) {
+    skybox::post_render_thread_local(world, staging_belt_manager);
 }
 
 pub fn surface_resize_schedule() -> ImmutableSchedule<Parallel> {
