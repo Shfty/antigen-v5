@@ -12,6 +12,7 @@ pub mod conservative_raster;
 pub mod mipmap;
 pub mod texture_arrays;
 pub mod skybox;
+pub mod shadow;
 
 pub fn assemble_schedule() -> ImmutableSchedule<Parallel> {
     parallel![
@@ -24,6 +25,7 @@ pub fn assemble_schedule() -> ImmutableSchedule<Parallel> {
         mipmap::assemble_system(),
         texture_arrays::assemble_system(),
         skybox::assemble_system(),
+        shadow::assemble_system(),
     ]
 }
 
@@ -46,6 +48,7 @@ pub fn prepare_schedule() -> ImmutableSchedule<Parallel> {
         mipmap::prepare_schedule(),
         texture_arrays::prepare_schedule(),
         skybox::prepare_schedule(),
+        shadow::prepare_schedule(),
     ]
 }
 
@@ -60,6 +63,7 @@ pub fn render_schedule() -> ImmutableSchedule<Parallel> {
         mipmap::render_schedule(),
         texture_arrays::render_schedule(),
         skybox::render_schedule(),
+        shadow::render_schedule(),
     ]
 }
 

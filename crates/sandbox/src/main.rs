@@ -22,7 +22,7 @@
 //          [✓] Upload buffer data using staging belt
 //          [✓] Input handling
 //              Will need to refactor camera into a component
-//       [ ] Shadow
+//       [>] Shadow
 //       [✓] Texture Arrays
 //          [✓] Base implementation
 //          [✓] Fix red texture not rendering
@@ -59,7 +59,12 @@
 //           Currently uploading everything at once and polling in wait mode to avoid futures
 //           Ideally should use poll mode, use futures to block associated render systems?
 //
-// TODO: Reimplement map renderer
+// TODO: Reimplement map demo scene
+//       [ ] Renderer
+//       [ ] Physics integration
+//       [ ] Map texture loading
+//       [ ] Basic first-person character control
+//       [ ] Render WGPU demos to texture, tie to named map texture for display in-world
 //
 // TODO: Investigate frame drops on window events
 //       Ex. Obvious framerate dip when moving mouse over bunnymark window in release mode
