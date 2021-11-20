@@ -2,11 +2,11 @@ use crate::wgpu_examples::skybox::{DEPTH_FORMAT, IMAGE_SIZE};
 
 use super::{
     Camera, DepthTextureView, EntityPipelineComponent, SkyPipelineComponent, Skybox,
-    SkyboxTextureComponent, SkyboxTextureViewComponent, Uniform, UniformBufferComponent, Vertex,
+    SkyboxTextureComponent, SkyboxTextureViewComponent, UniformBufferComponent, Vertex,
     VertexBufferComponent, VertexCountComponent,
 };
 use antigen_core::{
-    ChangedFlag, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock, RwLock, Usage,
+    ChangedFlag, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock, RwLock,
 };
 
 use antigen_wgpu::{
@@ -28,11 +28,7 @@ use antigen_wgpu::{
 
 use legion::{world::SubWorld, IntoQuery};
 
-fn create_depth_texture(config: &SurfaceConfiguration, device: &Device) -> Option<TextureView> {
-    if config.width == 0 || config.height == 0 {
-        return None;
-    }
-
+fn create_depth_texture(config: &SurfaceConfiguration, device: &Device) -> TextureView {
     let depth_texture = device.create_texture(&TextureDescriptor {
         size: Extent3d {
             width: config.width,
@@ -47,7 +43,7 @@ fn create_depth_texture(config: &SurfaceConfiguration, device: &Device) -> Optio
         label: None,
     });
 
-    Some(depth_texture.create_view(&TextureViewDescriptor::default()))
+    depth_texture.create_view(&TextureViewDescriptor::default())
 }
 
 // Initialize the hello triangle render pipeline
@@ -76,14 +72,15 @@ pub fn skybox_prepare(
     let surface_component = world.get_indirect(surface_component).unwrap();
     let config = surface_component.read();
 
+    if config.width == 0 || config.height == 0 {
+        return;
+    }
+
     if depth_texture_view_component.read().is_pending() {
-        if let Some(depth_texture_view) = create_depth_texture(&config, device) {
-            depth_texture_view_component
-                .write()
-                .set_ready(depth_texture_view);
-        } else {
-            depth_texture_view_component.write().set_pending();
-        }
+        let depth_texture_view = create_depth_texture(&config, device);
+        depth_texture_view_component
+            .write()
+            .set_ready(depth_texture_view);
     }
 
     if !entity_pipeline_component.read().is_pending() {
@@ -320,22 +317,24 @@ pub fn skybox_resize(
     if surface_config_changed.get() {
         let device = <&Device>::query().iter(world).next().unwrap();
 
-        if let Some(depth_texture_view) = create_depth_texture(&surface_config, device) {
-            depth_texture_view_component
-                .write()
-                .set_ready(depth_texture_view);
-
-            let camera = Camera {
-                angle_xz: 0.2,
-                angle_y: 0.2,
-                dist: 30.0,
-            };
-            *camera_data.write() =
-                camera.to_uniform_data(surface_config.width as f32 / surface_config.height as f32);
-            camera_data_changed.set(true);
-        } else {
-            depth_texture_view_component.write().set_pending();
+        if surface_config.width == 0 || surface_config.height == 0 {
+            return;
         }
+
+        let depth_texture_view = create_depth_texture(&surface_config, device);
+
+        depth_texture_view_component
+            .write()
+            .set_ready(depth_texture_view);
+
+        let camera = Camera {
+            angle_xz: 0.2,
+            angle_y: 0.2,
+            dist: 30.0,
+        };
+        *camera_data.write() =
+            camera.to_uniform_data(surface_config.width as f32 / surface_config.height as f32);
+        camera_data_changed.set(true);
     }
 }
 

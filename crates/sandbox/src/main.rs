@@ -18,7 +18,7 @@
 //       [>] Skybox
 //          [✓] First working implementation
 //          [✓] Window resize support
-//          [ ] Fix thread hang when dragging-sizing to zero
+//          [✓] Fix thread hang when dragging-sizing to zero
 //          [ ] Upload buffer data using staging belt
 //          [ ] Input handling
 //              Will need to refactor camera into a component
@@ -51,6 +51,12 @@
 //       Treat as its own 'data upload' step that occurs before draw
 //       StagingBelt itself isn't Send + Sync, will need to be thread-local
 //       Shouldn't be recreating it on every upload - point is efficient buffer reuse
+//       [✓] Initial manager + component + system implementation
+//       [ ] Assemly implementation
+//       [ ] First renderer integration
+//       [ ] Figure out how best to handle reclaiming / device polling
+//           Currently uploading everything at once and polling in wait mode to avoid futures
+//           Ideally should use poll mode, use futures to block associated render system
 //
 // TODO: Reimplement map renderer
 //
