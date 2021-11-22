@@ -91,12 +91,13 @@ pub fn winit_event_handler<T>(mut f: impl EventLoopHandler<T>) -> impl EventLoop
           control_flow: &mut ControlFlow| {
         match &event {
             Event::MainEventsCleared => {
-                antigen_wgpu::create_staging_belt_thread_local::<skybox::Uniform>(
+                antigen_wgpu::create_staging_belt_thread_local(
                     &world.read(),
                     &mut staging_belt_manager,
                 );
                 surface_resize_schedule.execute(world);
                 prepare_schedule.execute(world);
+                prepare_thread_local(&world.read(), &mut staging_belt_manager);
             }
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::Resized(_) => {
@@ -107,8 +108,6 @@ pub fn winit_event_handler<T>(mut f: impl EventLoopHandler<T>) -> impl EventLoop
                 _ => (),
             },
             Event::RedrawEventsCleared => {
-                prepare_thread_local(&world.read(), &mut staging_belt_manager);
-
                 antigen_wgpu::staging_belt_finish_thread_local(
                     &world.read(),
                     &mut staging_belt_manager,

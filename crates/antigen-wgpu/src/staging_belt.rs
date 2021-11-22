@@ -71,6 +71,7 @@ pub enum StagingBeltTag {}
 pub struct StagingBeltComponent {
     chunk_size: BufferAddress,
     staging_belt: RwLock<LazyComponent<StagingBeltId>>,
+    map_closures: RwLock<Vec<Box<dyn Fn(&World, &mut StagingBeltManager) + Send + Sync + 'static>>>,
 }
 
 impl_read_write_lock!(
@@ -84,11 +85,22 @@ impl StagingBeltComponent {
         StagingBeltComponent {
             chunk_size,
             staging_belt: RwLock::new(LazyComponent::Pending),
+            map_closures: Default::default(),
         }
     }
 
     pub fn chunk_size(&self) -> &BufferAddress {
         &self.chunk_size
+    }
+
+    pub fn map(&self, f: impl Fn(&World, &mut StagingBeltManager) + Send + Sync + 'static) {
+        self.map_closures.write().push(Box::new(f));
+    }
+
+    pub fn flush_map_closures(&self, world: &World, staging_belt_manager: &mut StagingBeltManager) {
+        for f in self.map_closures.write().drain(..) {
+            f(world, staging_belt_manager);
+        }
     }
 }
 
@@ -134,10 +146,7 @@ pub fn assemble_staging_belt(
     entity: legion::Entity,
     chunk_size: BufferAddress,
 ) {
-    cmd.add_component_with_changed_flag_clean(
-        entity,
-        StagingBeltComponent::new(chunk_size),
-    )
+    cmd.add_component_with_changed_flag_clean(entity, StagingBeltComponent::new(chunk_size))
 }
 
 pub fn assemble_staging_belt_data_with_usage<U, T>(
@@ -151,10 +160,7 @@ pub fn assemble_staging_belt_data_with_usage<U, T>(
     T: legion::storage::Component,
 {
     cmd.add_component_with_changed_flag_dirty(entity, data);
-    cmd.add_component(
-        entity,
-        StagingBeltWriteComponent::<T>::new(offset, size),
-    );
+    cmd.add_component(entity, StagingBeltWriteComponent::<T>::new(offset, size));
     cmd.add_indirect_component_self::<StagingBeltComponent>(entity);
     cmd.add_indirect_component_self::<ChangedFlag<StagingBeltComponent>>(entity);
     cmd.add_indirect_component_self::<Usage<U, BufferComponent>>(entity);
@@ -162,7 +168,7 @@ pub fn assemble_staging_belt_data_with_usage<U, T>(
 }
 
 // Initialize staging belts
-pub fn create_staging_belt_thread_local<T: Send + Sync + 'static>(
+pub fn create_staging_belt_thread_local(
     world: &World,
     staging_belt_manager: &mut StagingBeltManager,
 ) {
@@ -270,49 +276,47 @@ pub fn staging_belt_finish_thread_local(
     world: &World,
     staging_belt_manager: &mut StagingBeltManager,
 ) {
-    <(
-        &StagingBeltComponent,
-        &ChangedFlag<StagingBeltComponent>,
-    )>::query()
-    .for_each(world, |(staging_belt, changed_flag)| {
-        if !changed_flag.get() {
-            return;
-        }
+    <(&StagingBeltComponent, &ChangedFlag<StagingBeltComponent>)>::query().for_each(
+        world,
+        |(staging_belt, changed_flag)| {
+            if !changed_flag.get() {
+                return;
+            }
 
-        let staging_belt = staging_belt.read();
-        let staging_belt = if let LazyComponent::Ready(staging_belt) = &*staging_belt {
-            staging_belt
-        } else {
-            return;
-        };
-        staging_belt_manager.finish(staging_belt);
-        println!("Finished staging belt with id {:?}", staging_belt);
-    });
+            let staging_belt = staging_belt.read();
+            let staging_belt = if let LazyComponent::Ready(staging_belt) = &*staging_belt {
+                staging_belt
+            } else {
+                return;
+            };
+            staging_belt_manager.finish(staging_belt);
+            println!("Finished staging belt with id {:?}", staging_belt);
+        },
+    );
 }
 
 pub fn staging_belt_recall_thread_local(
     world: &World,
     staging_belt_manager: &mut StagingBeltManager,
 ) {
-    <(
-        &StagingBeltComponent,
-        &ChangedFlag<StagingBeltComponent>,
-    )>::query()
-    .for_each(world, |(staging_belt, changed_flag)| {
-        if !changed_flag.get() {
-            return;
-        }
+    <(&StagingBeltComponent, &ChangedFlag<StagingBeltComponent>)>::query().for_each(
+        world,
+        |(staging_belt, changed_flag)| {
+            if !changed_flag.get() {
+                return;
+            }
 
-        let staging_belt = staging_belt.read();
-        let staging_belt = if let LazyComponent::Ready(staging_belt) = &*staging_belt {
-            staging_belt
-        } else {
-            return;
-        };
+            let staging_belt = staging_belt.read();
+            let staging_belt = if let LazyComponent::Ready(staging_belt) = &*staging_belt {
+                staging_belt
+            } else {
+                return;
+            };
 
-        // Ignore resulting future - this assumes the wgpu device is being polled in wait mode
-        let _ = staging_belt_manager.recall(staging_belt);
-        changed_flag.set(false);
-        println!("Recalled staging belt with id {:?}", staging_belt);
-    });
+            // Ignore resulting future - this assumes the wgpu device is being polled in wait mode
+            let _ = staging_belt_manager.recall(staging_belt);
+            changed_flag.set(false);
+            println!("Recalled staging belt with id {:?}", staging_belt);
+        },
+    );
 }
