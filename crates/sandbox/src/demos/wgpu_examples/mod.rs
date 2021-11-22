@@ -98,6 +98,7 @@ pub fn winit_event_handler<T>(mut f: impl EventLoopHandler<T>) -> impl EventLoop
                 surface_resize_schedule.execute(world);
                 prepare_schedule.execute(world);
                 prepare_thread_local(&world.read(), &mut staging_belt_manager);
+                antigen_wgpu::staging_belt_flush_thread_local(&world.read(), &mut staging_belt_manager);
             }
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::Resized(_) => {

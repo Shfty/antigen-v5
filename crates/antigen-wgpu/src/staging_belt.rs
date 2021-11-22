@@ -272,6 +272,15 @@ pub fn staging_belt_write_thread_local<
     }
 }
 
+pub fn staging_belt_flush_thread_local(
+    world: &World,
+    staging_belt_manager: &mut StagingBeltManager,
+) {
+    for staging_belt_component in <&StagingBeltComponent>::query().iter(world) {
+        staging_belt_component.flush_map_closures(world, staging_belt_manager);
+    }
+}
+
 pub fn staging_belt_finish_thread_local(
     world: &World,
     staging_belt_manager: &mut StagingBeltManager,
