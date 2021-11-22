@@ -3,7 +3,7 @@ use antigen_core::{
     GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock, RwLock, RwLockReadGuard,
     RwLockWriteGuard, Usage,
 };
-use legion::{IntoQuery, World};
+use legion::{world::SubWorld, Entity, IntoQuery, World};
 use wgpu::{
     util::StagingBelt, Buffer, BufferAddress, BufferSize, CommandEncoder, CommandEncoderDescriptor,
     Device,
@@ -183,39 +183,53 @@ pub fn create_staging_belt_thread_local(
 }
 
 // Write data to buffer via staging belt
-pub fn staging_belt_write_thread_local<
+#[legion::system(par_for_each)]
+#[read_component(StagingBeltComponent)]
+pub fn staging_belt_write<
     T: Send + Sync + 'static,
     L: ReadWriteLock<V> + Send + Sync + 'static,
     V: ToBytes,
 >(
-    world: &World,
-    staging_belt_manager: &mut StagingBeltManager,
+    world: &SubWorld,
+    entity: &Entity,
+    staging_belt_write: &StagingBeltWriteComponent<L>,
+    staging_belt: &IndirectComponent<StagingBeltComponent>,
 ) {
-    let device = if let Some(device) = <&Device>::query().iter(world).next() {
-        device
-    } else {
-        return;
-    };
+    let entity = *entity;
 
-    for (
-        staging_belt_write,
-        value,
-        data_changed,
-        staging_belt,
-        staging_belt_changed,
-        buffer,
-        command_buffers,
-    ) in <(
-        &StagingBeltWriteComponent<L>,
-        &L,
-        &ChangedFlag<L>,
-        &IndirectComponent<StagingBeltComponent>,
-        &IndirectComponent<ChangedFlag<StagingBeltComponent>>,
-        &IndirectComponent<Usage<T, BufferComponent>>,
-        &IndirectComponent<CommandBuffersComponent>,
-    )>::query()
-    .iter(world)
-    {
+    let staging_belt = world.get_indirect(staging_belt).unwrap();
+
+    let offset = *ReadWriteLock::<BufferAddress>::read(staging_belt_write);
+    let size = *ReadWriteLock::<BufferSize>::read(staging_belt_write);
+
+    staging_belt.map(move |world, staging_belt_manager| {
+        let device = if let Some(device) = <&Device>::query().iter(world).next() {
+            device
+        } else {
+            return;
+        };
+
+        let (
+            value,
+            data_changed,
+            staging_belt,
+            staging_belt_changed,
+            buffer,
+            command_buffers,
+        ) = if let Ok(components) = <(
+            &L,
+            &ChangedFlag<L>,
+            &IndirectComponent<StagingBeltComponent>,
+            &IndirectComponent<ChangedFlag<StagingBeltComponent>>,
+            &IndirectComponent<Usage<T, BufferComponent>>,
+            &IndirectComponent<CommandBuffersComponent>,
+        )>::query()
+            .get(world, entity) {
+                components
+            } else {
+                return;
+            };
+
         let staging_belt = world.get_indirect(staging_belt).unwrap();
         let staging_belt_changed = world.get_indirect(staging_belt_changed).unwrap();
         let buffer = world.get_indirect(buffer).unwrap();
@@ -235,9 +249,6 @@ pub fn staging_belt_write_thread_local<
             } else {
                 return;
             };
-
-            let offset = *ReadWriteLock::<BufferAddress>::read(staging_belt_write);
-            let size = *ReadWriteLock::<BufferSize>::read(staging_belt_write);
 
             let value = value.read();
             let bytes = value.to_bytes();
@@ -269,7 +280,7 @@ pub fn staging_belt_write_thread_local<
             data_changed.set(false);
             staging_belt_changed.set(true);
         }
-    }
+    });
 }
 
 pub fn staging_belt_flush_thread_local(

@@ -3,7 +3,6 @@ mod systems;
 
 use antigen_winit::{AssembleWinit, WindowComponent};
 pub use components::*;
-use legion::World;
 pub use systems::*;
 
 use antigen_core::{
@@ -16,7 +15,7 @@ use antigen_wgpu::{
         AddressMode, BufferAddress, BufferDescriptor, BufferSize, BufferUsages, Device, FilterMode,
         SamplerDescriptor, ShaderModuleDescriptor, ShaderSource, TextureFormat,
     },
-    AssembleWgpu, RenderAttachmentTextureView, StagingBeltManager, SurfaceConfigurationComponent,
+    AssembleWgpu, RenderAttachmentTextureView, SurfaceConfigurationComponent,
     ToBytes,
 };
 
@@ -208,14 +207,6 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     );
 }
 
-pub fn prepare_thread_local(world: &World, staging_belt_manager: &mut StagingBeltManager) {
-    antigen_wgpu::staging_belt_write_thread_local::<
-        crate::demos::wgpu_examples::skybox::Uniform,
-        RwLock<[f32; 52]>,
-        [f32; 52],
-    >(world, staging_belt_manager);
-}
-
 pub fn prepare_schedule() -> ImmutableSchedule<Serial> {
     serial![
         parallel![
@@ -224,11 +215,10 @@ pub fn prepare_schedule() -> ImmutableSchedule<Serial> {
             antigen_wgpu::create_buffers_system::<Uniform>(),
             antigen_wgpu::create_samplers_system(),
         ],
-        parallel![antigen_wgpu::buffer_write_system::<
-            Vertex,
-            RwLock<Vec<Vertex>>,
-            Vec<Vertex>,
-        >(),],
+        parallel![
+            antigen_wgpu::buffer_write_system::<Vertex, RwLock<Vec<Vertex>>, Vec<Vertex>>(),
+            antigen_wgpu::staging_belt_write_system::<Uniform, RwLock<[f32; 52]>, [f32; 52]>(),
+        ],
         skybox_prepare_system()
     ]
 }

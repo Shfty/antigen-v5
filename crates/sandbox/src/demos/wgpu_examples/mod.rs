@@ -1,5 +1,4 @@
-use antigen_core::{ImmutableWorld, ReadWriteLock};
-use antigen_wgpu::StagingBeltManager;
+use antigen_core::{ImmutableWorld};
 use antigen_winit::{
     winit::{
         event::{Event, WindowEvent},
@@ -7,7 +6,6 @@ use antigen_winit::{
     },
     EventLoopHandler,
 };
-use legion::World;
 
 use crate::{parallel, ImmutableSchedule, Parallel};
 
@@ -37,13 +35,7 @@ pub fn assemble_schedule() -> ImmutableSchedule<Parallel> {
     ]
 }
 
-fn prepare_thread_local(world: &World, staging_belt_manager: &mut StagingBeltManager) {
-    skybox::prepare_thread_local(world, staging_belt_manager);
-}
-
 pub fn winit_event_handler<T>(mut f: impl EventLoopHandler<T>) -> impl EventLoopHandler<T> {
-    let mut staging_belt_manager = StagingBeltManager::new();
-
     let mut prepare_schedule = parallel![
         hello_triangle::prepare_schedule(),
         cube::prepare_schedule(),
@@ -91,14 +83,8 @@ pub fn winit_event_handler<T>(mut f: impl EventLoopHandler<T>) -> impl EventLoop
           control_flow: &mut ControlFlow| {
         match &event {
             Event::MainEventsCleared => {
-                antigen_wgpu::create_staging_belt_thread_local(
-                    &world.read(),
-                    &mut staging_belt_manager,
-                );
                 surface_resize_schedule.execute(world);
                 prepare_schedule.execute(world);
-                prepare_thread_local(&world.read(), &mut staging_belt_manager);
-                antigen_wgpu::staging_belt_flush_thread_local(&world.read(), &mut staging_belt_manager);
             }
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::Resized(_) => {
@@ -109,18 +95,7 @@ pub fn winit_event_handler<T>(mut f: impl EventLoopHandler<T>) -> impl EventLoop
                 _ => (),
             },
             Event::RedrawEventsCleared => {
-                antigen_wgpu::staging_belt_finish_thread_local(
-                    &world.read(),
-                    &mut staging_belt_manager,
-                );
-
                 render_schedule.execute(world);
-
-                antigen_wgpu::submit_and_present_schedule().execute(world);
-                antigen_wgpu::staging_belt_recall_thread_local(
-                    &world.read(),
-                    &mut staging_belt_manager,
-                );
             }
             _ => (),
         }

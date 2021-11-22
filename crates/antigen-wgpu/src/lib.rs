@@ -18,7 +18,7 @@ pub use systems::*;
 pub use to_bytes::*;
 pub use wgpu;
 
-use antigen_core::{parallel, serial, single, ImmutableSchedule, ImmutableWorld, Serial};
+use antigen_core::{ImmutableSchedule, ImmutableWorld, ReadWriteLock, Serial, parallel, serial, single};
 
 pub fn submit_and_present_schedule() -> ImmutableSchedule<Serial> {
     serial![
@@ -30,6 +30,8 @@ pub fn submit_and_present_schedule() -> ImmutableSchedule<Serial> {
 
 /// Extend an event loop closure with wgpu resource handling
 pub fn winit_event_handler<T: Clone>(mut f: impl EventLoopHandler<T>) -> impl EventLoopHandler<T> {
+    let mut staging_belt_manager = StagingBeltManager::new();
+
     let mut window_surfaces_schedule = parallel![
         create_window_surfaces_system(),
         serial![
@@ -49,9 +51,16 @@ pub fn winit_event_handler<T: Clone>(mut f: impl EventLoopHandler<T>) -> impl Ev
         match event {
             Event::MainEventsCleared => {
                 window_surfaces_schedule.execute(world);
+                create_staging_belt_thread_local(&world.read(), &mut staging_belt_manager);
             }
             Event::RedrawRequested(_) => {
                 surface_textures_views_schedule.execute(world);
+            }
+            Event::RedrawEventsCleared => {
+                staging_belt_finish_thread_local(
+                    &world.read(),
+                    &mut staging_belt_manager,
+                );
             }
             _ => (),
         }
@@ -60,7 +69,15 @@ pub fn winit_event_handler<T: Clone>(mut f: impl EventLoopHandler<T>) -> impl Ev
 
         match event {
             Event::MainEventsCleared => {
+                staging_belt_flush_thread_local(&world.read(), &mut staging_belt_manager);
                 reset_surface_config_changed_schedule.execute(world);
+            }
+            Event::RedrawEventsCleared => {
+                submit_and_present_schedule().execute(world);
+                staging_belt_recall_thread_local(
+                    &world.read(),
+                    &mut staging_belt_manager,
+                );
             }
             _ => (),
         }
