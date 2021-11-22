@@ -13,7 +13,7 @@ use antigen_wgpu::{
 
 use legion::IntoQuery;
 
-// Initialize the hello triangle render pipeline
+// Initialize the shadow render pipeline
 #[legion::system(par_for_each)]
 #[read_component(Device)]
 #[read_component(SurfaceConfigurationComponent)]
@@ -115,6 +115,7 @@ pub fn shadow_render(
     rpass.set_pipeline(render_pipeline);
     rpass.draw(0..3, 0..1);
     drop(rpass);
+    encoder.pop_debug_group();
 
     command_buffers.write().push(encoder.finish());
 }

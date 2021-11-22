@@ -168,6 +168,7 @@ pub fn prepare_schedule() -> ImmutableSchedule<Serial> {
 }
 
 pub fn render_schedule() -> ImmutableSchedule<Single> {
+    println!("Allocating render schedule");
     single![boids_render_system(
         AtomicUsize::new(0),
         ((NUM_PARTICLES as f32) / (PARTICLES_PER_GROUP as f32)).ceil() as u32,

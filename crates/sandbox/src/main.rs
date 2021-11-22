@@ -35,6 +35,12 @@
 //
 // TODO: Boilerplate reduction for reading and unwrapping RwLock<LazyComponent::Ready>
 //
+// TODO: Refactor ChangedFlag as a wrapper instead of a separate component
+//       Can implement its methods in a trait and use Deref to tag them onto an existing type,
+//       with or without a usage flag
+//       Less components means less boilerplate in user code,
+//       but introduces more pressure to typedef complex components
+//
 // TODO: Figure out a better way to assemble Usage<U, ChangedFlag<T>>
 //       add_component_with_usage_and_changed_flag?
 //
@@ -77,11 +83,7 @@ mod demos;
 pub use demos::*;
 
 use antigen_core::*;
-use antigen_wgpu::{
-    wgpu::{DeviceDescriptor, Features, Limits},
-    StagingBeltManager,
-};
-use antigen_winit::winit::event::{Event, WindowEvent};
+use antigen_wgpu::wgpu::{DeviceDescriptor, Features, Limits};
 
 const GAME_TICK_DURATION: std::time::Duration = std::time::Duration::from_secs(1);
 
@@ -149,97 +151,11 @@ pub fn game_thread(world: ImmutableWorld) -> impl Fn() {
 }
 
 pub fn winit_thread(world: ImmutableWorld) -> ! {
-    let mut staging_belt_manager = StagingBeltManager::new();
-
-    // Resets dirty flags that should only remain active for one frame
-    let reset_dirty_flags_schedule = parallel![
-        antigen_winit::reset_resize_window_dirty_flags_system(),
-        antigen_wgpu::reset_surface_config_changed_system(),
-    ];
-
-    // Create winit event schedules
-    let mut main_events_cleared_schedule = serial![
-        antigen_winit::window_title_system(),
-        antigen_winit::window_request_redraw_schedule(),
-        serial![
-            antigen_wgpu::window_surfaces_schedule(),
-            demos::wgpu_examples::surface_resize_schedule(),
-        ],
-        parallel![
-            crate::demos::wgpu_examples::prepare_schedule(),
-            reset_dirty_flags_schedule,
-        ],
-    ];
-
-    let mut redraw_requested_schedule = single![antigen_wgpu::surface_textures_views_system()];
-
-    let mut redraw_events_cleared_schedule = serial![
-        crate::demos::wgpu_examples::render_schedule(),
-        antigen_wgpu::submit_and_present_schedule(),
-    ];
-
-    let mut post_redraw_events_cleared_schedule = serial![antigen_wgpu::device_poll_system(
-        antigen_wgpu::wgpu::Maintain::Wait
-    ),];
-
-    let mut window_resized_schedule = serial![
-        antigen_winit::resize_window_system(),
-        demos::wgpu_examples::surface_resize_schedule(),
-    ];
-    let mut window_keyboard_event_schedule = parallel![
-        crate::demos::wgpu_examples::bunnymark::keyboard_event_schedule(),
-        crate::demos::wgpu_examples::msaa_line::keyboard_event_schedule(),
-    ];
-    let mut window_cursor_moved_schedule =
-        parallel![crate::demos::wgpu_examples::skybox::cursor_moved_schedule(),];
-    let mut window_close_requested_schedule = single![antigen_winit::close_window_system()];
-
-    // Thread-local functions
-    let main_events_cleared_thread_local =
-        |world: &legion::World, staging_belt_manager: &mut StagingBeltManager| {
-            crate::demos::wgpu_examples::update_thread_local(world, staging_belt_manager);
-        };
-
-    let redraw_events_cleared_thread_local =
-        |world: &legion::World, staging_belt_manager: &mut StagingBeltManager| {
-            crate::demos::wgpu_examples::prepare_thread_local(world, staging_belt_manager);
-        };
-
-    let post_redraw_events_cleared_thread_local =
-        |world: &legion::World, staging_belt_manager: &mut StagingBeltManager| {
-            crate::demos::wgpu_examples::post_render_thread_local(world, staging_belt_manager);
-        };
-
     // Enter winit event loop
-    antigen_winit::winit::event_loop::EventLoop::new().run(antigen_winit::event_loop_wrapper(
+    antigen_winit::winit::event_loop::EventLoop::new().run(antigen_winit::wrap_event_loop(
         world,
-        move |world, event, _, _control_flow| match &event {
-            Event::MainEventsCleared => {
-                main_events_cleared_thread_local(&world.read(), &mut staging_belt_manager);
-                main_events_cleared_schedule.execute(world);
-            }
-            Event::RedrawRequested(_) => {
-                redraw_requested_schedule.execute(world);
-            }
-            Event::WindowEvent { event, .. } => match event {
-                WindowEvent::Resized(_) => {
-                    window_resized_schedule.execute(world);
-                }
-                WindowEvent::CloseRequested => {
-                    window_close_requested_schedule.execute(world);
-                }
-                WindowEvent::KeyboardInput { .. } => window_keyboard_event_schedule.execute(world),
-                WindowEvent::CursorMoved { .. } => window_cursor_moved_schedule.execute(world),
-                _ => (),
-            },
-            Event::RedrawEventsCleared => {
-                redraw_events_cleared_thread_local(&world.read(), &mut staging_belt_manager);
-                redraw_events_cleared_schedule.execute(world);
-
-                post_redraw_events_cleared_thread_local(&world.read(), &mut staging_belt_manager);
-                post_redraw_events_cleared_schedule.execute(world);
-            }
-            _ => (),
-        },
+        antigen_winit::winit_event_handler(antigen_wgpu::winit_event_handler(
+            demos::wgpu_examples::winit_event_handler(antigen_winit::winit_event_terminator()),
+        )),
     ))
 }

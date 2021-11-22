@@ -163,7 +163,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         0,
         BufferSize::new(std::mem::size_of::<[f32; 52]>() as u64).unwrap(),
     );
-    antigen_wgpu::assemble_staging_belt_with_usage::<Uniform>(cmd, renderer_entity, 0x100);
+    antigen_wgpu::assemble_staging_belt(cmd, renderer_entity, 0x100);
     cmd.assemble_wgpu_buffer_with_usage::<Uniform>(
         renderer_entity,
         BufferDescriptor {
@@ -208,23 +208,12 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     );
 }
 
-pub fn update_thread_local(world: &World, staging_belt_manager: &mut StagingBeltManager) {
-    antigen_wgpu::create_staging_belt_thread_local::<crate::demos::wgpu_examples::skybox::Uniform>(
-        world,
-        staging_belt_manager,
-    );
-}
-
 pub fn prepare_thread_local(world: &World, staging_belt_manager: &mut StagingBeltManager) {
     antigen_wgpu::staging_belt_write_thread_local::<
         crate::demos::wgpu_examples::skybox::Uniform,
         RwLock<[f32; 52]>,
         [f32; 52],
     >(world, staging_belt_manager);
-    antigen_wgpu::staging_belt_finish_thread_local::<crate::demos::wgpu_examples::skybox::Uniform>(
-        world,
-        staging_belt_manager,
-    );
 }
 
 pub fn prepare_schedule() -> ImmutableSchedule<Serial> {
@@ -246,13 +235,6 @@ pub fn prepare_schedule() -> ImmutableSchedule<Serial> {
 
 pub fn render_schedule() -> ImmutableSchedule<Single> {
     single![skybox_render_system()]
-}
-
-pub fn post_render_thread_local(world: &World, staging_belt_manager: &mut StagingBeltManager) {
-    antigen_wgpu::staging_belt_recall_thread_local::<crate::demos::wgpu_examples::skybox::Uniform>(
-        world,
-        staging_belt_manager,
-    );
 }
 
 pub fn cursor_moved_schedule() -> ImmutableSchedule<Single> {

@@ -129,14 +129,14 @@ impl<T> StagingBeltWriteComponent<T> {
     }
 }
 
-pub fn assemble_staging_belt_with_usage<U: Send + Sync + 'static>(
+pub fn assemble_staging_belt(
     cmd: &mut legion::systems::CommandBuffer,
     entity: legion::Entity,
     chunk_size: BufferAddress,
 ) {
     cmd.add_component_with_changed_flag_clean(
         entity,
-        Usage::<U, _>::new(StagingBeltComponent::new(chunk_size)),
+        StagingBeltComponent::new(chunk_size),
     )
 }
 
@@ -153,10 +153,10 @@ pub fn assemble_staging_belt_data_with_usage<U, T>(
     cmd.add_component_with_changed_flag_dirty(entity, data);
     cmd.add_component(
         entity,
-        Usage::<U, _>::new(StagingBeltWriteComponent::<T>::new(offset, size)),
+        StagingBeltWriteComponent::<T>::new(offset, size),
     );
-    cmd.add_indirect_component_self::<Usage<U, StagingBeltComponent>>(entity);
-    cmd.add_indirect_component_self::<ChangedFlag<Usage<U, StagingBeltComponent>>>(entity);
+    cmd.add_indirect_component_self::<StagingBeltComponent>(entity);
+    cmd.add_indirect_component_self::<ChangedFlag<StagingBeltComponent>>(entity);
     cmd.add_indirect_component_self::<Usage<U, BufferComponent>>(entity);
     cmd.add_indirect_component_self::<CommandBuffersComponent>(entity);
 }
@@ -166,7 +166,7 @@ pub fn create_staging_belt_thread_local<T: Send + Sync + 'static>(
     world: &World,
     staging_belt_manager: &mut StagingBeltManager,
 ) {
-    <&Usage<T, StagingBeltComponent>>::query().for_each(world, |staging_belt| {
+    <&StagingBeltComponent>::query().for_each(world, |staging_belt| {
         if staging_belt.read().is_pending() {
             let staging_belt_id =
                 staging_belt_manager.create_staging_belt(*staging_belt.chunk_size());
@@ -200,11 +200,11 @@ pub fn staging_belt_write_thread_local<
         buffer,
         command_buffers,
     ) in <(
-        &Usage<T, StagingBeltWriteComponent<L>>,
+        &StagingBeltWriteComponent<L>,
         &L,
         &ChangedFlag<L>,
-        &IndirectComponent<Usage<T, StagingBeltComponent>>,
-        &IndirectComponent<ChangedFlag<Usage<T, StagingBeltComponent>>>,
+        &IndirectComponent<StagingBeltComponent>,
+        &IndirectComponent<ChangedFlag<StagingBeltComponent>>,
         &IndirectComponent<Usage<T, BufferComponent>>,
         &IndirectComponent<CommandBuffersComponent>,
     )>::query()
@@ -266,13 +266,13 @@ pub fn staging_belt_write_thread_local<
     }
 }
 
-pub fn staging_belt_finish_thread_local<T: Send + Sync + 'static>(
+pub fn staging_belt_finish_thread_local(
     world: &World,
     staging_belt_manager: &mut StagingBeltManager,
 ) {
     <(
-        &Usage<T, StagingBeltComponent>,
-        &ChangedFlag<Usage<T, StagingBeltComponent>>,
+        &StagingBeltComponent,
+        &ChangedFlag<StagingBeltComponent>,
     )>::query()
     .for_each(world, |(staging_belt, changed_flag)| {
         if !changed_flag.get() {
@@ -290,13 +290,13 @@ pub fn staging_belt_finish_thread_local<T: Send + Sync + 'static>(
     });
 }
 
-pub fn staging_belt_recall_thread_local<T: Send + Sync + 'static>(
+pub fn staging_belt_recall_thread_local(
     world: &World,
     staging_belt_manager: &mut StagingBeltManager,
 ) {
     <(
-        &Usage<T, StagingBeltComponent>,
-        &ChangedFlag<Usage<T, StagingBeltComponent>>,
+        &StagingBeltComponent,
+        &ChangedFlag<StagingBeltComponent>,
     )>::query()
     .for_each(world, |(staging_belt, changed_flag)| {
         if !changed_flag.get() {
