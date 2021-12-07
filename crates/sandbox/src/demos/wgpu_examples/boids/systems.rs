@@ -5,7 +5,7 @@ use super::{
     DrawShaderModuleComponent, FrontBufferBindGroupComponent, FrontBufferComponent,
     UniformBufferComponent, VertexBufferComponent, NUM_PARTICLES,
 };
-use antigen_core::{Changed, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock};
+use antigen_core::{GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock};
 
 use antigen_wgpu::{
     wgpu::{
@@ -25,7 +25,7 @@ use legion::IntoQuery;
 // Initialize the hello triangle render pipeline
 #[legion::system(par_for_each)]
 #[read_component(Device)]
-#[read_component(Changed<SurfaceConfigurationComponent>)]
+#[read_component(SurfaceConfigurationComponent)]
 pub fn boids_prepare(
     world: &legion::world::SubWorld,
     _: &Boids,
@@ -38,7 +38,7 @@ pub fn boids_prepare(
     back_buffer: &BackBufferComponent,
     front_buffer_bind_group: &FrontBufferBindGroupComponent,
     back_buffer_bind_group: &BackBufferBindGroupComponent,
-    surface_configuration_component: &IndirectComponent<Changed<SurfaceConfigurationComponent>>,
+    surface_configuration_component: &IndirectComponent<SurfaceConfigurationComponent>,
 ) {
     if !render_pipeline_component.read().is_pending() {
         return;

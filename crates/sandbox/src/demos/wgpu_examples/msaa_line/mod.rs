@@ -6,7 +6,7 @@ pub use components::*;
 pub use systems::*;
 
 use antigen_core::{
-    parallel, serial, single, AddIndirectComponent, Changed, ImmutableSchedule, RwLock, Serial,
+    parallel, serial, single, AddIndirectComponent,  ImmutableSchedule, RwLock, Serial,
     Single, Usage,
 };
 
@@ -53,7 +53,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     cmd.assemble_wgpu_render_bundle(renderer_entity);
     cmd.assemble_wgpu_command_buffers(renderer_entity);
 
-    cmd.add_indirect_component::<Changed<SurfaceConfigurationComponent>>(
+    cmd.add_indirect_component::<SurfaceConfigurationComponent>(
         renderer_entity,
         window_entity,
     );

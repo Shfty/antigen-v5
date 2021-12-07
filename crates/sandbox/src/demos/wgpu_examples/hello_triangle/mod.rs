@@ -5,7 +5,7 @@ use antigen_winit::AssembleWinit;
 pub use components::*;
 pub use systems::*;
 
-use antigen_core::{AddIndirectComponent, Changed, ImmutableSchedule, Serial, Single, serial, single};
+use antigen_core::{AddIndirectComponent,  ImmutableSchedule, Serial, Single, serial, single};
 
 use antigen_wgpu::{AssembleWgpu, RenderAttachmentTextureView, SurfaceConfigurationComponent, wgpu::{Device, ShaderModuleDescriptor, ShaderSource}};
 
@@ -26,7 +26,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     cmd.add_component(renderer_entity, HelloTriangle);
     cmd.assemble_wgpu_render_pipeline(renderer_entity);
     cmd.assemble_wgpu_command_buffers(renderer_entity);
-    cmd.add_indirect_component::<Changed<SurfaceConfigurationComponent>>(renderer_entity, window_entity);
+    cmd.add_indirect_component::<SurfaceConfigurationComponent>(renderer_entity, window_entity);
     cmd.add_indirect_component::<RenderAttachmentTextureView>(renderer_entity, window_entity);
 
     cmd.assemble_wgpu_shader(

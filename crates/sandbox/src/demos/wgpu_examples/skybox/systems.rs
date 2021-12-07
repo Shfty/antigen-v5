@@ -52,7 +52,7 @@ fn create_depth_texture(config: &SurfaceConfiguration, device: &Device) -> Textu
 #[legion::system(par_for_each)]
 #[read_component(Device)]
 #[read_component(Queue)]
-#[read_component(Changed<SurfaceConfigurationComponent>)]
+#[read_component(SurfaceConfigurationComponent)]
 pub fn skybox_prepare(
     world: &legion::world::SubWorld,
     _: &Skybox,
@@ -65,7 +65,7 @@ pub fn skybox_prepare(
     depth_texture_view_component: &DepthTextureView,
     texture_component: &SkyboxTextureComponent,
     texture_view_component: &SkyboxTextureViewComponent,
-    surface_component: &IndirectComponent<Changed<SurfaceConfigurationComponent>>,
+    surface_component: &IndirectComponent<SurfaceConfigurationComponent>,
 ) {
     let device = <&Device>::query().iter(world).next().unwrap();
 
@@ -301,11 +301,11 @@ pub fn skybox_prepare(
 
 #[legion::system(par_for_each)]
 #[read_component(Device)]
-#[read_component(Changed<SurfaceConfigurationComponent>)]
+#[read_component(SurfaceConfigurationComponent)]
 pub fn skybox_resize(
     world: &SubWorld,
     _: &Skybox,
-    surface_config: &IndirectComponent<Changed<SurfaceConfigurationComponent>>,
+    surface_config: &IndirectComponent<SurfaceConfigurationComponent>,
     camera_data: &Changed<RwLock<[f32; 52]>>,
     depth_texture_view_component: &DepthTextureView,
 ) {
@@ -456,14 +456,14 @@ pub fn skybox_render(
 
 #[legion::system(par_for_each)]
 #[read_component(WindowComponent)]
-#[read_component(Changed<SurfaceConfigurationComponent>)]
+#[read_component(SurfaceConfigurationComponent)]
 #[read_component(WindowEventComponent)]
 pub fn skybox_cursor_moved(
     world: &SubWorld,
     _: &Skybox,
     camera_data: &Changed<RwLock<[f32; 52]>>,
     window: &IndirectComponent<WindowComponent>,
-    surface_component: &IndirectComponent<Changed<SurfaceConfigurationComponent>>,
+    surface_component: &IndirectComponent<SurfaceConfigurationComponent>,
 ) {
     let window = world
         .get_indirect(window)

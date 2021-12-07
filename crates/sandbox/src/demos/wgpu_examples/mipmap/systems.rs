@@ -2,7 +2,11 @@ use std::{borrow::Cow, num::NonZeroU32};
 
 use crate::wgpu_examples::mipmap::{MIP_LEVEL_COUNT, TEXTURE_FORMAT};
 
-use super::{DrawPipelineComponent, DrawShaderComponent, JuliaSetSamplerComponent, JuliaSetTextureComponent, JuliaSetTextureViewComponent, MIP_PASS_COUNT, Mipmap, UniformBufferComponent, ViewProjectionMatrix};
+use super::{
+    DrawPipelineComponent, DrawShaderComponent, JuliaSetSamplerComponent, JuliaSetTextureComponent,
+    JuliaSetTextureViewComponent, Mipmap, UniformBufferComponent, ViewProjectionMatrix,
+    MIP_PASS_COUNT,
+};
 use antigen_core::{Changed, ChangedTrait, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock};
 
 use antigen_wgpu::{
@@ -20,7 +24,7 @@ use antigen_wgpu::{
     SurfaceConfigurationComponent,
 };
 
-use legion::{IntoQuery, world::SubWorld};
+use legion::{world::SubWorld, IntoQuery};
 
 use bytemuck::{Pod, Zeroable};
 
@@ -177,7 +181,7 @@ fn generate_mipmaps(
 #[legion::system(par_for_each)]
 #[read_component(Device)]
 #[read_component(Queue)]
-#[read_component(Changed<SurfaceConfigurationComponent>)]
+#[read_component(SurfaceConfigurationComponent)]
 #[read_component(RenderAttachmentTextureView)]
 pub fn mipmap_prepare(
     world: &legion::world::SubWorld,
@@ -189,7 +193,7 @@ pub fn mipmap_prepare(
     julia_set_texture: &JuliaSetTextureComponent,
     julia_set_texture_view: &JuliaSetTextureViewComponent,
     julia_set_sampler: &JuliaSetSamplerComponent,
-    surface_component: &IndirectComponent<Changed<SurfaceConfigurationComponent>>,
+    surface_component: &IndirectComponent<SurfaceConfigurationComponent>,
 ) {
     if !draw_pipeline_component.read().is_pending() {
         return;
@@ -395,11 +399,11 @@ pub fn mipmap_prepare(
 }
 
 #[legion::system(par_for_each)]
-#[read_component(Changed<SurfaceConfigurationComponent>)]
+#[read_component(SurfaceConfigurationComponent)]
 pub fn mipmap_resize(
     world: &SubWorld,
     _: &Mipmap,
-    surface_config: &IndirectComponent<Changed<SurfaceConfigurationComponent>>,
+    surface_config: &IndirectComponent<SurfaceConfigurationComponent>,
     view_projection: &Changed<ViewProjectionMatrix>,
 ) {
     let surface_config = world.get_indirect(surface_config).unwrap();

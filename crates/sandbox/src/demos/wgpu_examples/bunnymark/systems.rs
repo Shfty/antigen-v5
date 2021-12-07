@@ -33,7 +33,7 @@ use legion::{world::SubWorld, IntoQuery};
 // Initialize the hello triangle render pipeline
 #[legion::system(par_for_each)]
 #[read_component(Device)]
-#[read_component(Changed<SurfaceConfigurationComponent>)]
+#[read_component(SurfaceConfigurationComponent)]
 pub fn bunnymark_prepare(
     world: &legion::world::SubWorld,
     _: &Bunnymark,
@@ -45,7 +45,7 @@ pub fn bunnymark_prepare(
     sampler: &LogoSamplerComponent,
     global_bind_group: &GlobalBindGroupComponent,
     local_bind_group: &LocalBindGroupComponent,
-    surface_configuration_component: &IndirectComponent<Changed<SurfaceConfigurationComponent>>,
+    surface_configuration_component: &IndirectComponent<SurfaceConfigurationComponent>,
 ) {
     println!("Bunnymark prepare");
 

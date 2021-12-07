@@ -12,7 +12,10 @@ use super::{
     RotationSpeed, Shadow, ShadowBindGroup, ShadowRenderPipeline, ShadowSamplerComponent,
     ShadowTextureViewComponent, ShadowUniformBuffer, UniformOffset, VertexBufferComponent,
 };
-use antigen_core::{Changed, ChangedTrait, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock, Usage, lazy_read_ready_else_return};
+use antigen_core::{
+    lazy_read_ready_else_return, ChangedTrait, GetIndirect, IndirectComponent, LazyComponent,
+    ReadWriteLock, Usage,
+};
 
 use antigen_wgpu::{
     wgpu::{
@@ -70,7 +73,7 @@ fn create_depth_texture(config: &SurfaceConfiguration, device: &Device) -> Optio
 #[legion::system(par_for_each)]
 #[read_component(Adapter)]
 #[read_component(Device)]
-#[read_component(Changed<SurfaceConfigurationComponent>)]
+#[read_component(SurfaceConfigurationComponent)]
 // Object query
 #[read_component(Mesh)]
 #[read_component(ObjectMatrixComponent)]
@@ -99,7 +102,7 @@ pub fn shadow_prepare(
     object_bind_group_component: &ObjectBindGroup,
     object_uniform_buf_component: &ObjectUniformBuffer,
     light_storage_buf_component: &LightStorageBuffer,
-    surface_component: &IndirectComponent<Changed<SurfaceConfigurationComponent>>,
+    surface_component: &IndirectComponent<SurfaceConfigurationComponent>,
 ) {
     if !forward_render_pipeline_component.read().is_pending() {
         return;
@@ -415,7 +418,7 @@ pub fn shadow_prepare(
 #[legion::system(par_for_each)]
 #[read_component(Device)]
 #[read_component(Queue)]
-#[read_component(Changed<SurfaceConfigurationComponent>)]
+#[read_component(SurfaceConfigurationComponent)]
 // Light query
 #[read_component(nalgebra::Vector3<f32>)]
 #[read_component(Color)]
@@ -425,7 +428,7 @@ pub fn shadow_prepare(
 pub fn shadow_resize(
     world: &SubWorld,
     _: &Shadow,
-    surface_config: &IndirectComponent<Changed<SurfaceConfigurationComponent>>,
+    surface_config: &IndirectComponent<SurfaceConfigurationComponent>,
     forward_depth_view_component: &ForwardDepthView,
     forward_uniform_buf: &ForwardUniformBuffer,
 ) {

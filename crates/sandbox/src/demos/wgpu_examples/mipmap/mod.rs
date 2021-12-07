@@ -7,7 +7,9 @@ use antigen_winit::AssembleWinit;
 pub use components::*;
 pub use systems::*;
 
-use antigen_core::{AddIndirectComponent, Changed, ImmutableSchedule, RwLock, Serial, Single, parallel, serial, single};
+use antigen_core::{
+    parallel, serial, single, AddIndirectComponent, ImmutableSchedule, RwLock, Serial, Single,
+};
 
 use antigen_wgpu::{
     wgpu::{
@@ -80,7 +82,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     cmd.assemble_wgpu_render_pipeline_with_usage::<Draw>(renderer_entity);
     cmd.assemble_wgpu_command_buffers(renderer_entity);
 
-    cmd.add_indirect_component::<Changed<SurfaceConfigurationComponent>>(renderer_entity, window_entity);
+    cmd.add_indirect_component::<SurfaceConfigurationComponent>(renderer_entity, window_entity);
     cmd.add_indirect_component::<RenderAttachmentTextureView>(renderer_entity, window_entity);
 
     // Draw shader
@@ -96,7 +98,11 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     let matrix = generate_matrix(1.0);
     let mut buf: [f32; 16] = [0.0; 16];
     buf.copy_from_slice(matrix.as_slice());
-    cmd.assemble_wgpu_buffer_data_with_usage::<Uniform, _>(renderer_entity, ViewProjectionMatrix::new(buf.into()), 0);
+    cmd.assemble_wgpu_buffer_data_with_usage::<Uniform, _>(
+        renderer_entity,
+        ViewProjectionMatrix::new(buf.into()),
+        0,
+    );
 
     // Uniform buffer
     cmd.assemble_wgpu_buffer_with_usage::<Uniform>(
@@ -150,7 +156,11 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         },
     );
 
-    cmd.assemble_wgpu_texture_view_with_usage::<JuliaSet>(renderer_entity, renderer_entity, Default::default());
+    cmd.assemble_wgpu_texture_view_with_usage::<JuliaSet>(
+        renderer_entity,
+        renderer_entity,
+        Default::default(),
+    );
 
     // Texture sampler
     cmd.assemble_wgpu_sampler_with_usage::<JuliaSet>(

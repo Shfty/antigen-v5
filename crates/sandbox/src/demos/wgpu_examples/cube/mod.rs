@@ -7,7 +7,7 @@ use legion::systems::CommandBuffer;
 pub use systems::*;
 
 use antigen_core::{
-    parallel, serial, single, AddIndirectComponent, Changed, ImmutableSchedule,
+    parallel, serial, single, AddIndirectComponent,  ImmutableSchedule,
     RwLock, Serial, Single, Usage,
 };
 use antigen_wgpu::{
@@ -154,7 +154,7 @@ pub fn assemble(cmd: &mut CommandBuffer) {
     cmd.assemble_wgpu_render_pipeline_with_usage::<WirePass>(renderer_entity);
     cmd.assemble_wgpu_command_buffers(renderer_entity);
 
-    cmd.add_indirect_component::<Changed<SurfaceConfigurationComponent>>(
+    cmd.add_indirect_component::<SurfaceConfigurationComponent>(
         renderer_entity,
         window_entity,
     );

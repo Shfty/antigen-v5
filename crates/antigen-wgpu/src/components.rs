@@ -1,6 +1,5 @@
 use antigen_core::{
-    impl_read_write_lock, Changed, LazyComponent, ReadWriteLock, RwLock, RwLockReadGuard,
-    RwLockWriteGuard, Usage,
+    Changed, LazyComponent, ReadWriteLock, RwLock, RwLockReadGuard, RwLockWriteGuard, Usage,
 };
 
 use wgpu::{
@@ -14,15 +13,7 @@ use wgpu::{
 use std::marker::PhantomData;
 
 // WGPU surface configuration
-pub struct SurfaceConfigurationComponent(RwLock<SurfaceConfiguration>);
-
-impl SurfaceConfigurationComponent {
-    pub fn new(config: SurfaceConfiguration) -> SurfaceConfigurationComponent {
-        SurfaceConfigurationComponent(RwLock::new(config))
-    }
-}
-
-impl_read_write_lock!(SurfaceConfigurationComponent, 0, SurfaceConfiguration);
+pub type SurfaceConfigurationComponent = Changed<RwLock<SurfaceConfiguration>>;
 
 // WGPU surface
 pub type SurfaceComponent = RwLock<LazyComponent<Surface>>;
@@ -166,7 +157,8 @@ impl<T> TextureWriteComponent<T> {
 pub type ShaderModuleDescriptorComponent<'a> = Changed<RwLock<ShaderModuleDescriptor<'a>>>;
 
 // WGPU shader module descriptor
-pub type ShaderModuleDescriptorSpirVComponent<'a> = Changed<RwLock<ShaderModuleDescriptorSpirV<'a>>>;
+pub type ShaderModuleDescriptorSpirVComponent<'a> =
+    Changed<RwLock<ShaderModuleDescriptorSpirV<'a>>>;
 
 // WGPU shader module
 pub type ShaderModuleComponent = RwLock<LazyComponent<ShaderModule>>;

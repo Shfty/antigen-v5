@@ -184,16 +184,13 @@ impl AssembleWgpu for &mut legion::systems::CommandBuffer {
     fn assemble_wgpu_window_surface(self, entity: Entity) {
         self.add_component(
             entity,
-            Changed::new(
                 SurfaceConfigurationComponent::new(SurfaceConfiguration {
                     usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
                     format: wgpu::TextureFormat::Bgra8Unorm,
                     width: 0,
                     height: 0,
                     present_mode: wgpu::PresentMode::Mailbox,
-                }),
-                false,
-            ),
+                }.into(), false),
         );
         self.add_component(entity, SurfaceComponent::new(LazyComponent::Pending));
 

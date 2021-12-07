@@ -34,7 +34,7 @@ pub fn device_poll(device: &Device, #[state] maintain: &Maintain) {
 pub fn create_window_surfaces(
     world: &SubWorld,
     window_component: &WindowComponent,
-    surface_configuration_component: &Changed<SurfaceConfigurationComponent>,
+    surface_configuration_component: &SurfaceConfigurationComponent,
     surface_component: &SurfaceComponent,
 ) {
     if let LazyComponent::Ready(window) = &*window_component.read() {
@@ -68,7 +68,7 @@ pub fn create_window_surfaces(
 #[read_component(wgpu::Instance)]
 pub fn reconfigure_surfaces(
     world: &SubWorld,
-    surface_config: &Changed<SurfaceConfigurationComponent>,
+    surface_config: &SurfaceConfigurationComponent,
     surface_component: &SurfaceComponent,
 ) {
     let device = <&Device>::query().iter(world).next().unwrap();
@@ -91,7 +91,7 @@ pub fn reconfigure_surfaces(
 }
 
 #[legion::system(par_for_each)]
-pub fn reset_surface_config_changed(surface_config: &Changed<SurfaceConfigurationComponent>) {
+pub fn reset_surface_config_changed(surface_config: &SurfaceConfigurationComponent) {
     if surface_config.get_changed() {
         surface_config.set_changed(false);
     }
@@ -157,7 +157,7 @@ pub fn surface_texture_view_query(world: &legion::world::SubWorld, entity: &legi
 #[legion::system(par_for_each)]
 pub fn surface_size(
     window_size: &WindowSizeComponent,
-    surface_configuration_component: &Changed<SurfaceConfigurationComponent>,
+    surface_configuration_component: &SurfaceConfigurationComponent,
 ) {
     if window_size.get_changed() {
         let window_size = *window_size.read();

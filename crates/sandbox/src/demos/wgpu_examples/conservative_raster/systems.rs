@@ -8,8 +8,7 @@ use super::{
     UpscaleShaderComponent,
 };
 use antigen_core::{
-    Changed, ChangedTrait, GetIndirect, IndirectComponent, LazyComponent,
-    ReadWriteLock, Usage,
+    ChangedTrait, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock, Usage,
 };
 
 use antigen_wgpu::{
@@ -30,7 +29,7 @@ use legion::{world::SubWorld, IntoQuery};
 // Initialize the hello triangle render pipeline
 #[legion::system(par_for_each)]
 #[read_component(Device)]
-#[read_component(Changed<SurfaceConfigurationComponent>)]
+#[read_component(SurfaceConfigurationComponent)]
 pub fn conservative_raster_prepare(
     world: &legion::world::SubWorld,
     _: &ConservativeRaster,
@@ -44,7 +43,7 @@ pub fn conservative_raster_prepare(
     bind_group_upscale_component: &UpscaleBindGroupComponent,
     low_res_view: &LowResTextureViewComponent,
     low_res_sampler: &LowResSamplerComponent,
-    surface_config_component: &IndirectComponent<Changed<SurfaceConfigurationComponent>>,
+    surface_config_component: &IndirectComponent<SurfaceConfigurationComponent>,
 ) {
     let device = <&Device>::query().iter(world).next().unwrap();
 
@@ -261,14 +260,14 @@ pub fn conservative_raster_prepare(
 }
 
 #[legion::system(par_for_each)]
-#[read_component(Changed<SurfaceConfigurationComponent>)]
+#[read_component(SurfaceConfigurationComponent)]
 #[read_component(LowResTextureDescriptorComponent<'static>)]
 #[read_component(Usage<LowResTarget, TextureViewDescriptorComponent<'static>>)]
 pub fn conservative_raster_resize(
     world: &SubWorld,
     _: &ConservativeRaster,
     bind_group_upscale_component: &UpscaleBindGroupComponent,
-    surface_config: &IndirectComponent<Changed<SurfaceConfigurationComponent>>,
+    surface_config: &IndirectComponent<SurfaceConfigurationComponent>,
     low_res_desc: &IndirectComponent<LowResTextureDescriptorComponent<'static>>,
     low_res_view_desc: &IndirectComponent<
         Usage<LowResTarget, TextureViewDescriptorComponent<'static>>,

@@ -28,7 +28,7 @@ use legion::{world::SubWorld, IntoQuery};
 // Initialize the hello triangle render pipeline
 #[legion::system(par_for_each)]
 #[read_component(Device)]
-#[read_component(Changed<SurfaceConfigurationComponent>)]
+#[read_component(SurfaceConfigurationComponent)]
 pub fn cube_prepare(
     world: &SubWorld,
     _: &Cube,
@@ -38,7 +38,7 @@ pub fn cube_prepare(
     texture_view: &MandelbrotTextureViewComponent,
     uniform_buffer: &UniformBufferComponent,
     bind_group_component: &BindGroupComponent,
-    surface_configuration_component: &IndirectComponent<Changed<SurfaceConfigurationComponent>>,
+    surface_configuration_component: &IndirectComponent<SurfaceConfigurationComponent>,
 ) {
     if !opaque_pipeline_component.read().is_pending() {
         return;
@@ -204,11 +204,11 @@ pub fn cube_prepare(
 }
 
 #[legion::system(par_for_each)]
-#[read_component(Changed<SurfaceConfigurationComponent>)]
+#[read_component(SurfaceConfigurationComponent)]
 pub fn cube_resize(
     world: &SubWorld,
     _: &Cube,
-    surface_config: &IndirectComponent<Changed<SurfaceConfigurationComponent>>,
+    surface_config: &IndirectComponent<SurfaceConfigurationComponent>,
     view_projection: &Changed<ViewProjectionMatrix>,
 ) {
     let surface_config = world.get_indirect(surface_config).unwrap();

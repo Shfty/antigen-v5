@@ -1,7 +1,6 @@
 use super::{MsaaLine, Vertex, VertexBufferComponent, VERTEX_COUNT};
 use antigen_core::{
-    Changed, ChangedTrait, GetIndirect, IndirectComponent, LazyComponent,
-    ReadWriteLock, Usage,
+    ChangedTrait, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock, Usage,
 };
 
 use antigen_wgpu::{
@@ -27,7 +26,7 @@ use legion::{world::SubWorld, IntoQuery};
 // Initialize the MSAA lines render pipeline
 #[legion::system(par_for_each)]
 #[read_component(Device)]
-#[read_component(Changed<SurfaceConfigurationComponent>)]
+#[read_component(SurfaceConfigurationComponent)]
 #[read_component(MsaaFramebufferTextureDescriptor<'static>)]
 pub fn msaa_line_prepare(
     world: &legion::world::SubWorld,
@@ -36,7 +35,7 @@ pub fn msaa_line_prepare(
     pipeline_layout_component: &PipelineLayoutComponent,
     render_bundle_component: &RenderBundleComponent,
     vertex_buffer_component: &VertexBufferComponent,
-    surface_configuration_component: &IndirectComponent<Changed<SurfaceConfigurationComponent>>,
+    surface_configuration_component: &IndirectComponent<SurfaceConfigurationComponent>,
     msaa_framebuffer_desc: &IndirectComponent<MsaaFramebufferTextureDescriptor<'static>>,
 ) {
     println!("MSAA Line Prepare");
@@ -146,13 +145,13 @@ pub fn msaa_line_prepare(
 }
 
 #[legion::system(par_for_each)]
-#[read_component(Changed<SurfaceConfigurationComponent>)]
+#[read_component(SurfaceConfigurationComponent)]
 #[read_component(MsaaFramebufferTextureDescriptor<'static>)]
 #[read_component(Usage<MsaaFramebuffer, TextureViewDescriptorComponent<'static>>)]
 pub fn msaa_line_resize(
     world: &SubWorld,
     _: &MsaaLine,
-    surface_config: &IndirectComponent<Changed<SurfaceConfigurationComponent>>,
+    surface_config: &IndirectComponent<SurfaceConfigurationComponent>,
     msaa_framebuffer_desc: &IndirectComponent<MsaaFramebufferTextureDescriptor<'static>>,
     msaa_framebuffer_view_desc: &IndirectComponent<
         Usage<MsaaFramebuffer, TextureViewDescriptorComponent<'static>>,

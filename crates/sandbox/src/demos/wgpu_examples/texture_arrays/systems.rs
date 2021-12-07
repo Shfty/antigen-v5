@@ -5,7 +5,7 @@ use super::{
     RedTextureViewComponent, TextureArrays, UniformWorkaroundComponent, Vertex,
     VertexBufferComponent, VertexShaderComponent, INDEX_FORMAT,
 };
-use antigen_core::{Changed, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock};
+use antigen_core::{GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock};
 
 use antigen_wgpu::{
     wgpu::{
@@ -26,7 +26,7 @@ use legion::IntoQuery;
 // Initialize the hello triangle render pipeline
 #[legion::system(par_for_each)]
 #[read_component(Device)]
-#[read_component(Changed<SurfaceConfigurationComponent>)]
+#[read_component(SurfaceConfigurationComponent)]
 pub fn texture_arrays_prepare(
     world: &legion::world::SubWorld,
     _: &TextureArrays,
@@ -38,7 +38,7 @@ pub fn texture_arrays_prepare(
     green_texture_view: &GreenTextureViewComponent,
     sampler: &SamplerComponent,
     uniform_workaround: &UniformWorkaroundComponent,
-    surface_configuration_component: &IndirectComponent<Changed<SurfaceConfigurationComponent>>,
+    surface_configuration_component: &IndirectComponent<SurfaceConfigurationComponent>,
 ) {
     if !render_pipeline_component.read().is_pending() {
         return;
@@ -67,7 +67,7 @@ pub fn texture_arrays_prepare(
     } else {
         return;
     };
-    
+
     let vertex_shader = vertex_shader.read();
     let vertex_shader = if let LazyComponent::Ready(vertex_shader) = &*vertex_shader {
         vertex_shader
