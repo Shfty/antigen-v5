@@ -5,7 +5,7 @@ use antigen_winit::AssembleWinit;
 pub use components::*;
 pub use systems::*;
 
-use antigen_core::{AddIndirectComponent, Changed, ChangedFlag, ImmutableSchedule, Serial, Single, Usage, serial, single};
+use antigen_core::{AddIndirectComponent, Changed, ImmutableSchedule, Serial, Single, Usage, serial, single};
 
 use antigen_wgpu::{
     wgpu::{
@@ -13,7 +13,7 @@ use antigen_wgpu::{
         TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
     },
     AssembleWgpu, RenderAttachmentTextureView, SurfaceConfigurationComponent,
-    TextureDescriptorComponent, TextureViewDescriptorComponent,
+    TextureViewDescriptorComponent,
 };
 
 const RENDER_TARGET_FORMAT: TextureFormat = TextureFormat::Rgba8UnormSrgb;
@@ -95,8 +95,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
 
     // Indirect components for resize
     cmd.add_indirect_component_self::<LowResTextureDescriptorComponent>(renderer_entity);
-    cmd.add_indirect_component_self::<Usage<LowResTarget, ChangedFlag<TextureDescriptorComponent>>>(renderer_entity);
-    cmd.add_indirect_component_self::<Usage<LowResTarget, ChangedFlag<TextureViewDescriptorComponent>>>(renderer_entity);
+    cmd.add_indirect_component_self::<Usage<LowResTarget, TextureViewDescriptorComponent>>(renderer_entity);
 }
 
 pub fn prepare_schedule() -> ImmutableSchedule<Serial> {

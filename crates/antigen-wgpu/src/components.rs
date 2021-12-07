@@ -1,6 +1,6 @@
 use antigen_core::{
-    impl_read_write_lock, LazyComponent, ReadWriteLock, RwLock, RwLockReadGuard, RwLockWriteGuard,
-    Usage,
+    impl_read_write_lock, Changed, LazyComponent, ReadWriteLock, RwLock, RwLockReadGuard,
+    RwLockWriteGuard, Usage,
 };
 
 use wgpu::{
@@ -28,7 +28,7 @@ impl_read_write_lock!(SurfaceConfigurationComponent, 0, SurfaceConfiguration);
 pub type SurfaceComponent = RwLock<LazyComponent<Surface>>;
 
 // WGPU texture descriptor
-pub type TextureDescriptorComponent<'a> = RwLock<TextureDescriptor<'a>>;
+pub type TextureDescriptorComponent<'a> = Changed<RwLock<TextureDescriptor<'a>>>;
 
 // WGPU texture
 pub type TextureComponent = RwLock<LazyComponent<Texture>>;
@@ -53,16 +53,16 @@ pub type MsaaFramebufferTextureViewDescriptor<'a> =
 pub type MsaaFramebufferTextureView = Usage<MsaaFramebuffer, TextureViewComponent>;
 
 // WGPU surface texture
-pub type SurfaceTextureComponent = RwLock<Option<SurfaceTexture>>;
+pub type SurfaceTextureComponent = Changed<RwLock<Option<SurfaceTexture>>>;
 
 // WPGU texture view descriptor
-pub type TextureViewDescriptorComponent<'a> = RwLock<TextureViewDescriptor<'a>>;
+pub type TextureViewDescriptorComponent<'a> = Changed<RwLock<TextureViewDescriptor<'a>>>;
 
 // WGPU texture view
 pub type TextureViewComponent = RwLock<LazyComponent<TextureView>>;
 
 // WGPU sampler descriptor
-pub type SamplerDescriptorComponent<'a> = RwLock<SamplerDescriptor<'a>>;
+pub type SamplerDescriptorComponent<'a> = Changed<RwLock<SamplerDescriptor<'a>>>;
 
 // WGPU sampler
 pub type SamplerComponent = RwLock<LazyComponent<Sampler>>;
@@ -89,10 +89,10 @@ pub type BindGroupComponent = RwLock<LazyComponent<BindGroup>>;
 pub type CommandBuffersComponent = RwLock<Vec<CommandBuffer>>;
 
 // WGPU buffer descriptor
-pub type BufferDescriptorComponent<'a> = RwLock<BufferDescriptor<'a>>;
+pub type BufferDescriptorComponent<'a> = Changed<RwLock<BufferDescriptor<'a>>>;
 
 // WGPU buffer init descriptor
-pub type BufferInitDescriptorComponent<'a> = RwLock<BufferInitDescriptor<'a>>;
+pub type BufferInitDescriptorComponent<'a> = Changed<RwLock<BufferInitDescriptor<'a>>>;
 
 // WGPU buffer
 pub type BufferComponent = RwLock<LazyComponent<Buffer>>;
@@ -163,10 +163,10 @@ impl<T> TextureWriteComponent<T> {
 }
 
 // WGPU shader module descriptor
-pub type ShaderModuleDescriptorComponent<'a> = RwLock<ShaderModuleDescriptor<'a>>;
+pub type ShaderModuleDescriptorComponent<'a> = Changed<RwLock<ShaderModuleDescriptor<'a>>>;
 
 // WGPU shader module descriptor
-pub type ShaderModuleDescriptorSpirVComponent<'a> = RwLock<ShaderModuleDescriptorSpirV<'a>>;
+pub type ShaderModuleDescriptorSpirVComponent<'a> = Changed<RwLock<ShaderModuleDescriptorSpirV<'a>>>;
 
 // WGPU shader module
 pub type ShaderModuleComponent = RwLock<LazyComponent<ShaderModule>>;

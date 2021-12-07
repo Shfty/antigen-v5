@@ -1,11 +1,11 @@
 use super::{RedrawUnconditionally, WindowComponent};
 use crate::{WindowEntityMap, WindowEventComponent, WindowSizeComponent, WindowTitleComponent};
 
-use antigen_core::{ChangedFlag, ImmutableWorld, LazyComponent, ReadWriteLock};
+use antigen_core::{ChangedTrait, ImmutableWorld, LazyComponent, ReadWriteLock};
 
 use legion::{world::SubWorld, IntoQuery};
 use rayon::iter::ParallelIterator;
-use winit::{event_loop::EventLoopWindowTarget};
+use winit::event_loop::EventLoopWindowTarget;
 
 // Create winit::Window for WindowComponent
 pub fn create_windows_thread_local<T>(
@@ -32,13 +32,10 @@ pub fn create_windows_thread_local<T>(
         .collect::<Vec<_>>();
 
     for entity in pending_entities {
-        let (window_component, size_component, size_dirty) = <(
-            &WindowComponent,
-            Option<&WindowSizeComponent>,
-            Option<&ChangedFlag<WindowSizeComponent>>,
-        )>::query()
-        .get(&*world_read, *entity)
-        .unwrap();
+        let (window_component, size_component) =
+            <(&WindowComponent, Option<&WindowSizeComponent>)>::query()
+                .get(&*world_read, *entity)
+                .unwrap();
 
         let window = winit::window::Window::new(event_loop_proxy).unwrap();
         let size = window.inner_size();
@@ -46,9 +43,9 @@ pub fn create_windows_thread_local<T>(
         window_entity_map.write().insert(window.id(), *entity);
         *window_component.write() = LazyComponent::Ready(window);
 
-        if let (Some(window_size), Some(size_dirty)) = (size_component, size_dirty) {
+        if let Some(window_size) = size_component {
             *window_size.write() = size;
-            size_dirty.set(true);
+            window_size.set_changed(true);
         }
     }
 }
@@ -70,7 +67,6 @@ pub fn redraw_windows_on_main_events_cleared(
 #[read_component(WindowEntityMap)]
 #[read_component(WindowComponent)]
 #[read_component(WindowSizeComponent)]
-#[read_component(ChangedFlag<WindowSizeComponent>)]
 pub fn resize_window(world: &SubWorld) {
     let event_window = <&WindowEventComponent>::query()
         .iter(&*world)
@@ -86,12 +82,8 @@ pub fn resize_window(world: &SubWorld) {
         .get(&window_id)
         .expect("Resize requested for window without entity");
 
-    let (window_component, size_component, dirty_flag) = if let Ok(components) = <(
-        &WindowComponent,
-        &WindowSizeComponent,
-        &ChangedFlag<WindowSizeComponent>,
-    )>::query()
-    .get(&*world, *entity)
+    let (window_component, size_component) = if let Ok(components) =
+        <(&WindowComponent, &WindowSizeComponent)>::query().get(&*world, *entity)
     {
         components
     } else {
@@ -100,38 +92,33 @@ pub fn resize_window(world: &SubWorld) {
 
     if let LazyComponent::Ready(window) = &*window_component.read() {
         *size_component.write() = window.inner_size();
-        dirty_flag.set(true);
+        size_component.set_changed(true);
     }
 }
 
 #[legion::system(par_for_each)]
-pub fn reset_resize_window_dirty_flags(dirty_flag: &ChangedFlag<WindowSizeComponent>) {
-    if dirty_flag.get() {
+pub fn reset_resize_window_dirty_flags(window_size: &WindowSizeComponent) {
+    if window_size.get_changed() {
         println!("Resetting window size changed flag");
-        dirty_flag.set(false);
+        window_size.set_changed(false);
     }
 }
 
 #[legion::system]
 #[read_component(WindowComponent)]
 #[read_component(WindowTitleComponent)]
-#[read_component(ChangedFlag<WindowTitleComponent>)]
 pub fn window_title(world: &SubWorld) {
-    <(
-        &WindowComponent,
-        &WindowTitleComponent,
-        &ChangedFlag<WindowTitleComponent>,
-    )>::query()
-    .iter(world)
-    .for_each(|(window, title, title_dirty)| {
-        let window = window.read();
-        if let LazyComponent::Ready(window) = &*window {
-            if title_dirty.get() {
-                window.set_title(&title.read());
-                title_dirty.set(false);
+    <(&WindowComponent, &WindowTitleComponent)>::query()
+        .iter(world)
+        .for_each(|(window, title)| {
+            let window = window.read();
+            if let LazyComponent::Ready(window) = &*window {
+                if title.get_changed() {
+                    window.set_title(&title.read());
+                    title.set_changed(false);
+                }
             }
-        }
-    });
+        });
 }
 
 #[legion::system]

@@ -8,7 +8,7 @@ use super::{
     UpscaleShaderComponent,
 };
 use antigen_core::{
-    Changed, ChangedFlag, ChangedTrait, GetIndirect, IndirectComponent, LazyComponent,
+    Changed, ChangedTrait, GetIndirect, IndirectComponent, LazyComponent,
     ReadWriteLock, Usage,
 };
 
@@ -22,7 +22,7 @@ use antigen_wgpu::{
         VertexState,
     },
     CommandBuffersComponent, RenderAttachmentTextureView, SurfaceConfigurationComponent,
-    TextureDescriptorComponent, TextureViewDescriptorComponent,
+    TextureViewDescriptorComponent,
 };
 
 use legion::{world::SubWorld, IntoQuery};
@@ -263,26 +263,21 @@ pub fn conservative_raster_prepare(
 #[legion::system(par_for_each)]
 #[read_component(Changed<SurfaceConfigurationComponent>)]
 #[read_component(LowResTextureDescriptorComponent<'static>)]
-#[read_component(Usage<LowResTarget, ChangedFlag<TextureDescriptorComponent<'static>>>)]
-#[read_component(Usage<LowResTarget, ChangedFlag<TextureViewDescriptorComponent<'static>>>)]
+#[read_component(Usage<LowResTarget, TextureViewDescriptorComponent<'static>>)]
 pub fn conservative_raster_resize(
     world: &SubWorld,
     _: &ConservativeRaster,
     bind_group_upscale_component: &UpscaleBindGroupComponent,
     surface_config: &IndirectComponent<Changed<SurfaceConfigurationComponent>>,
     low_res_desc: &IndirectComponent<LowResTextureDescriptorComponent<'static>>,
-    low_res_desc_changed: &IndirectComponent<
-        Usage<LowResTarget, ChangedFlag<TextureDescriptorComponent<'static>>>,
-    >,
-    low_res_view_desc_changed: &IndirectComponent<
-        Usage<LowResTarget, ChangedFlag<TextureViewDescriptorComponent<'static>>>,
+    low_res_view_desc: &IndirectComponent<
+        Usage<LowResTarget, TextureViewDescriptorComponent<'static>>,
     >,
 ) {
     let surface_config = world.get_indirect(surface_config).unwrap();
 
     let low_res_desc = world.get_indirect(low_res_desc).unwrap();
-    let low_res_desc_changed = world.get_indirect(low_res_desc_changed).unwrap();
-    let low_res_view_desc_changed = world.get_indirect(low_res_view_desc_changed).unwrap();
+    let low_res_view_desc = world.get_indirect(low_res_view_desc).unwrap();
 
     if !surface_config.get_changed() {
         return;
@@ -297,8 +292,8 @@ pub fn conservative_raster_resize(
         depth_or_array_layers: 1,
     };
 
-    low_res_desc_changed.set(true);
-    low_res_view_desc_changed.set(true);
+    low_res_desc.set_changed(true);
+    low_res_view_desc.set_changed(true);
     bind_group_upscale_component.write().set_pending();
 }
 

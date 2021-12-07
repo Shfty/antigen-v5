@@ -1,4 +1,4 @@
-use antigen_core::{ChangedFlag, LazyComponent};
+use antigen_core::{Changed, LazyComponent};
 use legion::{Entity, World};
 
 use crate::{
@@ -21,12 +21,16 @@ pub trait AssembleWinit {
 impl AssembleWinit for &mut legion::systems::CommandBuffer {
     fn assemble_winit_window(self, entity: Entity) {
         self.add_component(entity, WindowComponent::new(LazyComponent::Pending));
-        self.add_component(entity, WindowSizeComponent::new(Default::default()));
-        self.add_component(entity, ChangedFlag::<WindowSizeComponent>::new_clean());
+        self.add_component(
+            entity,
+            WindowSizeComponent::new(Changed::new(Default::default(), false)),
+        );
     }
 
     fn assemble_winit_window_title(self, entity: Entity, title: &'static str) {
-        self.add_component(entity, WindowTitleComponent::new((title).into()));
-        self.add_component(entity, ChangedFlag::<WindowTitleComponent>::new_dirty());
+        self.add_component(
+            entity,
+            WindowTitleComponent::new(Changed::new(title.into(), true)),
+        );
     }
 }

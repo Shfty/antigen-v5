@@ -5,7 +5,7 @@ use super::{
 };
 
 use antigen_core::{
-    Changed, ChangedFlag, ChangedTrait, GetIndirect, IndirectComponent, LazyComponent,
+    Changed, ChangedTrait, GetIndirect, IndirectComponent, LazyComponent,
     ReadWriteLock,
 };
 use antigen_wgpu::{
@@ -209,8 +209,7 @@ pub fn cube_resize(
     world: &SubWorld,
     _: &Cube,
     surface_config: &IndirectComponent<Changed<SurfaceConfigurationComponent>>,
-    view_projection: &ViewProjectionMatrix,
-    matrix_dirty: &ChangedFlag<ViewProjectionMatrix>,
+    view_projection: &Changed<ViewProjectionMatrix>,
 ) {
     let surface_config = world.get_indirect(surface_config).unwrap();
 
@@ -219,7 +218,7 @@ pub fn cube_resize(
         let aspect = surface_config.width as f32 / surface_config.height as f32;
         let matrix = super::generate_matrix(aspect);
         view_projection.write().copy_from_slice(matrix.as_slice());
-        matrix_dirty.set(true);
+        view_projection.set_changed(true);
     }
 }
 
@@ -238,11 +237,14 @@ pub fn cube_render(
     command_buffers: &CommandBuffersComponent,
     texture_view: &IndirectComponent<RenderAttachmentTextureView>,
 ) {
+    println!("Cube render");
     let device = if let Some(components) = <&Device>::query().iter(world).next() {
         components
     } else {
         return;
     };
+
+    println!("Device is ready");
 
     let opaque_pipeline = opaque_pipeline.read();
     let opaque_pipeline = if let LazyComponent::Ready(opaque_pipeline) = &*opaque_pipeline {
@@ -251,12 +253,16 @@ pub fn cube_render(
         return;
     };
 
+    println!("Opaque pipeline is ready");
+
     let bind_group = bind_group.read();
     let bind_group = if let LazyComponent::Ready(bind_group) = &*bind_group {
         bind_group
     } else {
         return;
     };
+
+    println!("Bind group is ready");
 
     let vertex_buffer = vertex_buffer.read();
     let vertex_buffer = if let LazyComponent::Ready(vertex_buffer) = &*vertex_buffer {
@@ -265,12 +271,16 @@ pub fn cube_render(
         return;
     };
 
+    println!("Vertex buffer is ready");
+
     let index_buffer = index_buffer.read();
     let index_buffer = if let LazyComponent::Ready(index_buffer) = &*index_buffer {
         index_buffer
     } else {
         return;
     };
+
+    println!("Index buffer is ready");
 
     let texture_view = world.get_indirect(texture_view).unwrap();
     let texture_view = texture_view.read();
@@ -279,6 +289,8 @@ pub fn cube_render(
     } else {
         return;
     };
+
+    println!("Texture view is ready");
 
     let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor { label: None });
 
@@ -321,4 +333,6 @@ pub fn cube_render(
     }
 
     command_buffers.write().push(encoder.finish());
+
+    println!("Cube render complete");
 }

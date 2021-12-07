@@ -1,5 +1,8 @@
 use super::{MsaaLine, Vertex, VertexBufferComponent, VERTEX_COUNT};
-use antigen_core::{Changed, ChangedTrait, ChangedFlag, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock, Usage};
+use antigen_core::{
+    Changed, ChangedTrait, GetIndirect, IndirectComponent, LazyComponent,
+    ReadWriteLock, Usage,
+};
 
 use antigen_wgpu::{
     wgpu::{
@@ -12,7 +15,7 @@ use antigen_wgpu::{
     CommandBuffersComponent, MsaaFramebuffer, MsaaFramebufferTextureDescriptor,
     MsaaFramebufferTextureView, PipelineLayoutComponent, RenderAttachmentTextureView,
     RenderBundleComponent, ShaderModuleComponent, SurfaceConfigurationComponent,
-    TextureDescriptorComponent, TextureViewDescriptorComponent,
+    TextureViewDescriptorComponent,
 };
 
 use antigen_winit::{
@@ -60,7 +63,7 @@ pub fn msaa_line_prepare(
     } else {
         unreachable!()
     };
-    
+
     println!("Pipeline layout ready");
 
     // Create render bundle
@@ -145,26 +148,19 @@ pub fn msaa_line_prepare(
 #[legion::system(par_for_each)]
 #[read_component(Changed<SurfaceConfigurationComponent>)]
 #[read_component(MsaaFramebufferTextureDescriptor<'static>)]
-#[read_component(Usage<MsaaFramebuffer, ChangedFlag<TextureDescriptorComponent<'static>>>)]
-#[read_component(Usage<MsaaFramebuffer, ChangedFlag<TextureViewDescriptorComponent<'static>>>)]
+#[read_component(Usage<MsaaFramebuffer, TextureViewDescriptorComponent<'static>>)]
 pub fn msaa_line_resize(
     world: &SubWorld,
     _: &MsaaLine,
     surface_config: &IndirectComponent<Changed<SurfaceConfigurationComponent>>,
     msaa_framebuffer_desc: &IndirectComponent<MsaaFramebufferTextureDescriptor<'static>>,
-    msaa_framebuffer_desc_changed: &IndirectComponent<
-        Usage<MsaaFramebuffer, ChangedFlag<TextureDescriptorComponent<'static>>>,
-    >,
-    msaa_framebuffer_view_desc_changed: &IndirectComponent<
-        Usage<MsaaFramebuffer, ChangedFlag<TextureViewDescriptorComponent<'static>>>,
+    msaa_framebuffer_view_desc: &IndirectComponent<
+        Usage<MsaaFramebuffer, TextureViewDescriptorComponent<'static>>,
     >,
 ) {
     let surface_config = world.get_indirect(surface_config).unwrap();
     let msaa_framebuffer_desc = world.get_indirect(msaa_framebuffer_desc).unwrap();
-    let msaa_framebuffer_desc_changed = world.get_indirect(msaa_framebuffer_desc_changed).unwrap();
-    let msaa_framebuffer_view_desc_changed = world
-        .get_indirect(msaa_framebuffer_view_desc_changed)
-        .unwrap();
+    let msaa_framebuffer_view_desc = world.get_indirect(msaa_framebuffer_view_desc).unwrap();
 
     if !surface_config.get_changed() {
         return;
@@ -179,8 +175,8 @@ pub fn msaa_line_resize(
         depth_or_array_layers: 1,
     };
 
-    msaa_framebuffer_desc_changed.set(true);
-    msaa_framebuffer_view_desc_changed.set(true);
+    msaa_framebuffer_desc.set_changed(true);
+    msaa_framebuffer_view_desc.set_changed(true);
 }
 
 #[legion::system(par_for_each)]
@@ -280,7 +276,7 @@ pub fn msaa_line_render(
     } else {
         return;
     };
-    
+
     println!("Render bundle ready");
 
     let render_attachment = world.get_indirect(render_attachment).unwrap();

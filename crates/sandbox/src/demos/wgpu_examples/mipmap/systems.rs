@@ -3,7 +3,7 @@ use std::{borrow::Cow, num::NonZeroU32};
 use crate::wgpu_examples::mipmap::{MIP_LEVEL_COUNT, TEXTURE_FORMAT};
 
 use super::{DrawPipelineComponent, DrawShaderComponent, JuliaSetSamplerComponent, JuliaSetTextureComponent, JuliaSetTextureViewComponent, MIP_PASS_COUNT, Mipmap, UniformBufferComponent, ViewProjectionMatrix};
-use antigen_core::{Changed, ChangedTrait, ChangedFlag, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock};
+use antigen_core::{Changed, ChangedTrait, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock};
 
 use antigen_wgpu::{
     wgpu::{
@@ -400,8 +400,7 @@ pub fn mipmap_resize(
     world: &SubWorld,
     _: &Mipmap,
     surface_config: &IndirectComponent<Changed<SurfaceConfigurationComponent>>,
-    view_projection: &ViewProjectionMatrix,
-    matrix_dirty: &ChangedFlag<ViewProjectionMatrix>,
+    view_projection: &Changed<ViewProjectionMatrix>,
 ) {
     let surface_config = world.get_indirect(surface_config).unwrap();
 
@@ -410,7 +409,7 @@ pub fn mipmap_resize(
         let aspect = surface_config.width as f32 / surface_config.height as f32;
         let matrix = super::generate_matrix(aspect);
         view_projection.write().copy_from_slice(matrix.as_slice());
-        matrix_dirty.set(true);
+        view_projection.set_changed(true);
     }
 }
 

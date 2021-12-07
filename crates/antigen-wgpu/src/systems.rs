@@ -10,11 +10,16 @@ use crate::{
     ShaderModuleDescriptorSpirVComponent, SurfaceConfigurationComponent, TextureComponent,
 };
 
-use antigen_core::{Changed, ChangedFlag, ChangedTrait, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock, Usage};
+use antigen_core::{
+    Changed, ChangedTrait, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock, Usage,
+};
 use antigen_winit::{WindowComponent, WindowEntityMap, WindowEventComponent, WindowSizeComponent};
 
 use legion::{world::SubWorld, IntoQuery};
-use wgpu::{Adapter, Device, ImageCopyTextureBase, ImageDataLayout, Instance, Maintain, Queue, Surface, util::DeviceExt};
+use wgpu::{
+    util::DeviceExt, Adapter, Device, ImageCopyTextureBase, ImageDataLayout, Instance, Maintain,
+    Queue, Surface,
+};
 
 #[legion::system(par_for_each)]
 pub fn device_poll(device: &Device, #[state] maintain: &Maintain) {
@@ -86,9 +91,7 @@ pub fn reconfigure_surfaces(
 }
 
 #[legion::system(par_for_each)]
-pub fn reset_surface_config_changed(
-    surface_config: &Changed<SurfaceConfigurationComponent>,
-) {
+pub fn reset_surface_config_changed(surface_config: &Changed<SurfaceConfigurationComponent>) {
     if surface_config.get_changed() {
         surface_config.set_changed(false);
     }
@@ -96,12 +99,8 @@ pub fn reset_surface_config_changed(
 
 // Fetch the current surface texture for a given surface, and set its dirty flag
 pub fn surface_texture_query(world: &legion::world::SubWorld, entity: &legion::Entity) {
-    let (surface, surface_texture, surface_texture_dirty) = if let Ok(components) = <(
-        &SurfaceComponent,
-        &SurfaceTextureComponent,
-        &ChangedFlag<SurfaceTextureComponent>,
-    )>::query()
-    .get(world, *entity)
+    let (surface, surface_texture) = if let Ok(components) =
+        <(&SurfaceComponent, &SurfaceTextureComponent)>::query().get(world, *entity)
     {
         components
     } else {
@@ -117,10 +116,10 @@ pub fn surface_texture_query(world: &legion::world::SubWorld, entity: &legion::E
 
     if let Ok(current) = surface.get_current_texture() {
         *surface_texture.write() = Some(current);
-        surface_texture_dirty.set(true);
+        surface_texture.set_changed(true);
     } else {
         if surface_texture.read().is_some() {
-            surface_texture_dirty.set(true);
+            surface_texture.set_changed(true);
             *surface_texture.write() = None;
         }
     }
@@ -128,30 +127,29 @@ pub fn surface_texture_query(world: &legion::world::SubWorld, entity: &legion::E
 
 // Create a texture view for a surface texture, unsetting its dirty flag
 pub fn surface_texture_view_query(world: &legion::world::SubWorld, entity: &legion::Entity) {
-    let (surface_texture, surface_texture_dirty, texture_view_desc, texture_view) =
-        if let Ok(components) = <(
-            &SurfaceTextureComponent,
-            &ChangedFlag<SurfaceTextureComponent>,
-            &RenderAttachmentTextureViewDescriptor,
-            &RenderAttachmentTextureView,
-        )>::query()
-        .get(world, *entity)
-        {
-            components
-        } else {
-            return;
-        };
+    let (surface_texture_component, texture_view_desc, texture_view) = if let Ok(components) = <(
+        &SurfaceTextureComponent,
+        &RenderAttachmentTextureViewDescriptor,
+        &RenderAttachmentTextureView,
+    )>::query(
+    )
+    .get(world, *entity)
+    {
+        components
+    } else {
+        return;
+    };
 
-    if surface_texture_dirty.get() {
-        if let Some(surface_texture) = &*surface_texture.read() {
+    if surface_texture_component.get_changed() {
+        if let Some(surface_texture) = &*surface_texture_component.read() {
             let view = surface_texture
                 .texture
                 .create_view(&texture_view_desc.read());
             texture_view.write().set_ready(view);
-            surface_texture_dirty.set(false);
+            surface_texture_component.set_changed(false);
         } else {
             texture_view.write().set_dropped();
-            surface_texture_dirty.set(false);
+            surface_texture_component.set_changed(false);
         }
     }
 }
@@ -159,10 +157,9 @@ pub fn surface_texture_view_query(world: &legion::world::SubWorld, entity: &legi
 #[legion::system(par_for_each)]
 pub fn surface_size(
     window_size: &WindowSizeComponent,
-    window_size_changed: &ChangedFlag<WindowSizeComponent>,
     surface_configuration_component: &Changed<SurfaceConfigurationComponent>,
 ) {
-    if window_size_changed.get() {
+    if window_size.get_changed() {
         let window_size = *window_size.read();
         let mut surface_configuration = surface_configuration_component.write();
         surface_configuration.width = window_size.width;
@@ -173,13 +170,10 @@ pub fn surface_size(
 
 // Present valid surface textures, setting their dirty flag
 #[legion::system(par_for_each)]
-pub fn surface_texture_present(
-    surface_texture: &SurfaceTextureComponent,
-    surface_texture_dirty: &ChangedFlag<SurfaceTextureComponent>,
-) {
-    if let Some(surface_texture) = surface_texture.write().take() {
+pub fn surface_texture_present(surface_texture_component: &SurfaceTextureComponent) {
+    if let Some(surface_texture) = surface_texture_component.write().take() {
         surface_texture.present();
-        surface_texture_dirty.set(true);
+        surface_texture_component.set_changed(true);
     }
 }
 
@@ -187,10 +181,9 @@ pub fn surface_texture_present(
 #[legion::system(par_for_each)]
 pub fn surface_texture_view_drop(
     surface_texture: &SurfaceTextureComponent,
-    surface_texture_changed: &ChangedFlag<SurfaceTextureComponent>,
     texture_view: &RenderAttachmentTextureView,
 ) {
-    if !surface_texture_changed.get() {
+    if !surface_texture.get_changed() {
         return;
     }
 
@@ -199,19 +192,18 @@ pub fn surface_texture_view_drop(
     }
 
     texture_view.write().set_dropped();
-    surface_texture_changed.set(false);
+    surface_texture.set_changed(false);
 }
 
-/// Create pending untagged shader modules, recreating them if a ChangedFlag is set
+/// Create pending untagged shader modules, recreating them if a Changed flag is set
 #[legion::system(par_for_each)]
 #[read_component(Device)]
 pub fn create_shader_modules(
     world: &SubWorld,
     shader_module_desc: &ShaderModuleDescriptorComponent,
     shader_module: &ShaderModuleComponent,
-    shader_module_desc_changed: &ChangedFlag<ShaderModuleDescriptorComponent>,
 ) {
-    if !shader_module.read().is_pending() && !shader_module_desc_changed.get() {
+    if !shader_module.read().is_pending() && !shader_module_desc.get_changed() {
         return;
     }
 
@@ -220,21 +212,20 @@ pub fn create_shader_modules(
         .write()
         .set_ready(device.create_shader_module(&shader_module_desc.read()));
 
-    shader_module_desc_changed.set(false);
+    shader_module_desc.set_changed(false);
 
     println!("Created shader module");
 }
 
-/// Create pending usage-tagged shader modules, recreating them if a ChangedFlag is set
+/// Create pending usage-tagged shader modules, recreating them if a Changed flag is set
 #[legion::system(par_for_each)]
 #[read_component(Device)]
 pub fn create_shader_modules_usage<T: Send + Sync + 'static>(
     world: &SubWorld,
     shader_module_desc: &Usage<T, ShaderModuleDescriptorComponent>,
     shader_module: &Usage<T, ShaderModuleComponent>,
-    shader_module_desc_changed: &Usage<T, ChangedFlag<ShaderModuleDescriptorComponent>>,
 ) {
-    if !shader_module.read().is_pending() && !shader_module_desc_changed.get() {
+    if !shader_module.read().is_pending() && !shader_module_desc.get_changed() {
         return;
     }
 
@@ -243,21 +234,20 @@ pub fn create_shader_modules_usage<T: Send + Sync + 'static>(
         .write()
         .set_ready(device.create_shader_module(&shader_module_desc.read()));
 
-    shader_module_desc_changed.set(false);
+    shader_module_desc.set_changed(false);
     println!("Created {} shader module", std::any::type_name::<T>());
 }
 
-/// Create pending untagged shader modules, recreating them if a ChangedFlag is set
+/// Create pending untagged shader modules, recreating them if a Changed flag is set
 #[legion::system(par_for_each)]
 #[read_component(Device)]
 pub fn create_shader_modules_spirv(
     world: &SubWorld,
     shader_module_desc: &ShaderModuleDescriptorSpirVComponent,
     shader_module: &ShaderModuleComponent,
-    shader_module_desc_changed: &ChangedFlag<ShaderModuleDescriptorSpirVComponent>,
 ) {
     println!("Create shader modules spirv");
-    if !shader_module.read().is_pending() && !shader_module_desc_changed.get() {
+    if !shader_module.read().is_pending() && !shader_module_desc.get_changed() {
         return;
     }
 
@@ -266,21 +256,20 @@ pub fn create_shader_modules_spirv(
         .write()
         .set_ready(unsafe { device.create_shader_module_spirv(&shader_module_desc.read()) });
 
-    shader_module_desc_changed.set(false);
+    shader_module_desc.set_changed(false);
 
     println!("Created spir-v shader module");
 }
 
-/// Create pending usage-tagged shader modules, recreating them if a ChangedFlag is set
+/// Create pending usage-tagged shader modules, recreating them if a Changed flag is set
 #[legion::system(par_for_each)]
 #[read_component(Device)]
 pub fn create_shader_modules_usage_spirv<T: Send + Sync + 'static>(
     world: &SubWorld,
     shader_module_desc: &Usage<T, ShaderModuleDescriptorSpirVComponent>,
     shader_module: &Usage<T, ShaderModuleComponent>,
-    shader_module_desc_changed: &Usage<T, ChangedFlag<ShaderModuleDescriptorSpirVComponent>>,
 ) {
-    if !shader_module.read().is_pending() && !shader_module_desc_changed.get() {
+    if !shader_module.read().is_pending() && !shader_module_desc.get_changed() {
         return;
     }
 
@@ -289,23 +278,22 @@ pub fn create_shader_modules_usage_spirv<T: Send + Sync + 'static>(
         .write()
         .set_ready(unsafe { device.create_shader_module_spirv(&shader_module_desc.read()) });
 
-    shader_module_desc_changed.set(false);
+    shader_module_desc.set_changed(false);
     println!(
         "Created {} spir-v shader module",
         std::any::type_name::<T>()
     );
 }
 
-/// Create pending usage-tagged buffers, recreating them if a ChangedFlag is set
+/// Create pending usage-tagged buffers, recreating them if a Changed flag is set
 #[legion::system(par_for_each)]
 #[read_component(Device)]
 pub fn create_buffers<T: Send + Sync + 'static>(
     world: &SubWorld,
     buffer_desc: &Usage<T, BufferDescriptorComponent>,
     buffer: &Usage<T, BufferComponent>,
-    buffer_desc_changed: &Usage<T, ChangedFlag<BufferDescriptorComponent>>,
 ) {
-    if !buffer.read().is_pending() && !buffer_desc_changed.get() {
+    if !buffer.read().is_pending() && !buffer_desc.get_changed() {
         return;
     }
 
@@ -314,21 +302,20 @@ pub fn create_buffers<T: Send + Sync + 'static>(
         .write()
         .set_ready(device.create_buffer(&buffer_desc.read()));
 
-    buffer_desc_changed.set(false);
+    buffer_desc.set_changed(false);
 
     println!("Created {} buffer", std::any::type_name::<T>());
 }
 
-/// Create-initialize pending usage-tagged buffers, recreating them if a ChangedFlag is set
+/// Create-initialize pending usage-tagged buffers, recreating them if a Changed flag is set
 #[legion::system(par_for_each)]
 #[read_component(Device)]
 pub fn create_buffers_init<T: Send + Sync + 'static>(
     world: &SubWorld,
     buffer_init_desc: &Usage<T, BufferInitDescriptorComponent>,
     buffer: &Usage<T, BufferComponent>,
-    buffer_init_desc_changed: &Usage<T, ChangedFlag<BufferInitDescriptorComponent>>,
 ) {
-    if !buffer.read().is_pending() && !buffer_init_desc_changed.get() {
+    if !buffer.read().is_pending() && !buffer_init_desc.get_changed() {
         return;
     }
 
@@ -337,25 +324,24 @@ pub fn create_buffers_init<T: Send + Sync + 'static>(
         .write()
         .set_ready(device.create_buffer_init(&buffer_init_desc.read()));
 
-    buffer_init_desc_changed.set(false);
+    buffer_init_desc.set_changed(false);
 
     println!("Create-initialized {} buffer", std::any::type_name::<T>());
 }
 
-/// Create pending usage-tagged textures, recreating them if a ChangedFlag is set
+/// Create pending usage-tagged textures, recreating them if a Changed flag is set
 #[legion::system(par_for_each)]
 #[read_component(Device)]
 pub fn create_textures<T: Send + Sync + 'static>(
     world: &SubWorld,
-    texture_descriptor: &Usage<T, TextureDescriptorComponent>,
+    texture_descriptor_component: &Usage<T, TextureDescriptorComponent>,
     texture: &Usage<T, TextureComponent>,
-    texture_descriptor_changed: &Usage<T, ChangedFlag<TextureDescriptorComponent>>,
 ) {
-    if !texture.read().is_pending() && !texture_descriptor_changed.get() {
+    if !texture.read().is_pending() && !texture_descriptor_component.get_changed() {
         return;
     }
 
-    let texture_descriptor = texture_descriptor.read();
+    let texture_descriptor = texture_descriptor_component.read();
     if texture_descriptor.size.width == 0
         || texture_descriptor.size.height == 0
         || texture_descriptor.size.depth_or_array_layers == 0
@@ -368,12 +354,12 @@ pub fn create_textures<T: Send + Sync + 'static>(
         .write()
         .set_ready(device.create_texture(&*texture_descriptor));
 
-    texture_descriptor_changed.set(false);
+    texture_descriptor_component.set_changed(false);
 
     println!("Created texture: {:#?}", texture_descriptor);
 }
 
-/// Create pending usage-tagged texture views, recreating them if a ChangedFlag is set
+/// Create pending usage-tagged texture views, recreating them if a Changed flag is set
 #[legion::system(par_for_each)]
 #[read_component(Usage<T, TextureComponent>)]
 #[read_component(Device)]
@@ -382,9 +368,8 @@ pub fn create_texture_views<T: Send + Sync + 'static>(
     texture: &IndirectComponent<Usage<T, TextureComponent>>,
     texture_view_desc: &Usage<T, TextureViewDescriptorComponent>,
     texture_view: &Usage<T, TextureViewComponent>,
-    texture_view_desc_changed: &Usage<T, ChangedFlag<TextureViewDescriptorComponent>>,
 ) {
-    if !texture_view.read().is_pending() && !texture_view_desc_changed.get() {
+    if !texture_view.read().is_pending() && !texture_view_desc.get_changed() {
         return;
     }
 
@@ -400,21 +385,20 @@ pub fn create_texture_views<T: Send + Sync + 'static>(
         .write()
         .set_ready(texture.create_view(&texture_view_desc.read()));
 
-    texture_view_desc_changed.set(false);
+    texture_view_desc.set_changed(false);
 
     println!("Created texture view: {:#?}", texture_view_desc.read());
 }
 
-/// Create pending samplers, recreating them if a ChangedFlag is set
+/// Create pending samplers, recreating them if a Changed flag is set
 #[legion::system(par_for_each)]
 #[read_component(Device)]
 pub fn create_samplers(
     world: &SubWorld,
     sampler_desc: &SamplerDescriptorComponent,
     sampler: &SamplerComponent,
-    sampler_desc_changed: &ChangedFlag<SamplerDescriptorComponent>,
 ) {
-    if !sampler.read().is_pending() && !sampler_desc_changed.get() {
+    if !sampler.read().is_pending() && !sampler_desc.get_changed() {
         return;
     }
 
@@ -423,21 +407,20 @@ pub fn create_samplers(
         .write()
         .set_ready(device.create_sampler(&sampler_desc.read()));
 
-    sampler_desc_changed.set(false);
+    sampler_desc.set_changed(false);
 
     println!("Created sampler: {:#?}", sampler_desc.read());
 }
 
-/// Create pending usage-tagged samplers, recreating them if a ChangedFlag is set
+/// Create pending usage-tagged samplers, recreating them if a Changed flag is set
 #[legion::system(par_for_each)]
 #[read_component(Device)]
 pub fn create_samplers_with_usage<T: Send + Sync + 'static>(
     world: &SubWorld,
     sampler_desc: &Usage<T, SamplerDescriptorComponent>,
     sampler: &Usage<T, SamplerComponent>,
-    sampler_desc_changed: &Usage<T, ChangedFlag<SamplerDescriptorComponent>>,
 ) {
-    if !sampler.read().is_pending() && !sampler_desc_changed.get() {
+    if !sampler.read().is_pending() && !sampler_desc.get_changed() {
         return;
     }
 
@@ -446,7 +429,7 @@ pub fn create_samplers_with_usage<T: Send + Sync + 'static>(
         .write()
         .set_ready(device.create_sampler(&sampler_desc.read()));
 
-    sampler_desc_changed.set(false);
+    sampler_desc.set_changed(false);
 
     println!("Created sampler: {:#?}", sampler_desc.read());
 }
@@ -455,8 +438,7 @@ pub fn create_samplers_with_usage<T: Send + Sync + 'static>(
 #[legion::system]
 #[read_component(Queue)]
 #[read_component(Usage<T, BufferWriteComponent<L>>)]
-#[read_component(L)]
-#[read_component(ChangedFlag<L>)]
+#[read_component(Changed<L>)]
 #[read_component(IndirectComponent<Usage<T, BufferComponent>>)]
 #[read_component(Usage<T, BufferComponent>)]
 pub fn buffer_write<
@@ -474,14 +456,13 @@ pub fn buffer_write<
 
     <(
         &Usage<T, BufferWriteComponent<L>>,
-        &L,
-        &ChangedFlag<L>,
+        &Changed<L>,
         &IndirectComponent<Usage<T, BufferComponent>>,
     )>::query()
-    .par_for_each(world, |(buffer_write, value, dirty_flag, buffer)| {
+    .par_for_each(world, |(buffer_write, data_component, buffer)| {
         let buffer = world.get_indirect(buffer).unwrap();
 
-        if dirty_flag.get() {
+        if data_component.get_changed() {
             let buffer = buffer.read();
             let buffer = if let LazyComponent::Ready(buffer) = &*buffer {
                 buffer
@@ -489,8 +470,8 @@ pub fn buffer_write<
                 return;
             };
 
-            let value = value.read();
-            let bytes = value.to_bytes();
+            let data = data_component.read();
+            let bytes = data.to_bytes();
 
             println!(
                 "Writing {} bytes to {} buffer at offset {}",
@@ -500,7 +481,7 @@ pub fn buffer_write<
             );
             queue.write_buffer(buffer, *buffer_write.read(), bytes);
 
-            dirty_flag.set(false);
+            data_component.set_changed(false);
         }
     });
 }
@@ -509,8 +490,7 @@ pub fn buffer_write<
 #[legion::system]
 #[read_component(Queue)]
 #[read_component(Usage<T, TextureWriteComponent<L>>)]
-#[read_component(L)]
-#[read_component(ChangedFlag<L>)]
+#[read_component(Changed<L>)]
 #[read_component(IndirectComponent<Usage<T, TextureDescriptorComponent>>)]
 #[read_component(IndirectComponent<Usage<T, TextureComponent>>)]
 #[read_component(Usage<T, TextureDescriptorComponent>)]
@@ -529,18 +509,17 @@ where
 
     <(
         &Usage<T, TextureWriteComponent<L>>,
-        &L,
-        &ChangedFlag<L>,
+        &Changed<L>,
         &IndirectComponent<Usage<T, TextureDescriptorComponent>>,
         &IndirectComponent<Usage<T, TextureComponent>>,
     )>::query()
     .par_for_each(
         world,
-        |(texture_write, texels, dirty_flag, texture_desc, texture)| {
+        |(texture_write, texels_component, texture_desc, texture)| {
             let texture_descriptor_component = world.get_indirect(texture_desc).unwrap();
             let texture_component = world.get_indirect(texture).unwrap();
 
-            if dirty_flag.get() {
+            if texels_component.get_changed() {
                 let texture = texture_component.read();
                 let texture = if let LazyComponent::Ready(texture) = &*texture {
                     texture
@@ -548,7 +527,7 @@ where
                     return;
                 };
 
-                let texels = texels.read();
+                let texels = texels_component.read();
                 let bytes = texels.to_bytes();
                 let image_copy_texture =
                     ReadWriteLock::<ImageCopyTextureBase<()>>::read(texture_write);
@@ -572,7 +551,7 @@ where
                     texture_descriptor_component.read().size,
                 );
 
-                dirty_flag.set(false);
+                texels_component.set_changed(false);
             }
         },
     );
@@ -597,7 +576,6 @@ pub fn submit_command_buffers(world: &SubWorld, command_buffers: &CommandBuffers
 #[read_component(WindowEntityMap)]
 #[read_component(SurfaceComponent)]
 #[read_component(SurfaceTextureComponent)]
-#[read_component(ChangedFlag<SurfaceTextureComponent>)]
 #[read_component(RenderAttachmentTextureViewDescriptor)]
 #[read_component(RenderAttachmentTextureView)]
 pub fn surface_textures_views(world: &SubWorld) {

@@ -5,7 +5,9 @@ use super::{
     LocalBindGroupComponent, LocalBufferComponent, Locals, LogoSamplerComponent,
     LogoTextureViewComponent, PlayfieldExtentComponent, BUNNY_SIZE, GRAVITY,
 };
-use antigen_core::{Changed, ChangedFlag, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock};
+use antigen_core::{
+    Changed, ChangedTrait, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock,
+};
 
 use antigen_winit::{
     winit::event::{ElementState, KeyboardInput, VirtualKeyCode, WindowEvent},
@@ -45,6 +47,8 @@ pub fn bunnymark_prepare(
     local_bind_group: &LocalBindGroupComponent,
     surface_configuration_component: &IndirectComponent<Changed<SurfaceConfigurationComponent>>,
 ) {
+    println!("Bunnymark prepare");
+
     if !render_pipeline_component.read().is_pending() {
         return;
     }
@@ -206,12 +210,13 @@ pub fn bunnymark_prepare(
             }],
             label: None,
         }));
+
+    println!("Bunnymark prepare complete");
 }
 
 #[legion::system(par_for_each)]
 pub fn bunnymark_tick(
-    bunnies: &Bunnies,
-    dirty_flag: &ChangedFlag<Bunnies>,
+    bunnies: &Changed<Bunnies>,
     extent: &PlayfieldExtentComponent,
 ) {
     let delta = 0.01;
@@ -229,7 +234,7 @@ pub fn bunnymark_tick(
             bunny.velocity[1] *= -1.0;
         }
     }
-    dirty_flag.set(true);
+    bunnies.set_changed(true);
 }
 
 // Render the hello triangle pipeline to the specified entity's surface
@@ -239,13 +244,15 @@ pub fn bunnymark_tick(
 pub fn bunnymark_render(
     world: &legion::world::SubWorld,
     _: &Bunnymark,
-    bunnies: &Bunnies,
+    bunnies: &Changed<Bunnies>,
     render_pipeline: &RenderPipelineComponent,
     command_buffers: &CommandBuffersComponent,
     global_bind_group: &GlobalBindGroupComponent,
     local_bind_group: &LocalBindGroupComponent,
     texture_view: &IndirectComponent<RenderAttachmentTextureView>,
 ) {
+    println!("Bunnymark render");
+
     let device = if let Some(components) = <&Device>::query().iter(world).next() {
         components
     } else {
@@ -305,6 +312,8 @@ pub fn bunnymark_render(
             command_buffers.write().push(encoder.finish());
         }
     }
+
+    println!("Bunnymark render complete");
 }
 
 #[legion::system(par_for_each)]
@@ -313,7 +322,7 @@ pub fn bunnymark_render(
 pub fn bunnymark_key_event(
     world: &SubWorld,
     window: &IndirectComponent<WindowComponent>,
-    bunnies: &Bunnies,
+    bunnies: &Changed<Bunnies>,
     extent: &PlayfieldExtentComponent,
 ) {
     let window = world

@@ -46,18 +46,15 @@
 //       Should be able to give TextureComponent a sibling GenerateMipmaps component,
 //       have everything be automatic from there
 //
-// TODO: Boilerplate reduction for reading and unwrapping RwLock<LazyComponent::Ready>
+// TODO: [>] Boilerplate reduction for reading and unwrapping RwLock<LazyComponent::Ready>
 //
-// TODO: Refactor ChangedFlag as a wrapper instead of a separate component
+// TODO: [✓] Refactor ChangedFlag as a wrapper instead of a separate component
 //       Can implement its methods in a trait and use Deref to tag them onto an existing type,
-//       with or without a usage flag
+//          with or without a usage flag
 //       Less components means less boilerplate in user code,
 //       but introduces more pressure to typedef complex components
 //
-// TODO: Figure out a better way to assemble Usage<U, ChangedFlag<T>>
-//       add_component_with_usage_and_changed_flag?
-//       Functional-style composition may be a viable approach
-//       add_component(changed_flag(usage::<T>(MyComponent)))
+// TODO: [ ] Factor out AddComponentWithUsageFlag in favor of AsUsage
 //
 // TODO: Improve WindowEventComponent
 //       Split into discrete components?

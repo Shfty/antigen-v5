@@ -1,10 +1,8 @@
-mod changed_flag;
 mod indirect_component;
 mod lazy_component;
 mod usage;
 mod changed;
 
-pub use changed_flag::*;
 pub use indirect_component::*;
 pub use lazy_component::*;
 pub use usage::*;
