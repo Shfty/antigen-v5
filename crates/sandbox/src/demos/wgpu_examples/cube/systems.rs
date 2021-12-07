@@ -4,7 +4,10 @@ use super::{
     WirePassRenderPipelineComponent,
 };
 
-use antigen_core::{ChangedFlag, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock};
+use antigen_core::{
+    Changed, ChangedFlag, ChangedTrait, GetIndirect, IndirectComponent, LazyComponent,
+    ReadWriteLock,
+};
 use antigen_wgpu::{
     wgpu::{
         BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry,
@@ -25,7 +28,7 @@ use legion::{world::SubWorld, IntoQuery};
 // Initialize the hello triangle render pipeline
 #[legion::system(par_for_each)]
 #[read_component(Device)]
-#[read_component(SurfaceConfigurationComponent)]
+#[read_component(Changed<SurfaceConfigurationComponent>)]
 pub fn cube_prepare(
     world: &SubWorld,
     _: &Cube,
@@ -35,7 +38,7 @@ pub fn cube_prepare(
     texture_view: &MandelbrotTextureViewComponent,
     uniform_buffer: &UniformBufferComponent,
     bind_group_component: &BindGroupComponent,
-    surface_configuration_component: &IndirectComponent<SurfaceConfigurationComponent>,
+    surface_configuration_component: &IndirectComponent<Changed<SurfaceConfigurationComponent>>,
 ) {
     if !opaque_pipeline_component.read().is_pending() {
         return;
@@ -201,20 +204,17 @@ pub fn cube_prepare(
 }
 
 #[legion::system(par_for_each)]
-#[read_component(SurfaceConfigurationComponent)]
-#[read_component(ChangedFlag<SurfaceConfigurationComponent>)]
+#[read_component(Changed<SurfaceConfigurationComponent>)]
 pub fn cube_resize(
     world: &SubWorld,
     _: &Cube,
-    surface_config: &IndirectComponent<SurfaceConfigurationComponent>,
-    surface_config_changed: &IndirectComponent<ChangedFlag<SurfaceConfigurationComponent>>,
+    surface_config: &IndirectComponent<Changed<SurfaceConfigurationComponent>>,
     view_projection: &ViewProjectionMatrix,
     matrix_dirty: &ChangedFlag<ViewProjectionMatrix>,
 ) {
-    let surface_config_changed = world.get_indirect(surface_config_changed).unwrap();
     let surface_config = world.get_indirect(surface_config).unwrap();
 
-    if surface_config_changed.get() {
+    if surface_config.get_changed() {
         let surface_config = surface_config.read();
         let aspect = surface_config.width as f32 / surface_config.height as f32;
         let matrix = super::generate_matrix(aspect);

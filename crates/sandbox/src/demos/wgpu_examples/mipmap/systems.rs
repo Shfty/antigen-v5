@@ -3,7 +3,7 @@ use std::{borrow::Cow, num::NonZeroU32};
 use crate::wgpu_examples::mipmap::{MIP_LEVEL_COUNT, TEXTURE_FORMAT};
 
 use super::{DrawPipelineComponent, DrawShaderComponent, JuliaSetSamplerComponent, JuliaSetTextureComponent, JuliaSetTextureViewComponent, MIP_PASS_COUNT, Mipmap, UniformBufferComponent, ViewProjectionMatrix};
-use antigen_core::{ChangedFlag, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock};
+use antigen_core::{Changed, ChangedTrait, ChangedFlag, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock};
 
 use antigen_wgpu::{
     wgpu::{
@@ -177,7 +177,7 @@ fn generate_mipmaps(
 #[legion::system(par_for_each)]
 #[read_component(Device)]
 #[read_component(Queue)]
-#[read_component(SurfaceConfigurationComponent)]
+#[read_component(Changed<SurfaceConfigurationComponent>)]
 #[read_component(RenderAttachmentTextureView)]
 pub fn mipmap_prepare(
     world: &legion::world::SubWorld,
@@ -189,7 +189,7 @@ pub fn mipmap_prepare(
     julia_set_texture: &JuliaSetTextureComponent,
     julia_set_texture_view: &JuliaSetTextureViewComponent,
     julia_set_sampler: &JuliaSetSamplerComponent,
-    surface_component: &IndirectComponent<SurfaceConfigurationComponent>,
+    surface_component: &IndirectComponent<Changed<SurfaceConfigurationComponent>>,
 ) {
     if !draw_pipeline_component.read().is_pending() {
         return;
@@ -395,20 +395,17 @@ pub fn mipmap_prepare(
 }
 
 #[legion::system(par_for_each)]
-#[read_component(SurfaceConfigurationComponent)]
-#[read_component(ChangedFlag<SurfaceConfigurationComponent>)]
+#[read_component(Changed<SurfaceConfigurationComponent>)]
 pub fn mipmap_resize(
     world: &SubWorld,
     _: &Mipmap,
-    surface_config: &IndirectComponent<SurfaceConfigurationComponent>,
-    surface_config_changed: &IndirectComponent<ChangedFlag<SurfaceConfigurationComponent>>,
+    surface_config: &IndirectComponent<Changed<SurfaceConfigurationComponent>>,
     view_projection: &ViewProjectionMatrix,
     matrix_dirty: &ChangedFlag<ViewProjectionMatrix>,
 ) {
-    let surface_config_changed = world.get_indirect(surface_config_changed).unwrap();
     let surface_config = world.get_indirect(surface_config).unwrap();
 
-    if surface_config_changed.get() {
+    if surface_config.get_changed() {
         let surface_config = surface_config.read();
         let aspect = surface_config.width as f32 / surface_config.height as f32;
         let matrix = super::generate_matrix(aspect);

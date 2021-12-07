@@ -7,8 +7,8 @@ use legion::systems::CommandBuffer;
 pub use systems::*;
 
 use antigen_core::{
-    parallel, serial, single, AddIndirectComponent, ChangedFlag, ImmutableSchedule, RwLock, Serial,
-    Single, Usage,
+    parallel, serial, single, AddIndirectComponent, Changed, ImmutableSchedule,
+    RwLock, Serial, Single, Usage,
 };
 use antigen_wgpu::{
     wgpu::{
@@ -154,8 +154,7 @@ pub fn assemble(cmd: &mut CommandBuffer) {
     cmd.assemble_wgpu_render_pipeline_with_usage::<WirePass>(renderer_entity);
     cmd.assemble_wgpu_command_buffers(renderer_entity);
 
-    cmd.add_indirect_component::<SurfaceConfigurationComponent>(renderer_entity, window_entity);
-    cmd.add_indirect_component::<ChangedFlag<SurfaceConfigurationComponent>>(
+    cmd.add_indirect_component::<Changed<SurfaceConfigurationComponent>>(
         renderer_entity,
         window_entity,
     );
@@ -270,7 +269,11 @@ pub fn assemble(cmd: &mut CommandBuffer) {
     );
 
     // Texture view
-    cmd.assemble_wgpu_texture_view_with_usage::<Mandelbrot>(renderer_entity, renderer_entity, Default::default());
+    cmd.assemble_wgpu_texture_view_with_usage::<Mandelbrot>(
+        renderer_entity,
+        renderer_entity,
+        Default::default(),
+    );
 }
 
 pub fn prepare_schedule() -> ImmutableSchedule<Serial> {

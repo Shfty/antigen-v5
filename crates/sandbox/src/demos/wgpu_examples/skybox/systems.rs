@@ -6,8 +6,8 @@ use super::{
     VertexBufferComponent, VertexCountComponent,
 };
 use antigen_core::{
-    Changed, ChangedFlag, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock, RwLock,
-    ChangedTrait,
+    Changed, ChangedTrait, GetIndirect, IndirectComponent, LazyComponent,
+    ReadWriteLock, RwLock,
 };
 
 use antigen_wgpu::{
@@ -52,7 +52,7 @@ fn create_depth_texture(config: &SurfaceConfiguration, device: &Device) -> Textu
 #[legion::system(par_for_each)]
 #[read_component(Device)]
 #[read_component(Queue)]
-#[read_component(SurfaceConfigurationComponent)]
+#[read_component(Changed<SurfaceConfigurationComponent>)]
 pub fn skybox_prepare(
     world: &legion::world::SubWorld,
     _: &Skybox,
@@ -65,7 +65,7 @@ pub fn skybox_prepare(
     depth_texture_view_component: &DepthTextureView,
     texture_component: &SkyboxTextureComponent,
     texture_view_component: &SkyboxTextureViewComponent,
-    surface_component: &IndirectComponent<SurfaceConfigurationComponent>,
+    surface_component: &IndirectComponent<Changed<SurfaceConfigurationComponent>>,
 ) {
     let device = <&Device>::query().iter(world).next().unwrap();
 
@@ -301,21 +301,19 @@ pub fn skybox_prepare(
 
 #[legion::system(par_for_each)]
 #[read_component(Device)]
-#[read_component(SurfaceConfigurationComponent)]
-#[read_component(ChangedFlag<SurfaceConfigurationComponent>)]
+#[read_component(Changed<SurfaceConfigurationComponent>)]
 pub fn skybox_resize(
     world: &SubWorld,
     _: &Skybox,
-    surface_config: &IndirectComponent<SurfaceConfigurationComponent>,
-    surface_config_changed: &IndirectComponent<ChangedFlag<SurfaceConfigurationComponent>>,
+    surface_config: &IndirectComponent<Changed<SurfaceConfigurationComponent>>,
     camera_data: &Changed<RwLock<[f32; 52]>>,
     depth_texture_view_component: &DepthTextureView,
 ) {
-    let surface_config_changed = world.get_indirect(surface_config_changed).unwrap();
     let surface_config = world.get_indirect(surface_config).unwrap();
-    let surface_config = surface_config.read();
 
-    if surface_config_changed.get() {
+    if surface_config.get_changed() {
+        let surface_config = surface_config.read();
+
         let device = <&Device>::query().iter(world).next().unwrap();
 
         if surface_config.width == 0 || surface_config.height == 0 {
@@ -458,14 +456,14 @@ pub fn skybox_render(
 
 #[legion::system(par_for_each)]
 #[read_component(WindowComponent)]
-#[read_component(SurfaceConfigurationComponent)]
+#[read_component(Changed<SurfaceConfigurationComponent>)]
 #[read_component(WindowEventComponent)]
 pub fn skybox_cursor_moved(
     world: &SubWorld,
     _: &Skybox,
     camera_data: &Changed<RwLock<[f32; 52]>>,
     window: &IndirectComponent<WindowComponent>,
-    surface_component: &IndirectComponent<SurfaceConfigurationComponent>,
+    surface_component: &IndirectComponent<Changed<SurfaceConfigurationComponent>>,
 ) {
     let window = world
         .get_indirect(window)

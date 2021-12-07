@@ -1,7 +1,5 @@
 use super::{MsaaLine, Vertex, VertexBufferComponent, VERTEX_COUNT};
-use antigen_core::{
-    ChangedFlag, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock, Usage,
-};
+use antigen_core::{Changed, ChangedTrait, ChangedFlag, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock, Usage};
 
 use antigen_wgpu::{
     wgpu::{
@@ -26,7 +24,7 @@ use legion::{world::SubWorld, IntoQuery};
 // Initialize the MSAA lines render pipeline
 #[legion::system(par_for_each)]
 #[read_component(Device)]
-#[read_component(SurfaceConfigurationComponent)]
+#[read_component(Changed<SurfaceConfigurationComponent>)]
 #[read_component(MsaaFramebufferTextureDescriptor<'static>)]
 pub fn msaa_line_prepare(
     world: &legion::world::SubWorld,
@@ -35,7 +33,7 @@ pub fn msaa_line_prepare(
     pipeline_layout_component: &PipelineLayoutComponent,
     render_bundle_component: &RenderBundleComponent,
     vertex_buffer_component: &VertexBufferComponent,
-    surface_configuration_component: &IndirectComponent<SurfaceConfigurationComponent>,
+    surface_configuration_component: &IndirectComponent<Changed<SurfaceConfigurationComponent>>,
     msaa_framebuffer_desc: &IndirectComponent<MsaaFramebufferTextureDescriptor<'static>>,
 ) {
     println!("MSAA Line Prepare");
@@ -145,16 +143,14 @@ pub fn msaa_line_prepare(
 }
 
 #[legion::system(par_for_each)]
-#[read_component(SurfaceConfigurationComponent)]
-#[read_component(ChangedFlag<SurfaceConfigurationComponent>)]
+#[read_component(Changed<SurfaceConfigurationComponent>)]
 #[read_component(MsaaFramebufferTextureDescriptor<'static>)]
 #[read_component(Usage<MsaaFramebuffer, ChangedFlag<TextureDescriptorComponent<'static>>>)]
 #[read_component(Usage<MsaaFramebuffer, ChangedFlag<TextureViewDescriptorComponent<'static>>>)]
 pub fn msaa_line_resize(
     world: &SubWorld,
     _: &MsaaLine,
-    surface_config: &IndirectComponent<SurfaceConfigurationComponent>,
-    surface_config_changed: &IndirectComponent<ChangedFlag<SurfaceConfigurationComponent>>,
+    surface_config: &IndirectComponent<Changed<SurfaceConfigurationComponent>>,
     msaa_framebuffer_desc: &IndirectComponent<MsaaFramebufferTextureDescriptor<'static>>,
     msaa_framebuffer_desc_changed: &IndirectComponent<
         Usage<MsaaFramebuffer, ChangedFlag<TextureDescriptorComponent<'static>>>,
@@ -163,7 +159,6 @@ pub fn msaa_line_resize(
         Usage<MsaaFramebuffer, ChangedFlag<TextureViewDescriptorComponent<'static>>>,
     >,
 ) {
-    let surface_config_changed = world.get_indirect(surface_config_changed).unwrap();
     let surface_config = world.get_indirect(surface_config).unwrap();
     let msaa_framebuffer_desc = world.get_indirect(msaa_framebuffer_desc).unwrap();
     let msaa_framebuffer_desc_changed = world.get_indirect(msaa_framebuffer_desc_changed).unwrap();
@@ -171,7 +166,7 @@ pub fn msaa_line_resize(
         .get_indirect(msaa_framebuffer_view_desc_changed)
         .unwrap();
 
-    if !surface_config_changed.get() {
+    if !surface_config.get_changed() {
         return;
     }
 

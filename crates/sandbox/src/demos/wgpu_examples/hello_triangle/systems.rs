@@ -1,5 +1,5 @@
 use super::HelloTriangle;
-use antigen_core::{GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock};
+use antigen_core::{Changed, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock};
 
 use antigen_wgpu::{
     wgpu::{
@@ -16,13 +16,13 @@ use legion::IntoQuery;
 // Initialize the hello triangle render pipeline
 #[legion::system(par_for_each)]
 #[read_component(Device)]
-#[read_component(SurfaceConfigurationComponent)]
+#[read_component(Changed<SurfaceConfigurationComponent>)]
 pub fn hello_triangle_prepare(
     world: &legion::world::SubWorld,
     _: &HelloTriangle,
     shader_module: &ShaderModuleComponent,
     render_pipeline_component: &RenderPipelineComponent,
-    surface_component: &IndirectComponent<SurfaceConfigurationComponent>,
+    surface_component: &IndirectComponent<Changed<SurfaceConfigurationComponent>>,
 ) {
     if !render_pipeline_component.read().is_pending() {
         return;

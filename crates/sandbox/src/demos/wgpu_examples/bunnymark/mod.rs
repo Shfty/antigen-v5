@@ -8,10 +8,7 @@ pub use components::*;
 use legion::{world::SubWorld, IntoQuery};
 pub use systems::*;
 
-use antigen_core::{
-    impl_read_write_lock, parallel, serial, single, AddIndirectComponent, ImmutableSchedule,
-    RwLock, Serial, Single, Usage,
-};
+use antigen_core::{AddIndirectComponent, Changed, ImmutableSchedule, RwLock, Serial, Single, Usage, impl_read_write_lock, parallel, serial, single};
 
 use antigen_wgpu::{
     wgpu::{
@@ -91,7 +88,7 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
     cmd.add_component(renderer_entity, Bunnymark);
     cmd.assemble_wgpu_render_pipeline(renderer_entity);
     cmd.assemble_wgpu_command_buffers(renderer_entity);
-    cmd.add_indirect_component::<SurfaceConfigurationComponent>(renderer_entity, window_entity);
+    cmd.add_indirect_component::<Changed<SurfaceConfigurationComponent>>(renderer_entity, window_entity);
     cmd.add_indirect_component::<RenderAttachmentTextureView>(renderer_entity, window_entity);
 
     // Window reference for input handling

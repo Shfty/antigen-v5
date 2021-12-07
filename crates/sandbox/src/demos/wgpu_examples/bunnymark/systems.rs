@@ -5,7 +5,7 @@ use super::{
     LocalBindGroupComponent, LocalBufferComponent, Locals, LogoSamplerComponent,
     LogoTextureViewComponent, PlayfieldExtentComponent, BUNNY_SIZE, GRAVITY,
 };
-use antigen_core::{ChangedFlag, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock};
+use antigen_core::{Changed, ChangedFlag, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock};
 
 use antigen_winit::{
     winit::event::{ElementState, KeyboardInput, VirtualKeyCode, WindowEvent},
@@ -31,7 +31,7 @@ use legion::{world::SubWorld, IntoQuery};
 // Initialize the hello triangle render pipeline
 #[legion::system(par_for_each)]
 #[read_component(Device)]
-#[read_component(SurfaceConfigurationComponent)]
+#[read_component(Changed<SurfaceConfigurationComponent>)]
 pub fn bunnymark_prepare(
     world: &legion::world::SubWorld,
     _: &Bunnymark,
@@ -43,7 +43,7 @@ pub fn bunnymark_prepare(
     sampler: &LogoSamplerComponent,
     global_bind_group: &GlobalBindGroupComponent,
     local_bind_group: &LocalBindGroupComponent,
-    surface_configuration_component: &IndirectComponent<SurfaceConfigurationComponent>,
+    surface_configuration_component: &IndirectComponent<Changed<SurfaceConfigurationComponent>>,
 ) {
     if !render_pipeline_component.read().is_pending() {
         return;

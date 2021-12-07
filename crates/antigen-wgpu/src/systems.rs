@@ -10,9 +10,7 @@ use crate::{
     ShaderModuleDescriptorSpirVComponent, SurfaceConfigurationComponent, TextureComponent,
 };
 
-use antigen_core::{
-    ChangedFlag, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock, Usage,
-};
+use antigen_core::{Changed, ChangedFlag, ChangedTrait, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock, Usage};
 use antigen_winit::{WindowComponent, WindowEntityMap, WindowEventComponent, WindowSizeComponent};
 
 use legion::{world::SubWorld, IntoQuery};
@@ -31,7 +29,7 @@ pub fn device_poll(device: &Device, #[state] maintain: &Maintain) {
 pub fn create_window_surfaces(
     world: &SubWorld,
     window_component: &WindowComponent,
-    surface_configuration_component: &SurfaceConfigurationComponent,
+    surface_configuration_component: &Changed<SurfaceConfigurationComponent>,
     surface_component: &SurfaceComponent,
 ) {
     if let LazyComponent::Ready(window) = &*window_component.read() {
@@ -65,8 +63,7 @@ pub fn create_window_surfaces(
 #[read_component(wgpu::Instance)]
 pub fn reconfigure_surfaces(
     world: &SubWorld,
-    surface_config: &SurfaceConfigurationComponent,
-    surface_config_changed: &ChangedFlag<SurfaceConfigurationComponent>,
+    surface_config: &Changed<SurfaceConfigurationComponent>,
     surface_component: &SurfaceComponent,
 ) {
     let device = <&Device>::query().iter(world).next().unwrap();
@@ -78,7 +75,7 @@ pub fn reconfigure_surfaces(
         return;
     };
 
-    if !surface_config_changed.get() {
+    if !surface_config.get_changed() {
         return;
     }
 
@@ -90,10 +87,10 @@ pub fn reconfigure_surfaces(
 
 #[legion::system(par_for_each)]
 pub fn reset_surface_config_changed(
-    surface_config_changed: &ChangedFlag<SurfaceConfigurationComponent>,
+    surface_config: &Changed<SurfaceConfigurationComponent>,
 ) {
-    if surface_config_changed.get() {
-        surface_config_changed.set(false);
+    if surface_config.get_changed() {
+        surface_config.set_changed(false);
     }
 }
 
@@ -163,15 +160,14 @@ pub fn surface_texture_view_query(world: &legion::world::SubWorld, entity: &legi
 pub fn surface_size(
     window_size: &WindowSizeComponent,
     window_size_changed: &ChangedFlag<WindowSizeComponent>,
-    surface_configuration: &SurfaceConfigurationComponent,
-    surface_configuration_changed: &ChangedFlag<SurfaceConfigurationComponent>,
+    surface_configuration_component: &Changed<SurfaceConfigurationComponent>,
 ) {
     if window_size_changed.get() {
         let window_size = *window_size.read();
-        let mut surface_configuration = surface_configuration.write();
+        let mut surface_configuration = surface_configuration_component.write();
         surface_configuration.width = window_size.width;
         surface_configuration.height = window_size.height;
-        surface_configuration_changed.set(true);
+        surface_configuration_component.set_changed(true);
     }
 }
 

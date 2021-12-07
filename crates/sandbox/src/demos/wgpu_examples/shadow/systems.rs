@@ -9,14 +9,10 @@ use super::{
     ForwardBindGroup, ForwardDepthView, ForwardRenderPipeline, ForwardUniformBuffer,
     IndexBufferComponent, IndexCountComponent, LightFovComponent, LightStorageBuffer,
     LightsAreDirtyComponent, ObjectBindGroup, ObjectMatrixComponent, ObjectUniformBuffer,
-    RotationSpeed, Shadow, ShadowBindGroup, ShadowRenderPipeline,
-    ShadowSamplerComponent, ShadowTextureViewComponent, ShadowUniformBuffer, UniformOffset,
-    VertexBufferComponent,
+    RotationSpeed, Shadow, ShadowBindGroup, ShadowRenderPipeline, ShadowSamplerComponent,
+    ShadowTextureViewComponent, ShadowUniformBuffer, UniformOffset, VertexBufferComponent,
 };
-use antigen_core::{
-    lazy_read_ready_else_return, ChangedFlag, GetIndirect, IndirectComponent, LazyComponent,
-    ReadWriteLock, Usage,
-};
+use antigen_core::{Changed, ChangedTrait, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock, Usage, lazy_read_ready_else_return};
 
 use antigen_wgpu::{
     wgpu::{
@@ -74,7 +70,7 @@ fn create_depth_texture(config: &SurfaceConfiguration, device: &Device) -> Optio
 #[legion::system(par_for_each)]
 #[read_component(Adapter)]
 #[read_component(Device)]
-#[read_component(SurfaceConfigurationComponent)]
+#[read_component(Changed<SurfaceConfigurationComponent>)]
 // Object query
 #[read_component(Mesh)]
 #[read_component(ObjectMatrixComponent)]
@@ -103,7 +99,7 @@ pub fn shadow_prepare(
     object_bind_group_component: &ObjectBindGroup,
     object_uniform_buf_component: &ObjectUniformBuffer,
     light_storage_buf_component: &LightStorageBuffer,
-    surface_component: &IndirectComponent<SurfaceConfigurationComponent>,
+    surface_component: &IndirectComponent<Changed<SurfaceConfigurationComponent>>,
 ) {
     if !forward_render_pipeline_component.read().is_pending() {
         return;
@@ -419,8 +415,7 @@ pub fn shadow_prepare(
 #[legion::system(par_for_each)]
 #[read_component(Device)]
 #[read_component(Queue)]
-#[read_component(SurfaceConfigurationComponent)]
-#[read_component(ChangedFlag<SurfaceConfigurationComponent>)]
+#[read_component(Changed<SurfaceConfigurationComponent>)]
 // Light query
 #[read_component(nalgebra::Vector3<f32>)]
 #[read_component(Color)]
@@ -430,8 +425,7 @@ pub fn shadow_prepare(
 pub fn shadow_resize(
     world: &SubWorld,
     _: &Shadow,
-    surface_config: &IndirectComponent<SurfaceConfigurationComponent>,
-    surface_config_changed: &IndirectComponent<ChangedFlag<SurfaceConfigurationComponent>>,
+    surface_config: &IndirectComponent<Changed<SurfaceConfigurationComponent>>,
     forward_depth_view_component: &ForwardDepthView,
     forward_uniform_buf: &ForwardUniformBuffer,
 ) {
@@ -440,10 +434,9 @@ pub fn shadow_resize(
 
     lazy_read_ready_else_return!(forward_uniform_buf);
 
-    let surface_config_changed = world.get_indirect(surface_config_changed).unwrap();
     let surface_config = world.get_indirect(surface_config).unwrap();
 
-    if surface_config_changed.get() {
+    if surface_config.get_changed() {
         let surface_config = surface_config.read();
         if let Some(depth_view) = create_depth_texture(&*surface_config, device) {
             forward_depth_view_component.write().set_ready(depth_view);

@@ -5,10 +5,7 @@ use antigen_winit::{AssembleWinit, WindowComponent};
 pub use components::*;
 pub use systems::*;
 
-use antigen_core::{
-    parallel, serial, single, AddIndirectComponent, ChangedFlag, ImmutableSchedule, RwLock, Serial,
-    Single, Usage,
-};
+use antigen_core::{AddIndirectComponent, Changed, ChangedFlag, ImmutableSchedule, RwLock, Serial, Single, Usage, parallel, serial, single};
 
 use antigen_wgpu::{
     wgpu::{
@@ -53,11 +50,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     cmd.assemble_wgpu_render_bundle(renderer_entity);
     cmd.assemble_wgpu_command_buffers(renderer_entity);
 
-    cmd.add_indirect_component::<SurfaceConfigurationComponent>(renderer_entity, window_entity);
-    cmd.add_indirect_component::<ChangedFlag<SurfaceConfigurationComponent>>(
-        renderer_entity,
-        window_entity,
-    );
+    cmd.add_indirect_component::<Changed<SurfaceConfigurationComponent>>(renderer_entity, window_entity);
     cmd.add_indirect_component::<RenderAttachmentTextureView>(renderer_entity, window_entity);
 
     // Window reference for input handling

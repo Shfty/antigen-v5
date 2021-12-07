@@ -1,6 +1,6 @@
 use antigen_core::{
-    AddComponentWithChangedFlag, AddIndirectComponent, ChangedFlag, LazyComponent, Usage,
-    AsUsage
+    AddComponentWithChangedFlag, AddIndirectComponent, AsUsage, Changed, ChangedFlag,
+    LazyComponent, Usage,
 };
 
 use legion::{storage::Component, Entity, World};
@@ -185,15 +185,18 @@ pub trait AssembleWgpu {
 
 impl AssembleWgpu for &mut legion::systems::CommandBuffer {
     fn assemble_wgpu_window_surface(self, entity: Entity) {
-        self.add_component_with_changed_flag_clean(
+        self.add_component(
             entity,
-            SurfaceConfigurationComponent::new(SurfaceConfiguration {
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                format: wgpu::TextureFormat::Bgra8Unorm,
-                width: 0,
-                height: 0,
-                present_mode: wgpu::PresentMode::Mailbox,
-            }),
+            Changed::new(
+                SurfaceConfigurationComponent::new(SurfaceConfiguration {
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                    format: wgpu::TextureFormat::Bgra8Unorm,
+                    width: 0,
+                    height: 0,
+                    present_mode: wgpu::PresentMode::Mailbox,
+                }),
+                false,
+            ),
         );
         self.add_component(entity, SurfaceComponent::new(LazyComponent::Pending));
 
@@ -207,7 +210,7 @@ impl AssembleWgpu for &mut legion::systems::CommandBuffer {
         );
         self.add_component(
             entity,
-            RenderAttachment::as_usage(ChangedFlag::<TextureViewDescriptorComponent>::new_clean())
+            RenderAttachment::as_usage(ChangedFlag::<TextureViewDescriptorComponent>::new_clean()),
         );
         self.add_component(
             entity,
