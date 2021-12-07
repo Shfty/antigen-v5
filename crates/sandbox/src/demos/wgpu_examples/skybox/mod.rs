@@ -6,8 +6,8 @@ pub use components::*;
 pub use systems::*;
 
 use antigen_core::{
-    parallel, serial, single, AddIndirectComponent, ImmutableSchedule, LazyComponent, RwLock,
-    Serial, Single,
+    parallel, serial, single, AddIndirectComponent, AsUsage, ImmutableSchedule, LazyComponent,
+    RwLock, Serial, Single,
 };
 
 use antigen_wgpu::{
@@ -15,7 +15,8 @@ use antigen_wgpu::{
         AddressMode, BufferAddress, BufferDescriptor, BufferSize, BufferUsages, Device, FilterMode,
         SamplerDescriptor, ShaderModuleDescriptor, ShaderSource, TextureFormat,
     },
-    AssembleWgpu, RenderAttachmentTextureView, SurfaceConfigurationComponent, ToBytes,
+    AssembleWgpu, RenderAttachmentTextureView, SurfaceConfigurationComponent, TextureComponent,
+    TextureViewComponent, ToBytes,
 };
 
 use bytemuck::{Pod, Zeroable};
@@ -138,7 +139,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
                     mapped_at_creation: false,
                 },
             );
-            cmd.add_component(object_entity, VertexCountComponent::new(vertex_count));
+            cmd.add_component(object_entity, VertexCount::as_usage(vertex_count));
         }
     }
 
@@ -171,13 +172,13 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     // Texture
     cmd.add_component(
         renderer_entity,
-        SkyboxTextureComponent::new(RwLock::new(LazyComponent::Pending)),
+        Texture::as_usage(TextureComponent::new(LazyComponent::Pending)),
     );
 
     // Texture view
     cmd.add_component(
         renderer_entity,
-        SkyboxTextureViewComponent::new(RwLock::new(LazyComponent::Pending)),
+        Texture::as_usage(TextureViewComponent::new(LazyComponent::Pending)),
     );
 
     // Texture sampler
@@ -198,7 +199,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     // Depth texture view
     cmd.add_component(
         renderer_entity,
-        DepthTextureView::new(RwLock::new(LazyComponent::Pending)),
+        Depth::as_usage(TextureViewComponent::new(LazyComponent::Pending)),
     );
 }
 

@@ -8,17 +8,17 @@ pub use components::*;
 use legion::Entity;
 pub use systems::*;
 
-use antigen_core::{AddComponentWithUsage, AddIndirectComponent,  ImmutableSchedule, LazyComponent, RwLock, Serial, Single, Usage, parallel, serial, single};
+use antigen_core::{
+    parallel, serial, single, AddIndirectComponent, AsUsage, ImmutableSchedule, LazyComponent,
+    RwLock, Serial, Single,
+};
 
-use antigen_wgpu::{
-    wgpu::{
+use antigen_wgpu::{AssembleWgpu, BufferComponent, RenderAttachmentTextureView, SurfaceConfigurationComponent, TextureViewComponent, wgpu::{
         AddressMode, BufferAddress, BufferDescriptor, BufferUsages, Color, CompareFunction, Device,
         Extent3d, FilterMode, IndexFormat, SamplerDescriptor, ShaderModuleDescriptor, ShaderSource,
         TextureAspect, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
         TextureViewDescriptor, TextureViewDimension,
-    },
-    AssembleWgpu, BufferComponent, RenderAttachmentTextureView, SurfaceConfigurationComponent,
-};
+    }};
 
 use bytemuck::{Pod, Zeroable};
 
@@ -138,10 +138,10 @@ pub fn assemble_object(
     uniform_offset: u32,
 ) {
     cmd.add_component(entity, mesh);
-    cmd.add_component_with_usage::<ObjectTag>(entity, RwLock::new(mx_world));
-    cmd.add_component(entity, Usage::<RotationSpeed, f32>::new(rotation_speed));
+    cmd.add_component(entity, ObjectTag::as_usage(RwLock::new(mx_world)));
+    cmd.add_component(entity, RotationSpeed::as_usage(rotation_speed));
     cmd.add_component(entity, color);
-    cmd.add_component(entity, Usage::<UniformOffset, u32>::new(uniform_offset));
+    cmd.add_component(entity, UniformOffset::as_usage(uniform_offset));
 }
 
 pub fn assemble_light(
@@ -156,7 +156,7 @@ pub fn assemble_light(
 ) {
     cmd.add_component(entity, position);
     cmd.add_component(entity, color);
-    cmd.add_component_with_usage::<FieldOfView>(entity, fov);
+    cmd.add_component(entity, FieldOfView::as_usage(fov));
     cmd.add_component(entity, depth);
     cmd.assemble_wgpu_texture_view_with_usage::<ShadowPass>(
         entity,
@@ -230,12 +230,12 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
 
     cmd.add_component(
         renderer_entity,
-        ObjectUniformBuffer::new(RwLock::new(LazyComponent::Pending)),
+        ObjectTag::as_usage(BufferComponent::new(LazyComponent::Pending)),
     );
 
     cmd.add_component(
         renderer_entity,
-        LightStorageBuffer::new(RwLock::new(LazyComponent::Pending)),
+        LightTag::as_usage(BufferComponent::new(LazyComponent::Pending)),
     );
 
     // Shader
@@ -266,9 +266,9 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     );
 
     cmd.add_component(plane_mesh_entity, IndexFormat::Uint16);
-    cmd.add_component_with_usage::<IndexCount>(
+    cmd.add_component(
         plane_mesh_entity,
-        plane_indices_len as BufferAddress,
+        IndexCount::as_usage(plane_indices_len as BufferAddress),
     );
 
     // Plane mesh buffers
@@ -312,7 +312,10 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         0,
     );
     cmd.add_component(cube_mesh_entity, IndexFormat::Uint16);
-    cmd.add_component_with_usage::<IndexCount>(cube_mesh_entity, cube_indices_len as BufferAddress);
+    cmd.add_component(
+        cube_mesh_entity,
+        IndexCount::as_usage(cube_indices_len as BufferAddress),
+    );
 
     // Cube mesh buffers
     cmd.assemble_wgpu_buffer_with_usage::<VertexTag>(
@@ -338,7 +341,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     // Forward depth view
     cmd.add_component(
         renderer_entity,
-        ForwardDepthView::new(RwLock::new(LazyComponent::Pending)),
+        ForwardPass::as_usage(TextureViewComponent::new(LazyComponent::Pending)),
     );
 
     // Shadow texture
@@ -379,15 +382,15 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     );
 
     // Light storage buffer
-    cmd.add_component_with_usage::<LightTag>(
+    cmd.add_component(
         renderer_entity,
-        BufferComponent::new(LazyComponent::Pending),
+        LightTag::as_usage(BufferComponent::new(LazyComponent::Pending)),
     );
 
     // Object uniform buffer
-    cmd.add_component_with_usage::<ObjectTag>(
+    cmd.add_component(
         renderer_entity,
-        BufferComponent::new(LazyComponent::Pending),
+        ObjectTag::as_usage(BufferComponent::new(LazyComponent::Pending)),
     );
 
     // Assemble objects
@@ -490,7 +493,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     );
 
     // 'Lights are dirty' flag
-    cmd.add_component_with_usage::<LightsAreDirty>(renderer_entity, RwLock::new(true));
+    cmd.add_component(renderer_entity, LightsAreDirty::as_usage(RwLock::new(true)));
 }
 
 pub fn prepare_schedule() -> ImmutableSchedule<Serial> {

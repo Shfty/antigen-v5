@@ -8,7 +8,10 @@ pub use components::*;
 use legion::{world::SubWorld, IntoQuery};
 pub use systems::*;
 
-use antigen_core::{AddIndirectComponent,  ImmutableSchedule, RwLock, Serial, Single, Usage, impl_read_write_lock, parallel, serial, single};
+use antigen_core::{
+    impl_read_write_lock, parallel, serial, single, AddIndirectComponent, AsUsage,
+    ImmutableSchedule, RwLock, Serial, Single, Usage,
+};
 
 use antigen_wgpu::{
     wgpu::{
@@ -108,7 +111,7 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
     cmd.assemble_wgpu_bind_group_with_usage::<Local>(renderer_entity);
 
     // Playfield extent
-    let extent = (640, 480);
+    let extent = (640u32, 480u32);
 
     // Buffer data
     let globals = Globals {
@@ -137,7 +140,7 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
 
     cmd.assemble_wgpu_texture_data_with_usage::<Logo, _>(
         renderer_entity,
-        Usage::<Texels, _>::new(RwLock::new(buf)),
+        Texels::as_usage(RwLock::new(buf)),
         ImageCopyTextureBase {
             texture: (),
             mip_level: 0,
@@ -189,7 +192,11 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
     );
 
     // Texture view
-    cmd.assemble_wgpu_texture_view_with_usage::<Logo>(renderer_entity, renderer_entity, Default::default());
+    cmd.assemble_wgpu_texture_view_with_usage::<Logo>(
+        renderer_entity,
+        renderer_entity,
+        Default::default(),
+    );
 
     // Sampler
     cmd.assemble_wgpu_sampler_with_usage::<Logo>(
@@ -209,7 +216,7 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
     // Playfield extent
     cmd.add_component(
         renderer_entity,
-        Usage::<PlayfieldExtent, RwLock<(u32, u32)>>::new(RwLock::new(extent)),
+        PlayfieldExtent::as_usage(RwLock::new(extent)),
     );
 }
 

@@ -7,8 +7,8 @@ use legion::systems::CommandBuffer;
 pub use systems::*;
 
 use antigen_core::{
-    parallel, serial, single, AddIndirectComponent,  ImmutableSchedule,
-    RwLock, Serial, Single, Usage,
+    parallel, serial, single, AddIndirectComponent, AsUsage, ImmutableSchedule, RwLock, Serial,
+    Single, Usage,
 };
 use antigen_wgpu::{
     wgpu::{
@@ -154,10 +154,7 @@ pub fn assemble(cmd: &mut CommandBuffer) {
     cmd.assemble_wgpu_render_pipeline_with_usage::<WirePass>(renderer_entity);
     cmd.assemble_wgpu_command_buffers(renderer_entity);
 
-    cmd.add_indirect_component::<SurfaceConfigurationComponent>(
-        renderer_entity,
-        window_entity,
-    );
+    cmd.add_indirect_component::<SurfaceConfigurationComponent>(renderer_entity, window_entity);
     cmd.add_indirect_component::<RenderAttachmentTextureView>(renderer_entity, window_entity);
 
     // Shader
@@ -175,7 +172,7 @@ pub fn assemble(cmd: &mut CommandBuffer) {
     let vertex_size = std::mem::size_of::<[f32; 3]>();
     cmd.assemble_wgpu_buffer_data_with_usage::<Vertex, _>(
         renderer_entity,
-        Usage::<MeshVertices, _>::new(RwLock::new(cube_vertices)),
+        MeshVertices::as_usage(RwLock::new(cube_vertices)),
         0,
     );
 
@@ -184,7 +181,7 @@ pub fn assemble(cmd: &mut CommandBuffer) {
     let uvs_offset = (vertex_size * vertex_count) as BufferAddress;
     cmd.assemble_wgpu_buffer_data_with_usage::<Vertex, _>(
         renderer_entity,
-        Usage::<MeshUvs, _>::new(RwLock::new(cube_uvs)),
+        MeshUvs::as_usage(RwLock::new(cube_uvs)),
         uvs_offset,
     );
 
@@ -199,7 +196,7 @@ pub fn assemble(cmd: &mut CommandBuffer) {
 
     cmd.assemble_wgpu_texture_data_with_usage::<Mandelbrot, _>(
         renderer_entity,
-        Usage::<Texels, _>::new(RwLock::new(texels)),
+        Texels::as_usage(RwLock::new(texels)),
         ImageCopyTextureBase {
             texture: (),
             mip_level: 0,
@@ -220,7 +217,7 @@ pub fn assemble(cmd: &mut CommandBuffer) {
 
     cmd.assemble_wgpu_buffer_data_with_usage::<Uniform, _>(
         renderer_entity,
-        ViewProjectionMatrix::new(buf.into()),
+        ViewProjection::as_usage(RwLock::new(buf)),
         0,
     );
 

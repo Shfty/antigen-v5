@@ -8,8 +8,8 @@ pub use components::*;
 pub use systems::*;
 
 use antigen_core::{
-    parallel, serial, single, AddComponentWithUsage, AddIndirectComponent, ImmutableSchedule,
-    LazyComponent, RwLock, Serial, Single,
+    parallel, serial, single, AddIndirectComponent, AsUsage, ImmutableSchedule, LazyComponent,
+    RwLock, Serial, Single,
 };
 
 use antigen_wgpu::{
@@ -18,7 +18,8 @@ use antigen_wgpu::{
         ImageCopyTextureBase, ImageDataLayout, IndexFormat, TextureAspect, TextureDescriptor,
         TextureDimension, TextureFormat, TextureUsages,
     },
-    AssembleWgpu, RenderAttachmentTextureView, SurfaceConfigurationComponent,
+    AssembleWgpu, RenderAttachmentTextureView, ShaderModuleComponent,
+    SurfaceConfigurationComponent,
 };
 
 use bytemuck::{Pod, Zeroable};
@@ -110,11 +111,14 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     // Fragment shader is initialized in the prepare system
     cmd.add_component(
         renderer_entity,
-        FragmentShaderComponent::new(RwLock::new(LazyComponent::Pending)),
+        Fragment::as_usage(ShaderModuleComponent::new(LazyComponent::Pending)),
     );
 
     // Uniform workaround flag
-    cmd.add_component_with_usage::<UniformWorkaround>(renderer_entity, RwLock::new(false));
+    cmd.add_component(
+        renderer_entity,
+        UniformWorkaround::as_usage(RwLock::new(false)),
+    );
 
     // Buffer data
     let vertex_data = create_vertices();
@@ -158,7 +162,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     let red_texture_data = create_texture_data(Color::Red);
     cmd.assemble_wgpu_texture_data_with_usage::<Red, _>(
         renderer_entity,
-        RedTexelComponent::new(RwLock::new(red_texture_data)),
+        Red::as_usage(RwLock::new(red_texture_data)),
         ImageCopyTextureBase {
             texture: (),
             mip_level: 0,
@@ -175,7 +179,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     let green_texture_data = create_texture_data(Color::Green);
     cmd.assemble_wgpu_texture_data_with_usage::<Green, _>(
         renderer_entity,
-        GreenTexelComponent::new(RwLock::new(green_texture_data)),
+        Green::as_usage(RwLock::new(green_texture_data)),
         ImageCopyTextureBase {
             texture: (),
             mip_level: 0,

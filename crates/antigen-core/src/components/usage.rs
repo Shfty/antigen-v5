@@ -30,13 +30,6 @@ pub struct Usage<U, T> {
 }
 
 impl<U, T> Usage<U, T> {
-    pub fn new(data: T) -> Self {
-        Usage {
-            data,
-            _phantom: Default::default(),
-        }
-    }
-
     pub fn into_inner(self) -> T {
         self.data
     }
@@ -44,7 +37,7 @@ impl<U, T> Usage<U, T> {
 
 impl<U, T> From<T> for Usage<U, T> {
     fn from(t: T) -> Self {
-        Usage::new(t)
+        U::as_usage(t)
     }
 }
 
@@ -89,32 +82,14 @@ where
     }
 }
 
-/// Utility trait for constructing a [`Usage<U, T>`] via `U::as_usage(T)`
+/// Trait for constructing a [`Usage<U, T>`] via `U::as_usage(T)`
 pub trait AsUsage: Sized {
     fn as_usage<T>(data: T) -> Usage<Self, T> {
-        Usage::new(data)
+        Usage {
+            data,
+            _phantom: Default::default(),
+        }
     }
 }
 
 impl<T> AsUsage for T {}
-
-/// Trait for adding some component T to a world alongside a DirtyFlag<T>
-pub trait AddComponentWithUsage<T> {
-    fn add_component_with_usage<U: Send + Sync + 'static>(
-        self,
-        entity: legion::Entity,
-        component: T,
-    );
-}
-
-impl<T: legion::storage::Component> AddComponentWithUsage<T>
-    for &mut legion::systems::CommandBuffer
-{
-    fn add_component_with_usage<U: Send + Sync + 'static>(
-        self,
-        entity: legion::Entity,
-        component: T,
-    ) {
-        self.add_component(entity, Usage::<U, T>::new(component));
-    }
-}

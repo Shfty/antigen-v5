@@ -6,7 +6,7 @@ pub use components::*;
 pub use systems::*;
 
 use antigen_core::{
-    parallel, serial, single, AddIndirectComponent,  ImmutableSchedule, RwLock, Serial,
+    parallel, serial, single, AddIndirectComponent, AsUsage, ImmutableSchedule, RwLock, Serial,
     Single, Usage,
 };
 
@@ -53,10 +53,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     cmd.assemble_wgpu_render_bundle(renderer_entity);
     cmd.assemble_wgpu_command_buffers(renderer_entity);
 
-    cmd.add_indirect_component::<SurfaceConfigurationComponent>(
-        renderer_entity,
-        window_entity,
-    );
+    cmd.add_indirect_component::<SurfaceConfigurationComponent>(renderer_entity, window_entity);
     cmd.add_indirect_component::<RenderAttachmentTextureView>(renderer_entity, window_entity);
 
     // Window reference for input handling
@@ -89,7 +86,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
 
     cmd.assemble_wgpu_buffer_data_with_usage::<VertexBuffer, _>(
         renderer_entity,
-        Usage::<MeshVertices, _>::new(RwLock::new(vertex_data)),
+        MeshVertices::as_usage(RwLock::new(vertex_data)),
         0,
     );
 

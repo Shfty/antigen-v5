@@ -8,7 +8,8 @@ pub use components::*;
 pub use systems::*;
 
 use antigen_core::{
-    parallel, serial, single, AddIndirectComponent, ImmutableSchedule, RwLock, Serial, Single,
+    parallel, serial, single, AddIndirectComponent, AsUsage, ImmutableSchedule, RwLock, Serial,
+    Single,
 };
 
 use antigen_wgpu::{
@@ -100,7 +101,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     buf.copy_from_slice(matrix.as_slice());
     cmd.assemble_wgpu_buffer_data_with_usage::<Uniform, _>(
         renderer_entity,
-        ViewProjectionMatrix::new(buf.into()),
+        ViewProjection::as_usage(RwLock::new(buf)),
         0,
     );
 
