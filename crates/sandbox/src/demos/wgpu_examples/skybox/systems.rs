@@ -6,7 +6,8 @@ use super::{
     VertexBufferComponent, VertexCountComponent,
 };
 use antigen_core::{
-    ChangedFlag, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock, RwLock,
+    Changed, ChangedFlag, GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock, RwLock,
+    ChangedTrait,
 };
 
 use antigen_wgpu::{
@@ -307,8 +308,7 @@ pub fn skybox_resize(
     _: &Skybox,
     surface_config: &IndirectComponent<SurfaceConfigurationComponent>,
     surface_config_changed: &IndirectComponent<ChangedFlag<SurfaceConfigurationComponent>>,
-    camera_data: &RwLock<[f32; 52]>,
-    camera_data_changed: &ChangedFlag<RwLock<[f32; 52]>>,
+    camera_data: &Changed<RwLock<[f32; 52]>>,
     depth_texture_view_component: &DepthTextureView,
 ) {
     let surface_config_changed = world.get_indirect(surface_config_changed).unwrap();
@@ -335,7 +335,7 @@ pub fn skybox_resize(
         };
         *camera_data.write() =
             camera.to_uniform_data(surface_config.width as f32 / surface_config.height as f32);
-        camera_data_changed.set(true);
+        camera_data.set_changed(true);
     }
 }
 
@@ -463,8 +463,7 @@ pub fn skybox_render(
 pub fn skybox_cursor_moved(
     world: &SubWorld,
     _: &Skybox,
-    camera_data: &RwLock<[f32; 52]>,
-    camera_data_changed: &ChangedFlag<RwLock<[f32; 52]>>,
+    camera_data: &Changed<RwLock<[f32; 52]>>,
     window: &IndirectComponent<WindowComponent>,
     surface_component: &IndirectComponent<SurfaceConfigurationComponent>,
 ) {
@@ -512,9 +511,8 @@ pub fn skybox_cursor_moved(
         dist: 30.0,
     };
 
-    *camera_data.write() =
-        camera.to_uniform_data(config.width as f32 / config.height as f32);
-    camera_data_changed.set(true);
+    *camera_data.write() = camera.to_uniform_data(config.width as f32 / config.height as f32);
+    camera_data.set_changed(true);
 
     window.request_redraw();
 }

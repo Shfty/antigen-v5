@@ -31,8 +31,8 @@ pub fn assemble_schedule() -> ImmutableSchedule<Parallel> {
         conservative_raster::assemble_system(),
         mipmap::assemble_system(),
         texture_arrays::assemble_system(),
-        skybox::assemble_system(),
         */
+        skybox::assemble_system(),
         shadow::assemble_system(),
     ]
 }
@@ -48,8 +48,8 @@ pub fn winit_event_handler<T>(mut f: impl EventLoopHandler<T>) -> impl EventLoop
         conservative_raster::prepare_schedule(),
         mipmap::prepare_schedule(),
         texture_arrays::prepare_schedule(),
-        skybox::prepare_schedule(),
         */
+        skybox::prepare_schedule(),
         shadow::prepare_schedule(),
     ];
 
@@ -63,8 +63,8 @@ pub fn winit_event_handler<T>(mut f: impl EventLoopHandler<T>) -> impl EventLoop
         conservative_raster::render_schedule(),
         mipmap::render_schedule(),
         texture_arrays::render_schedule(),
-        skybox::render_schedule(),
         */
+        skybox::render_schedule(),
         shadow::render_schedule(),
     ];
 
@@ -74,8 +74,8 @@ pub fn winit_event_handler<T>(mut f: impl EventLoopHandler<T>) -> impl EventLoop
         msaa_line::msaa_line_resize_system()
         conservative_raster::conservative_raster_resize_system()
         mipmap::mipmap_resize_system(),
-        skybox::skybox_resize_system(),
         */
+        skybox::skybox_resize_system(),
         shadow::shadow_resize_system(),
     ];
 

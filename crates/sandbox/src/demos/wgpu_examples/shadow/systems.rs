@@ -9,7 +9,7 @@ use super::{
     ForwardBindGroup, ForwardDepthView, ForwardRenderPipeline, ForwardUniformBuffer,
     IndexBufferComponent, IndexCountComponent, LightFovComponent, LightStorageBuffer,
     LightsAreDirtyComponent, ObjectBindGroup, ObjectMatrixComponent, ObjectUniformBuffer,
-    RotationSpeed, Shadow, ShadowBindGroup, ShadowPass, ShadowRenderPipeline,
+    RotationSpeed, Shadow, ShadowBindGroup, ShadowRenderPipeline,
     ShadowSamplerComponent, ShadowTextureViewComponent, ShadowUniformBuffer, UniformOffset,
     VertexBufferComponent,
 };
@@ -34,7 +34,7 @@ use antigen_wgpu::{
         VertexStepMode,
     },
     CommandBuffersComponent, RenderAttachmentTextureView, ShaderModuleComponent,
-    SurfaceConfigurationComponent, TextureViewComponent,
+    SurfaceConfigurationComponent,
 };
 
 use legion::{world::SubWorld, IntoQuery};

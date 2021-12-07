@@ -80,11 +80,3 @@ impl<T> ChangedTrait for Changed<T> {
     }
 }
 
-/// Utility trait for constructing a `Changed<T>` via `T::as_changed_*(T)`
-pub trait AsChanged: Sized {
-    fn as_changed(data: Self, changed: bool) -> Changed<Self> {
-        Changed::new(data, changed)
-    }
-}
-
-impl<T> AsChanged for T {}

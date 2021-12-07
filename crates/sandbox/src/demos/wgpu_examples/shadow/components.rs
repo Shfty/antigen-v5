@@ -1,12 +1,11 @@
 use std::ops::Range;
 
-use antigen_core::{IndirectComponent, RwLock, Usage};
+use antigen_core::{RwLock, Usage};
 use antigen_wgpu::{
     wgpu::{BufferAddress, Color, IndexFormat},
     BindGroupComponent, BufferComponent, RenderPipelineComponent, SamplerComponent,
-    TextureComponent, TextureViewComponent,
+    TextureViewComponent,
 };
-use legion::Entity;
 use nalgebra::Matrix4;
 
 // Shadow renderer tag
