@@ -126,6 +126,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     // Texture view
     cmd.assemble_wgpu_texture_view_with_usage::<MsaaFramebuffer>(
         renderer_entity,
+        renderer_entity,
         Default::default(),
     );
 

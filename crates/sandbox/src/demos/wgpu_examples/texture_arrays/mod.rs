@@ -204,8 +204,16 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     cmd.assemble_wgpu_texture_with_usage::<Green>(renderer_entity, texture_descriptor.clone());
 
     // Texture views
-    cmd.assemble_wgpu_texture_view_with_usage::<Red>(renderer_entity, Default::default());
-    cmd.assemble_wgpu_texture_view_with_usage::<Green>(renderer_entity, Default::default());
+    cmd.assemble_wgpu_texture_view_with_usage::<Red>(
+        renderer_entity,
+        renderer_entity,
+        Default::default(),
+    );
+    cmd.assemble_wgpu_texture_view_with_usage::<Green>(
+        renderer_entity,
+        renderer_entity,
+        Default::default(),
+    );
 
     // Texture sampler
     cmd.assemble_wgpu_sampler(renderer_entity, Default::default());

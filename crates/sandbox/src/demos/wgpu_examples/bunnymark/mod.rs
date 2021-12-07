@@ -192,7 +192,7 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
     );
 
     // Texture view
-    cmd.assemble_wgpu_texture_view_with_usage::<Logo>(renderer_entity, Default::default());
+    cmd.assemble_wgpu_texture_view_with_usage::<Logo>(renderer_entity, renderer_entity, Default::default());
 
     // Sampler
     cmd.assemble_wgpu_sampler_with_usage::<Logo>(

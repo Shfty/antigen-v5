@@ -36,6 +36,10 @@ impl<U, T> Usage<U, T> {
             _phantom: Default::default(),
         }
     }
+
+    pub fn into_inner(self) -> T {
+        self.data
+    }
 }
 
 impl<U, T> From<T> for Usage<U, T> {
@@ -44,6 +48,7 @@ impl<U, T> From<T> for Usage<U, T> {
     }
 }
 
+// Data access traits
 impl<U, T> Borrow<T> for Usage<U, T> {
     fn borrow(&self) -> &T {
         &self.data
@@ -70,6 +75,7 @@ impl<U, T> DerefMut for Usage<U, T> {
     }
 }
 
+// ReadWriteLock implementation
 impl<U, T, V> ReadWriteLock<V> for Usage<U, T>
 where
     T: ReadWriteLock<V>,
@@ -82,6 +88,15 @@ where
         self.data.write()
     }
 }
+
+/// Utility trait for constructing a [`Usage<U, T>`] via `U::as_usage(T)`
+pub trait AsUsage: Sized {
+    fn as_usage<T>(data: T) -> Usage<Self, T> {
+        Usage::new(data)
+    }
+}
+
+impl<T> AsUsage for T {}
 
 /// Trait for adding some component T to a world alongside a DirtyFlag<T>
 pub trait AddComponentWithUsage<T> {

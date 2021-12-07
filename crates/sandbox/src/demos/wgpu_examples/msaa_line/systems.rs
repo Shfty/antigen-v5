@@ -38,6 +38,8 @@ pub fn msaa_line_prepare(
     surface_configuration_component: &IndirectComponent<SurfaceConfigurationComponent>,
     msaa_framebuffer_desc: &IndirectComponent<MsaaFramebufferTextureDescriptor<'static>>,
 ) {
+    println!("MSAA Line Prepare");
+
     let device = <&Device>::query().iter(world).next().unwrap();
 
     // Create pipeline layout if needed
@@ -49,6 +51,8 @@ pub fn msaa_line_prepare(
         });
 
         pipeline_layout_component.write().set_ready(pipeline_layout);
+
+        println!("Created pipeline layout");
     }
 
     let pipeline_layout_component = pipeline_layout_component.read();
@@ -58,11 +62,15 @@ pub fn msaa_line_prepare(
     } else {
         unreachable!()
     };
+    
+    println!("Pipeline layout ready");
 
     // Create render bundle
     if !render_bundle_component.read().is_pending() {
         return;
     }
+
+    println!("Render bundle is pending");
 
     let shader_module = shader_module.read();
     let shader_module = if let LazyComponent::Ready(shader_module) = &*shader_module {
@@ -71,12 +79,16 @@ pub fn msaa_line_prepare(
         return;
     };
 
+    println!("Shader module ready");
+
     let vertex_buffer_component = vertex_buffer_component.read();
     let vertex_buffer = if let LazyComponent::Ready(vertex_buffer) = &*vertex_buffer_component {
         vertex_buffer
     } else {
         return;
     };
+
+    println!("Vertex buffer ready");
 
     let surface_configuration_component =
         world.get_indirect(surface_configuration_component).unwrap();
@@ -257,11 +269,15 @@ pub fn msaa_line_render(
     msaa_framebuffer_desc: &IndirectComponent<MsaaFramebufferTextureDescriptor<'static>>,
     msaa_framebuffer_view: &IndirectComponent<MsaaFramebufferTextureView>,
 ) {
+    println!("MSAA Line Render");
+
     let device = if let Some(components) = <&Device>::query().iter(world).next() {
         components
     } else {
         return;
     };
+
+    println!("Device ready");
 
     let render_bundle = render_bundle.read();
     let render_bundle = if let LazyComponent::Ready(render_bundle) = &*render_bundle {
@@ -269,6 +285,8 @@ pub fn msaa_line_render(
     } else {
         return;
     };
+    
+    println!("Render bundle ready");
 
     let render_attachment = world.get_indirect(render_attachment).unwrap();
     let render_attachment = render_attachment.read();
@@ -277,6 +295,8 @@ pub fn msaa_line_render(
     } else {
         return;
     };
+
+    println!("Render attachment ready");
 
     let msaa_framebuffer_desc = world.get_indirect(msaa_framebuffer_desc).unwrap();
     let msaa_framebuffer_desc = msaa_framebuffer_desc.read();
@@ -289,6 +309,8 @@ pub fn msaa_line_render(
         } else {
             return;
         };
+
+    println!("MSAA framebuffer view ready");
 
     let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor { label: None });
 

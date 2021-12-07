@@ -33,3 +33,41 @@ impl<T> LazyComponent<T> {
     }
 }
 
+/// Read a RwLock<LazyComponent<T>> and match against LazyComponent::Ready(T), else panic
+#[macro_export]
+macro_rules! lazy_read_ready_else_panic {
+    ($cmp:ident) => {
+        let $cmp = $cmp.read();
+        let $cmp = if let LazyComponent::Ready($cmp) = &*$cmp {
+            $cmp
+        } else {
+            panic!("LazyComponent is not ready");
+        };
+    };
+}
+
+/// Read a RwLock<LazyComponent<T>> and match against LazyComponent::Ready(T), else continue
+#[macro_export]
+macro_rules! lazy_read_ready_else_continue {
+    ($cmp:ident) => {
+        let $cmp = $cmp.read();
+        let $cmp = if let LazyComponent::Ready($cmp) = &*$cmp {
+            $cmp
+        } else {
+            continue;
+        };
+    };
+}
+
+/// Read a RwLock<LazyComponent<T>> and match against LazyComponent::Ready(T), else return
+#[macro_export]
+macro_rules! lazy_read_ready_else_return {
+    ($cmp:ident) => {
+        let $cmp = $cmp.read();
+        let $cmp = if let LazyComponent::Ready($cmp) = &*$cmp {
+            $cmp
+        } else {
+            return;
+        };
+    };
+}

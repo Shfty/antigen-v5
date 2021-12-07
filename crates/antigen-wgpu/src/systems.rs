@@ -379,9 +379,11 @@ pub fn create_textures<T: Send + Sync + 'static>(
 
 /// Create pending usage-tagged texture views, recreating them if a ChangedFlag is set
 #[legion::system(par_for_each)]
+#[read_component(Usage<T, TextureComponent>)]
 #[read_component(Device)]
 pub fn create_texture_views<T: Send + Sync + 'static>(
-    texture: &Usage<T, TextureComponent>,
+    world: &SubWorld,
+    texture: &IndirectComponent<Usage<T, TextureComponent>>,
     texture_view_desc: &Usage<T, TextureViewDescriptorComponent>,
     texture_view: &Usage<T, TextureViewComponent>,
     texture_view_desc_changed: &Usage<T, ChangedFlag<TextureViewDescriptorComponent>>,
@@ -390,6 +392,7 @@ pub fn create_texture_views<T: Send + Sync + 'static>(
         return;
     }
 
+    let texture = world.get_indirect(texture).unwrap();
     let texture = texture.read();
     let texture = if let LazyComponent::Ready(texture) = &*texture {
         texture

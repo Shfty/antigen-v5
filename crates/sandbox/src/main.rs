@@ -22,7 +22,20 @@
 //          [✓] Upload buffer data using staging belt
 //          [✓] Input handling
 //              Will need to refactor camera into a component
-//       [>] Shadow
+//       [✓] Shadow
+//          [✓] Implement objects as legion entities
+//              [✓] Create in module
+//              [✓] Write to uniform buffer via component
+//          [✓] Fix runtime errors
+//          [✓] Fix lifetime issues with RenderPass
+//              * Render passes need to be singular, not per-object
+//              * Vertex / index buffer read guards need to exist before render pass
+//              * Fetch cube / plane vertex / index buffers at top of render system
+//              * Use tags or enums to determine which objects are interested in which buffer
+//          [✓] Debug low-res shadow output
+//          [✓] Implement resize handling
+//          [ ] Structural polish (ECS uniform upload, on-change light updates)
+//          [ ] Convert to wgpu-native coordinate system
 //       [✓] Texture Arrays
 //          [✓] Base implementation
 //          [✓] Fix red texture not rendering
@@ -43,6 +56,8 @@
 //
 // TODO: Figure out a better way to assemble Usage<U, ChangedFlag<T>>
 //       add_component_with_usage_and_changed_flag?
+//       Functional-style composition may be a viable approach
+//       add_component(changed_flag(usage::<T>(MyComponent)))
 //
 // TODO: Improve WindowEventComponent
 //       Split into discrete components?
@@ -61,6 +76,7 @@
 //       [✓] Assemly implementation
 //       [✓] First renderer integration
 //       [✓] Compose thread-local functions similar to schedules
+//       [✓] Avoid using thread-local functions in StagingBelt consumers
 //       [ ] Figure out how best to handle reclaiming / device polling
 //           Currently uploading everything at once and polling in wait mode to avoid futures
 //           Ideally should use poll mode, use futures to block associated render systems?
@@ -88,6 +104,8 @@ use antigen_wgpu::wgpu::{DeviceDescriptor, Features, Limits};
 const GAME_TICK_DURATION: std::time::Duration = std::time::Duration::from_secs(1);
 
 fn main() -> ! {
+    //tracing_subscriber::fmt::fmt().pretty().init();
+
     // Create world
     let world = ImmutableWorld::default();
 

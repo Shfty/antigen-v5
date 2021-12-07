@@ -22,6 +22,7 @@ pub mod texture_arrays;
 
 pub fn assemble_schedule() -> ImmutableSchedule<Parallel> {
     parallel![
+        /*
         hello_triangle::assemble_system(),
         cube::assemble_system(),
         boids::assemble_system(),
@@ -31,12 +32,14 @@ pub fn assemble_schedule() -> ImmutableSchedule<Parallel> {
         mipmap::assemble_system(),
         texture_arrays::assemble_system(),
         skybox::assemble_system(),
-        //shadow::assemble_system(),
+        */
+        shadow::assemble_system(),
     ]
 }
 
 pub fn winit_event_handler<T>(mut f: impl EventLoopHandler<T>) -> impl EventLoopHandler<T> {
     let mut prepare_schedule = parallel![
+        /*
         hello_triangle::prepare_schedule(),
         cube::prepare_schedule(),
         boids::prepare_schedule(),
@@ -46,10 +49,12 @@ pub fn winit_event_handler<T>(mut f: impl EventLoopHandler<T>) -> impl EventLoop
         mipmap::prepare_schedule(),
         texture_arrays::prepare_schedule(),
         skybox::prepare_schedule(),
-        //shadow::prepare_schedule(),
+        */
+        shadow::prepare_schedule(),
     ];
 
     let mut render_schedule = parallel![
+        /*
         hello_triangle::render_schedule(),
         cube::render_schedule(),
         boids::render_schedule(),
@@ -59,20 +64,26 @@ pub fn winit_event_handler<T>(mut f: impl EventLoopHandler<T>) -> impl EventLoop
         mipmap::render_schedule(),
         texture_arrays::render_schedule(),
         skybox::render_schedule(),
-        //shadow::render_schedule(),
+        */
+        shadow::render_schedule(),
     ];
 
     let mut surface_resize_schedule = parallel![
+        /*
         cube::cube_resize_system()
         msaa_line::msaa_line_resize_system()
         conservative_raster::conservative_raster_resize_system()
         mipmap::mipmap_resize_system(),
         skybox::skybox_resize_system(),
+        */
+        shadow::shadow_resize_system(),
     ];
 
     let mut keyboard_event_schedule = parallel![
+        /*
         bunnymark::keyboard_event_schedule(),
         msaa_line::keyboard_event_schedule(),
+        */
     ];
 
     let mut window_cursor_moved_schedule = parallel![skybox::cursor_moved_schedule(),];

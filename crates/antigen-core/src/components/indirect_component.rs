@@ -4,6 +4,7 @@ use legion::{Entity, IntoQuery, storage::Component, systems::CommandBuffer, worl
 
 /// A component referenced by entity ID,
 /// which can be fetched given a reference to a World or SubWorld
+#[derive(Debug, Copy, Clone, PartialEq, Hash)]
 pub struct IndirectComponent<T> {
     target: Entity,
     _phantom: PhantomData<T>,
@@ -15,6 +16,10 @@ impl<T> IndirectComponent<T> {
             target,
             _phantom: Default::default(),
         }
+    }
+
+    pub fn target(&self) -> Entity {
+        self.target
     }
 }
 

@@ -1,5 +1,6 @@
 use antigen_core::{
     AddComponentWithChangedFlag, AddIndirectComponent, ChangedFlag, LazyComponent, Usage,
+    AsUsage
 };
 
 use legion::{storage::Component, Entity, World};
@@ -167,15 +168,12 @@ pub trait AssembleWgpu {
     fn assemble_wgpu_texture_view_with_usage<U: Send + Sync + 'static>(
         self,
         entity: Entity,
+        target: Entity,
         desc: TextureViewDescriptor<'static>,
     );
 
     /// Adds a usage-tagged sampler to an entity
-    fn assemble_wgpu_sampler(
-        self,
-        entity: Entity,
-        desc: SamplerDescriptor<'static>,
-    );
+    fn assemble_wgpu_sampler(self, entity: Entity, desc: SamplerDescriptor<'static>);
 
     /// Adds a usage-tagged sampler to an entity
     fn assemble_wgpu_sampler_with_usage<U: Send + Sync + 'static>(
@@ -209,9 +207,7 @@ impl AssembleWgpu for &mut legion::systems::CommandBuffer {
         );
         self.add_component(
             entity,
-            Usage::<RenderAttachment, _>::new(
-                ChangedFlag::<TextureViewDescriptorComponent>::new_clean(),
-            ),
+            RenderAttachment::as_usage(ChangedFlag::<TextureViewDescriptorComponent>::new_clean())
         );
         self.add_component(
             entity,
@@ -445,6 +441,7 @@ impl AssembleWgpu for &mut legion::systems::CommandBuffer {
     fn assemble_wgpu_texture_view_with_usage<U: Send + Sync + 'static>(
         self,
         entity: Entity,
+        target: Entity,
         desc: TextureViewDescriptor<'static>,
     ) {
         self.add_component(
@@ -461,25 +458,17 @@ impl AssembleWgpu for &mut legion::systems::CommandBuffer {
             entity,
             Usage::<U, _>::new(TextureViewComponent::new(LazyComponent::Pending)),
         );
+
+        self.add_indirect_component::<Usage<U, TextureComponent>>(entity, target);
     }
 
-    fn assemble_wgpu_sampler(
-        self,
-        entity: Entity,
-        desc: SamplerDescriptor<'static>,
-    ) {
-        self.add_component(
-            entity,
-            SamplerDescriptorComponent::new(desc),
-        );
+    fn assemble_wgpu_sampler(self, entity: Entity, desc: SamplerDescriptor<'static>) {
+        self.add_component(entity, SamplerDescriptorComponent::new(desc));
         self.add_component(
             entity,
             ChangedFlag::<SamplerDescriptorComponent>::new_clean(),
         );
-        self.add_component(
-            entity,
-            SamplerComponent::new(LazyComponent::Pending),
-        );
+        self.add_component(entity, SamplerComponent::new(LazyComponent::Pending));
     }
 
     fn assemble_wgpu_sampler_with_usage<U: Send + Sync + 'static>(

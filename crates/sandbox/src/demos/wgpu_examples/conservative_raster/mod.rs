@@ -87,7 +87,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         },
     );
 
-    cmd.assemble_wgpu_texture_view_with_usage::<LowResTarget>(renderer_entity, Default::default());
+    cmd.assemble_wgpu_texture_view_with_usage::<LowResTarget>(renderer_entity, renderer_entity, Default::default());
 
     cmd.assemble_wgpu_sampler_with_usage::<LowResTarget>(
         renderer_entity,

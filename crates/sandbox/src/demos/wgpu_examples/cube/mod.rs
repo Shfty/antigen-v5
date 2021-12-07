@@ -270,7 +270,7 @@ pub fn assemble(cmd: &mut CommandBuffer) {
     );
 
     // Texture view
-    cmd.assemble_wgpu_texture_view_with_usage::<Mandelbrot>(renderer_entity, Default::default());
+    cmd.assemble_wgpu_texture_view_with_usage::<Mandelbrot>(renderer_entity, renderer_entity, Default::default());
 }
 
 pub fn prepare_schedule() -> ImmutableSchedule<Serial> {
