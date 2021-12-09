@@ -8,8 +8,7 @@ pub use components::*;
 pub use systems::*;
 
 use antigen_core::{
-    parallel, serial, single, AddIndirectComponent, AsUsage, ImmutableSchedule, RwLock, Serial,
-    Single,
+    parallel, serial, single, AddIndirectComponent, Construct, ImmutableSchedule, Serial, Single,
 };
 
 use antigen_wgpu::{
@@ -101,7 +100,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     buf.copy_from_slice(matrix.as_slice());
     cmd.assemble_wgpu_buffer_data_with_usage::<Uniform, _>(
         renderer_entity,
-        ViewProjection::as_usage(RwLock::new(buf)),
+        ViewProjectionMatrix::construct(buf),
         0,
     );
 
@@ -128,7 +127,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
 
     cmd.assemble_wgpu_texture_data_with_usage::<JuliaSet, _>(
         renderer_entity,
-        RwLock::new(texels),
+        TexelsComponent::construct(texels),
         ImageCopyTextureBase {
             texture: (),
             mip_level: 0,
@@ -190,7 +189,7 @@ pub fn prepare_schedule() -> ImmutableSchedule<Serial> {
         ],
         parallel![
             antigen_wgpu::buffer_write_system::<Uniform, ViewProjectionMatrix, [f32; 16]>(),
-            antigen_wgpu::texture_write_system::<JuliaSet, RwLock<Vec<u8>>, Vec<u8>>(),
+            antigen_wgpu::texture_write_system::<JuliaSet, TexelsComponent, Vec<u8>>(),
         ],
         mipmap_prepare_system()
     ]

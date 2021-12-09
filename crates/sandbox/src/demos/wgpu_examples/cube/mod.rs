@@ -7,8 +7,8 @@ use legion::systems::CommandBuffer;
 pub use systems::*;
 
 use antigen_core::{
-    parallel, serial, single, AddIndirectComponent, AsUsage, ImmutableSchedule, RwLock, Serial,
-    Single, Usage,
+    parallel, serial, single, AddIndirectComponent, Construct, ImmutableSchedule, RwLock,
+    Serial, Single, Usage,
 };
 use antigen_wgpu::{
     wgpu::{
@@ -17,7 +17,7 @@ use antigen_wgpu::{
         TextureAspect, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
     },
     AssembleWgpu, MeshUvs, MeshVertices, RenderAttachmentTextureView,
-    SurfaceConfigurationComponent, Texels,
+    SurfaceConfigurationComponent,
 };
 
 use std::{borrow::Cow, num::NonZeroU32};
@@ -172,7 +172,7 @@ pub fn assemble(cmd: &mut CommandBuffer) {
     let vertex_size = std::mem::size_of::<[f32; 3]>();
     cmd.assemble_wgpu_buffer_data_with_usage::<Vertex, _>(
         renderer_entity,
-        MeshVertices::as_usage(RwLock::new(cube_vertices)),
+        MeshVerticesComponent::construct(cube_vertices),
         0,
     );
 
@@ -181,7 +181,7 @@ pub fn assemble(cmd: &mut CommandBuffer) {
     let uvs_offset = (vertex_size * vertex_count) as BufferAddress;
     cmd.assemble_wgpu_buffer_data_with_usage::<Vertex, _>(
         renderer_entity,
-        MeshUvs::as_usage(RwLock::new(cube_uvs)),
+        MeshUvsComponent::construct(cube_uvs),
         uvs_offset,
     );
 
@@ -196,7 +196,7 @@ pub fn assemble(cmd: &mut CommandBuffer) {
 
     cmd.assemble_wgpu_texture_data_with_usage::<Mandelbrot, _>(
         renderer_entity,
-        Texels::as_usage(RwLock::new(texels)),
+        TexelsComponent::construct(texels),
         ImageCopyTextureBase {
             texture: (),
             mip_level: 0,
@@ -217,7 +217,7 @@ pub fn assemble(cmd: &mut CommandBuffer) {
 
     cmd.assemble_wgpu_buffer_data_with_usage::<Uniform, _>(
         renderer_entity,
-        ViewProjection::as_usage(RwLock::new(buf)),
+        ViewProjectionMatrix::construct(buf),
         0,
     );
 
@@ -297,8 +297,7 @@ pub fn prepare_schedule() -> ImmutableSchedule<Serial> {
                 Vec<[f32; 2]>,
             >(),
             antigen_wgpu::buffer_write_system::<Uniform, ViewProjectionMatrix, [f32; 16]>(),
-            antigen_wgpu::texture_write_system::<Mandelbrot, Usage<Texels, RwLock<Vec<u8>>>, Vec<u8>>(
-            ),
+            antigen_wgpu::texture_write_system::<Mandelbrot, TexelsComponent, Vec<u8>>(),
         ],
         cube_prepare_system(),
     ]

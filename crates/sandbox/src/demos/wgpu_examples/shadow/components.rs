@@ -8,6 +8,8 @@ use antigen_wgpu::{
 };
 use nalgebra::Matrix4;
 
+use super::{Index, Vertex};
+
 // Shadow renderer tag
 pub struct Shadow;
 
@@ -55,7 +57,9 @@ pub enum Mesh {
     Cube
 }
 
+pub type VertexDataComponent = RwLock<Vec<Vertex>>;
 pub type VertexBufferComponent = Usage<VertexTag, BufferComponent>;
+pub type IndexDataComponent = RwLock<Vec<Index>>;
 pub type IndexBufferComponent = Usage<IndexTag, BufferComponent>;
 
 pub type ForwardRenderPipeline = Usage<ForwardPass, RenderPipelineComponent>;

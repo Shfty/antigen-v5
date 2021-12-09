@@ -19,7 +19,10 @@ pub enum Red {}
 pub enum Green {}
 
 // Usage-tagged components
+pub type VertexDataComponent = RwLock<Vec<Vertex>>;
 pub type VertexBufferComponent = Usage<Vertex, BufferComponent>;
+
+pub type IndexDataComponent = RwLock<Vec<u16>>;
 pub type IndexBufferComponent = Usage<Index, BufferComponent>;
 
 pub type VertexShaderComponent = Usage<Vertex, ShaderModuleComponent>;

@@ -1,7 +1,7 @@
 use crate::wgpu_examples::bunnymark::MAX_VELOCITY;
 
 use super::{
-    Bunnies, Bunnymark, GlobalBindGroupComponent, GlobalBufferComponent, Globals,
+    BunniesComponent, Bunnymark, GlobalBindGroupComponent, GlobalBufferComponent, Globals,
     LocalBindGroupComponent, LocalBufferComponent, Locals, LogoSamplerComponent,
     LogoTextureViewComponent, PlayfieldExtentComponent, BUNNY_SIZE, GRAVITY,
 };
@@ -216,7 +216,7 @@ pub fn bunnymark_prepare(
 
 #[legion::system(par_for_each)]
 pub fn bunnymark_tick(
-    bunnies: &Changed<Bunnies>,
+    bunnies: &Changed<BunniesComponent>,
     extent: &PlayfieldExtentComponent,
 ) {
     let delta = 0.01;
@@ -244,7 +244,7 @@ pub fn bunnymark_tick(
 pub fn bunnymark_render(
     world: &legion::world::SubWorld,
     _: &Bunnymark,
-    bunnies: &Changed<Bunnies>,
+    bunnies: &Changed<BunniesComponent>,
     render_pipeline: &RenderPipelineComponent,
     command_buffers: &CommandBuffersComponent,
     global_bind_group: &GlobalBindGroupComponent,
@@ -322,7 +322,7 @@ pub fn bunnymark_render(
 pub fn bunnymark_key_event(
     world: &SubWorld,
     window: &IndirectComponent<WindowComponent>,
-    bunnies: &Changed<Bunnies>,
+    bunnies: &Changed<BunniesComponent>,
     extent: &PlayfieldExtentComponent,
 ) {
     let window = world

@@ -7,7 +7,7 @@ pub use systems::*;
 
 use antigen_core::{
     parallel, serial, single, AddIndirectComponent, AsUsage, ImmutableSchedule, LazyComponent,
-    RwLock, Serial, Single,
+    RwLock, Serial, Single, Construct
 };
 
 use antigen_wgpu::{
@@ -127,7 +127,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
             let object_entity = cmd.push(());
             cmd.assemble_wgpu_buffer_data_with_usage::<Vertex, _>(
                 object_entity,
-                RwLock::new(vertices),
+                VertexDataComponent::construct(vertices),
                 0,
             );
             cmd.assemble_wgpu_buffer_with_usage::<Vertex>(
@@ -154,7 +154,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     antigen_wgpu::assemble_staging_belt_data_with_usage::<Uniform, _>(
         cmd,
         renderer_entity,
-        RwLock::new(raw_uniforms),
+        UniformDataComponent::construct(raw_uniforms),
         0,
         BufferSize::new(std::mem::size_of::<[f32; 52]>() as u64).unwrap(),
     );
@@ -172,13 +172,13 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     // Texture
     cmd.add_component(
         renderer_entity,
-        Texture::as_usage(TextureComponent::new(LazyComponent::Pending)),
+        Texture::as_usage(TextureComponent::construct(LazyComponent::Pending)),
     );
 
     // Texture view
     cmd.add_component(
         renderer_entity,
-        Texture::as_usage(TextureViewComponent::new(LazyComponent::Pending)),
+        Texture::as_usage(TextureViewComponent::construct(LazyComponent::Pending)),
     );
 
     // Texture sampler
@@ -199,7 +199,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     // Depth texture view
     cmd.add_component(
         renderer_entity,
-        Depth::as_usage(TextureViewComponent::new(LazyComponent::Pending)),
+        Depth::as_usage(TextureViewComponent::construct(LazyComponent::Pending)),
     );
 }
 

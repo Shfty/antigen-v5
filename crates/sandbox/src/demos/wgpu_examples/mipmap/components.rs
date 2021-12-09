@@ -23,3 +23,5 @@ pub type UniformBufferComponent = Usage<Uniform, BufferComponent>;
 pub type JuliaSetTextureComponent = Usage<JuliaSet, TextureComponent>;
 pub type JuliaSetTextureViewComponent = Usage<JuliaSet, TextureViewComponent>;
 pub type JuliaSetSamplerComponent = Usage<JuliaSet, SamplerComponent>;
+
+pub type TexelsComponent = RwLock<Vec<u8>>;

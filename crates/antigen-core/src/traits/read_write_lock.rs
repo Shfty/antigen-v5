@@ -28,6 +28,22 @@ impl<T> ReadWriteLock<T> for Arc<RwLock<T>> {
     }
 }
 
+/// Construct implementation
+impl<T> crate::Construct<T, crate::peano::Z> for RwLock<T> {
+    fn construct(t: T) -> Self {
+        RwLock::new(t)
+    }
+}
+
+impl<T, I, N> crate::Construct<T, crate::peano::S<I>> for RwLock<N>
+where
+    N: crate::Construct<T, I>,
+{
+    fn construct(t: T) -> Self {
+        RwLock::new(N::construct(t))
+    }
+}
+
 /// Implement ReadWriteLock for a newtype struct
 #[macro_export]
 macro_rules! impl_read_write_lock {
@@ -43,4 +59,3 @@ macro_rules! impl_read_write_lock {
         }
     };
 }
-

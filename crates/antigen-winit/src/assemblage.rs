@@ -1,8 +1,11 @@
-use antigen_core::{AsUsage, Changed, LazyComponent, RwLock, SizeComponent};
+use antigen_core::{ChangedFlag, Construct, LazyComponent, With};
 use legion::{Entity, World};
 use winit::dpi::PhysicalSize;
 
-use crate::{WindowComponent, WindowEntityMap, WindowEventComponent, WindowSize, WindowTitle};
+use crate::{
+    WindowComponent, WindowEntityMap, WindowEventComponent, WindowSizeComponent,
+    WindowTitleComponent,
+};
 
 pub fn assemble_winit_backend(world: &mut World) -> Entity {
     world.push((
@@ -18,20 +21,17 @@ pub trait AssembleWinit {
 
 impl AssembleWinit for &mut legion::systems::CommandBuffer {
     fn assemble_winit_window(self, entity: Entity) {
-        self.add_component(entity, WindowComponent::new(LazyComponent::Pending));
+        self.add_component(entity, WindowComponent::construct(LazyComponent::Pending));
         self.add_component(
             entity,
-            WindowSize::as_usage(Changed::new(
-                SizeComponent::new(RwLock::new(PhysicalSize::<u32>::default())),
-                false,
-            )),
+            WindowSizeComponent::construct(PhysicalSize::<u32>::default()).with(ChangedFlag(false)),
         );
     }
 
     fn assemble_winit_window_title(self, entity: Entity, title: &'static str) {
         self.add_component(
             entity,
-            WindowTitle::as_usage(Changed::new(RwLock::new(title), true)),
+            WindowTitleComponent::construct(title).with(ChangedFlag(true)),
         );
     }
 }

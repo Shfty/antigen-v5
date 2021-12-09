@@ -1,8 +1,5 @@
 use antigen_core::{RwLock, Usage};
-use antigen_wgpu::{
-    BufferComponent, RenderPipelineComponent, TextureComponent, TextureDescriptorComponent,
-    TextureViewComponent,
-};
+use antigen_wgpu::{BufferComponent, MeshUvs, MeshVertices, RenderPipelineComponent, Texels, TextureComponent, TextureDescriptorComponent, TextureViewComponent};
 
 // Cube renderer tag
 pub struct Cube;
@@ -43,3 +40,8 @@ pub type MandelbrotTextureDescriptorComponent<'a> =
     Usage<Mandelbrot, TextureDescriptorComponent<'a>>;
 pub type MandelbrotTextureComponent = Usage<Mandelbrot, TextureComponent>;
 pub type MandelbrotTextureViewComponent = Usage<Mandelbrot, TextureViewComponent>;
+
+pub type MeshVerticesComponent = Usage<MeshVertices, RwLock<Vec<[f32; 3]>>>;
+pub type MeshUvsComponent = Usage<MeshUvs, RwLock<Vec<[f32; 2]>>>;
+
+pub type TexelsComponent = Usage<Texels, RwLock<Vec<u8>>>;

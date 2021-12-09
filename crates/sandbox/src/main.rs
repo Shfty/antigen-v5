@@ -54,7 +54,10 @@
 //       Less components means less boilerplate in user code,
 //       but introduces more pressure to typedef complex components
 //
-// TODO: [ ] Factor out AddComponentWithUsageFlag in favor of AsUsage
+// TODO: [✓] Factor out AddComponentWithUsageFlag in favor of AsUsage
+//
+// TODO: [✓] Integrate Construct and With traits to simplify newtype handling
+//           [✗] Simplify implementation using HKT Unplug<Unplugged = T> equivalent
 //
 // TODO: Improve WindowEventComponent
 //       Split into discrete components?

@@ -93,3 +93,38 @@ pub trait AsUsage: Sized {
 }
 
 impl<T> AsUsage for T {}
+
+/// Construct implementation
+impl<U, T> crate::Construct<T, crate::peano::Z> for Usage<U, T> {
+    fn construct(t: T) -> Self {
+        Usage {
+            data: t,
+            _phantom: Default::default(),
+        }
+    }
+}
+
+impl<T, I, U, N> crate::Construct<T, crate::peano::S<I>> for Usage<U, N>
+where
+    N: crate::Construct<T, I>,
+{
+    fn construct(t: T) -> Self {
+        Usage {
+            data: N::construct(t),
+            _phantom: Default::default(),
+        }
+    }
+}
+
+/// With implementation
+impl<T, I, U, N> crate::With<T, crate::peano::S<I>> for Usage<U, N>
+where
+    N: crate::With<T, I>,
+{
+    fn with(self, t: T) -> Self {
+        Usage {
+            data: self.data.with(t),
+            ..self
+        }
+    }
+}

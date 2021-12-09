@@ -9,8 +9,7 @@ use legion::{world::SubWorld, IntoQuery};
 pub use systems::*;
 
 use antigen_core::{
-    impl_read_write_lock, parallel, serial, single, AddIndirectComponent, AsUsage,
-    ImmutableSchedule, RwLock, Serial, Single, Usage,
+    parallel, serial, single, AddIndirectComponent, Construct, ImmutableSchedule, Serial, Single,
 };
 
 use antigen_wgpu::{
@@ -20,7 +19,7 @@ use antigen_wgpu::{
         ShaderSource, TextureAspect, TextureDescriptor, TextureDimension, TextureFormat,
         TextureUsages,
     },
-    AssembleWgpu, RenderAttachmentTextureView, SurfaceConfigurationComponent, Texels, ToBytes,
+    AssembleWgpu, RenderAttachmentTextureView, SurfaceConfigurationComponent, ToBytes,
 };
 
 const MAX_BUNNIES: usize = 1 << 20;
@@ -30,7 +29,7 @@ const MAX_VELOCITY: f32 = 750.0;
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-struct Globals {
+pub struct Globals {
     mvp: [[f32; 4]; 4],
     size: [f32; 2],
     pad: [f32; 2],
@@ -45,7 +44,7 @@ impl ToBytes for Globals {
 // Manually padded to 256 instead of using repr so we can use Pod instead of slice::from_raw_parts
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-struct Locals {
+pub struct Locals {
     position: [f32; 2],
     velocity: [f32; 2],
     color: u32,
@@ -55,17 +54,6 @@ struct Locals {
 impl ToBytes for Locals {
     fn to_bytes(&self) -> &[u8] {
         bytemuck::bytes_of(self)
-    }
-}
-
-#[repr(C)]
-pub struct Bunnies(RwLock<Vec<Locals>>);
-
-impl_read_write_lock!(Bunnies, 0, Vec<Locals>);
-
-impl Bunnies {
-    pub fn new() -> Self {
-        Bunnies(RwLock::new(Default::default()))
     }
 }
 
@@ -121,9 +109,17 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
         size: [BUNNY_SIZE; 2],
         pad: [0.0; 2],
     };
-    cmd.assemble_wgpu_buffer_data_with_usage::<Global, _>(renderer_entity, RwLock::new(globals), 0);
+    cmd.assemble_wgpu_buffer_data_with_usage::<Global, _>(
+        renderer_entity,
+        GlobalDataComponent::construct(globals),
+        0,
+    );
 
-    cmd.assemble_wgpu_buffer_data_with_usage::<Local, _>(renderer_entity, Bunnies::new(), 0);
+    cmd.assemble_wgpu_buffer_data_with_usage::<Local, _>(
+        renderer_entity,
+        BunniesComponent::construct(Vec::default()),
+        0,
+    );
 
     // Texture data
     let img_data = include_bytes!("logo.png");
@@ -140,7 +136,7 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
 
     cmd.assemble_wgpu_texture_data_with_usage::<Logo, _>(
         renderer_entity,
-        Texels::as_usage(RwLock::new(buf)),
+        TexelDataComponent::construct(buf),
         ImageCopyTextureBase {
             texture: (),
             mip_level: 0,
@@ -214,10 +210,7 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
     );
 
     // Playfield extent
-    cmd.add_component(
-        renderer_entity,
-        PlayfieldExtent::as_usage(RwLock::new(extent)),
-    );
+    cmd.add_component(renderer_entity, PlayfieldExtentComponent::construct(extent));
 }
 
 pub fn prepare_schedule() -> ImmutableSchedule<Serial> {
@@ -231,9 +224,9 @@ pub fn prepare_schedule() -> ImmutableSchedule<Serial> {
             antigen_wgpu::create_samplers_with_usage_system::<Logo>(),
         ],
         parallel![
-            antigen_wgpu::buffer_write_system::<Global, RwLock<Globals>, Globals>(),
-            antigen_wgpu::buffer_write_system::<Local, Bunnies, Vec<Locals>>(),
-            antigen_wgpu::texture_write_system::<Logo, Usage<Texels, RwLock<Vec<u8>>>, Vec<u8>>(),
+            antigen_wgpu::buffer_write_system::<Global, GlobalDataComponent, Globals>(),
+            antigen_wgpu::buffer_write_system::<Local, BunniesComponent, Vec<Locals>>(),
+            antigen_wgpu::texture_write_system::<Logo, TexelDataComponent, Vec<u8>>(),
         ],
         bunnymark_prepare_system(),
     ]

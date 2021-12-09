@@ -10,7 +10,7 @@ pub use systems::*;
 
 use antigen_core::{
     parallel, serial, single, AddIndirectComponent, AsUsage, ImmutableSchedule, LazyComponent,
-    RwLock, Serial, Single,
+    RwLock, Serial, Single, Construct,
 };
 
 use antigen_wgpu::{AssembleWgpu, BufferComponent, RenderAttachmentTextureView, SurfaceConfigurationComponent, TextureViewComponent, wgpu::{
@@ -116,7 +116,7 @@ fn create_plane(size: i8) -> (Vec<Vertex>, Vec<Index>) {
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
-struct Vertex {
+pub struct Vertex {
     _pos: [i8; 4],
     _normal: [i8; 4],
 }
@@ -138,8 +138,8 @@ pub fn assemble_object(
     uniform_offset: u32,
 ) {
     cmd.add_component(entity, mesh);
-    cmd.add_component(entity, ObjectTag::as_usage(RwLock::new(mx_world)));
-    cmd.add_component(entity, RotationSpeed::as_usage(rotation_speed));
+    cmd.add_component(entity, ObjectMatrixComponent::construct(mx_world));
+    cmd.add_component(entity, RotationSpeedComponent::construct(rotation_speed));
     cmd.add_component(entity, color);
     cmd.add_component(entity, UniformOffset::as_usage(uniform_offset));
 }
@@ -230,12 +230,12 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
 
     cmd.add_component(
         renderer_entity,
-        ObjectTag::as_usage(BufferComponent::new(LazyComponent::Pending)),
+        ObjectUniformBuffer::construct(LazyComponent::Pending),
     );
 
     cmd.add_component(
         renderer_entity,
-        LightTag::as_usage(BufferComponent::new(LazyComponent::Pending)),
+        LightStorageBuffer::construct(LazyComponent::Pending),
     );
 
     // Shader
@@ -502,8 +502,8 @@ pub fn prepare_schedule() -> ImmutableSchedule<Serial> {
             antigen_wgpu::create_shader_modules_system(),
             antigen_wgpu::create_buffers_system::<VertexTag>(),
             antigen_wgpu::create_buffers_system::<IndexTag>(),
-            antigen_wgpu::buffer_write_system::<VertexTag, RwLock<Vec<Vertex>>, Vec<Vertex>>(),
-            antigen_wgpu::buffer_write_system::<IndexTag, RwLock<Vec<Index>>, Vec<Index>>(),
+            antigen_wgpu::buffer_write_system::<VertexTag, VertexDataComponent, Vec<Vertex>>(),
+            antigen_wgpu::buffer_write_system::<IndexTag, IndexDataComponent, Vec<Index>>(),
             antigen_wgpu::create_textures_system::<ShadowPass>(),
             antigen_wgpu::create_texture_views_system::<ShadowPass>(),
             antigen_wgpu::create_samplers_with_usage_system::<ShadowPass>(),

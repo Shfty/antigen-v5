@@ -1,4 +1,6 @@
-use antigen_core::{AddIndirectComponent, AsUsage, Changed, LazyComponent, Usage};
+use antigen_core::{
+    AddIndirectComponent, AsUsage, Changed, ChangedFlag, Construct, LazyComponent, Usage, With,
+};
 
 use legion::{storage::Component, Entity, World};
 use wgpu::{
@@ -13,8 +15,9 @@ use std::path::Path;
 use crate::{
     BindGroupComponent, BindGroupLayoutComponent, BufferComponent, BufferDescriptorComponent,
     BufferInitDescriptorComponent, BufferWriteComponent, CommandBuffersComponent,
-    ComputePipelineComponent, PipelineLayoutComponent, RenderAttachment, RenderBundleComponent,
-    RenderPipelineComponent, SamplerComponent, SamplerDescriptorComponent, ShaderModuleComponent,
+    ComputePipelineComponent, PipelineLayoutComponent, RenderAttachmentTextureView,
+    RenderAttachmentTextureViewDescriptor, RenderBundleComponent, RenderPipelineComponent,
+    SamplerComponent, SamplerDescriptorComponent, ShaderModuleComponent,
     ShaderModuleDescriptorComponent, ShaderModuleDescriptorSpirVComponent, SurfaceComponent,
     SurfaceConfigurationComponent, SurfaceTextureComponent, TextureComponent,
     TextureDescriptorComponent, TextureViewComponent, TextureViewDescriptorComponent,
@@ -184,92 +187,109 @@ impl AssembleWgpu for &mut legion::systems::CommandBuffer {
     fn assemble_wgpu_window_surface(self, entity: Entity) {
         self.add_component(
             entity,
-                SurfaceConfigurationComponent::new(SurfaceConfiguration {
-                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                    format: wgpu::TextureFormat::Bgra8Unorm,
-                    width: 0,
-                    height: 0,
-                    present_mode: wgpu::PresentMode::Mailbox,
-                }.into(), false),
+            SurfaceConfigurationComponent::construct(SurfaceConfiguration {
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                format: wgpu::TextureFormat::Bgra8Unorm,
+                width: 0,
+                height: 0,
+                present_mode: wgpu::PresentMode::Mailbox,
+            })
+            .with(ChangedFlag(false)),
         );
-        self.add_component(entity, SurfaceComponent::new(LazyComponent::Pending));
-
-        self.add_component(entity, SurfaceTextureComponent::new(None.into(), false));
+        self.add_component(entity, SurfaceComponent::construct(LazyComponent::Pending));
 
         self.add_component(
             entity,
-            RenderAttachment::as_usage(TextureViewDescriptorComponent::new(
-                Default::default(),
-                false,
-            )),
+            SurfaceTextureComponent::construct(None).with(ChangedFlag(false)),
+        );
+
+        self.add_component(
+            entity,
+            RenderAttachmentTextureViewDescriptor::construct(TextureViewDescriptor::default())
+                .with(ChangedFlag(false)),
         );
         self.add_component(
             entity,
-            RenderAttachment::as_usage(TextureViewComponent::new(LazyComponent::Pending)),
+            RenderAttachmentTextureView::construct(LazyComponent::Pending),
         );
     }
 
     fn assemble_wgpu_render_pipeline(self, entity: Entity) {
-        self.add_component(entity, RenderPipelineComponent::new(LazyComponent::Pending));
+        self.add_component(
+            entity,
+            RenderPipelineComponent::construct(LazyComponent::Pending),
+        );
     }
 
     fn assemble_wgpu_pipeline_layout(self, entity: Entity) {
-        self.add_component(entity, PipelineLayoutComponent::new(LazyComponent::Pending));
+        self.add_component(
+            entity,
+            PipelineLayoutComponent::construct(LazyComponent::Pending),
+        );
     }
 
     fn assemble_wgpu_render_bundle(self, entity: Entity) {
-        self.add_component(entity, RenderBundleComponent::new(LazyComponent::Pending));
+        self.add_component(
+            entity,
+            RenderBundleComponent::construct(LazyComponent::Pending),
+        );
     }
 
     fn assemble_wgpu_render_pipeline_with_usage<U: Send + Sync + 'static>(self, entity: Entity) {
         self.add_component(
             entity,
-            U::as_usage(RenderPipelineComponent::new(LazyComponent::Pending)),
+            U::as_usage(RenderPipelineComponent::construct(LazyComponent::Pending)),
         );
     }
 
     fn assemble_wgpu_compute_pipeline(self, entity: Entity) {
         self.add_component(
             entity,
-            ComputePipelineComponent::new(LazyComponent::Pending),
+            ComputePipelineComponent::construct(LazyComponent::Pending),
         );
     }
 
     fn assemble_wgpu_bind_group_layout(self, entity: Entity) {
         self.add_component(
             entity,
-            BindGroupLayoutComponent::new(LazyComponent::Pending),
+            BindGroupLayoutComponent::construct(LazyComponent::Pending),
         );
     }
 
     fn assemble_wgpu_bind_group_layout_with_usage<U: Send + Sync + 'static>(self, entity: Entity) {
         self.add_component(
             entity,
-            U::as_usage(BindGroupLayoutComponent::new(LazyComponent::Pending)),
+            U::as_usage(BindGroupLayoutComponent::construct(LazyComponent::Pending)),
         );
     }
 
     fn assemble_wgpu_bind_group(self, entity: Entity) {
-        self.add_component(entity, BindGroupComponent::new(LazyComponent::Pending));
+        self.add_component(
+            entity,
+            BindGroupComponent::construct(LazyComponent::Pending),
+        );
     }
 
     fn assemble_wgpu_bind_group_with_usage<U: Send + Sync + 'static>(self, entity: Entity) {
         self.add_component(
             entity,
-            U::as_usage(BindGroupComponent::new(LazyComponent::Pending)),
+            U::as_usage(BindGroupComponent::construct(LazyComponent::Pending)),
         );
     }
 
     fn assemble_wgpu_command_buffers(self, entity: Entity) {
-        self.add_component(entity, CommandBuffersComponent::new(Default::default()));
+        self.add_component(entity, CommandBuffersComponent::construct(Vec::default()));
     }
 
     fn assemble_wgpu_shader(self, entity: Entity, desc: ShaderModuleDescriptor<'static>) {
         self.add_component(
             entity,
-            ShaderModuleDescriptorComponent::new(desc.into(), false),
+            ShaderModuleDescriptorComponent::construct(desc).with(ChangedFlag(false)),
         );
-        self.add_component(entity, ShaderModuleComponent::new(LazyComponent::Pending));
+        self.add_component(
+            entity,
+            ShaderModuleComponent::construct(LazyComponent::Pending),
+        );
     }
 
     fn assemble_wgpu_shader_with_usage<U: Send + Sync + 'static>(
@@ -279,12 +299,12 @@ impl AssembleWgpu for &mut legion::systems::CommandBuffer {
     ) {
         self.add_component(
             entity,
-            U::as_usage(ShaderModuleDescriptorComponent::new(desc.into(), false)),
+            U::as_usage(ShaderModuleDescriptorComponent::construct(desc).with(ChangedFlag(false))),
         );
 
         self.add_component(
             entity,
-            U::as_usage(ShaderModuleComponent::new(LazyComponent::Pending)),
+            U::as_usage(ShaderModuleComponent::construct(LazyComponent::Pending)),
         );
     }
 
@@ -295,9 +315,12 @@ impl AssembleWgpu for &mut legion::systems::CommandBuffer {
     ) {
         self.add_component(
             entity,
-            ShaderModuleDescriptorSpirVComponent::new(desc.into(), false),
+            ShaderModuleDescriptorSpirVComponent::construct(desc).with(ChangedFlag(false)),
         );
-        self.add_component(entity, ShaderModuleComponent::new(LazyComponent::Pending));
+        self.add_component(
+            entity,
+            ShaderModuleComponent::construct(LazyComponent::Pending),
+        );
     }
 
     fn assemble_wgpu_shader_spirv_with_usage<U: Send + Sync + 'static>(
@@ -307,15 +330,14 @@ impl AssembleWgpu for &mut legion::systems::CommandBuffer {
     ) {
         self.add_component(
             entity,
-            U::as_usage(ShaderModuleDescriptorSpirVComponent::new(
-                desc.into(),
-                false,
-            )),
+            U::as_usage(
+                ShaderModuleDescriptorSpirVComponent::construct(desc).with(ChangedFlag(false)),
+            ),
         );
 
         self.add_component(
             entity,
-            U::as_usage(ShaderModuleComponent::new(LazyComponent::Pending)),
+            U::as_usage(ShaderModuleComponent::construct(LazyComponent::Pending)),
         );
     }
 
@@ -326,12 +348,12 @@ impl AssembleWgpu for &mut legion::systems::CommandBuffer {
     ) {
         self.add_component(
             entity,
-            U::as_usage(BufferDescriptorComponent::new(desc.into(), false)),
+            U::as_usage(BufferDescriptorComponent::construct(desc).with(ChangedFlag(false))),
         );
 
         self.add_component(
             entity,
-            U::as_usage(BufferComponent::new(LazyComponent::Pending)),
+            U::as_usage(BufferComponent::construct(LazyComponent::Pending)),
         );
     }
 
@@ -342,12 +364,12 @@ impl AssembleWgpu for &mut legion::systems::CommandBuffer {
     ) {
         self.add_component(
             entity,
-            U::as_usage(BufferInitDescriptorComponent::new(desc.into(), false)),
+            U::as_usage(BufferInitDescriptorComponent::construct(desc).with(ChangedFlag(false))),
         );
 
         self.add_component(
             entity,
-            U::as_usage(BufferComponent::new(LazyComponent::Pending)),
+            U::as_usage(BufferComponent::construct(LazyComponent::Pending)),
         );
     }
 
@@ -372,12 +394,12 @@ impl AssembleWgpu for &mut legion::systems::CommandBuffer {
     ) {
         self.add_component(
             entity,
-            U::as_usage(TextureDescriptorComponent::new(desc.into(), false)),
+            U::as_usage(TextureDescriptorComponent::construct(desc).with(ChangedFlag(false))),
         );
 
         self.add_component(
             entity,
-            U::as_usage(TextureComponent::new(LazyComponent::Pending)),
+            U::as_usage(TextureComponent::construct(LazyComponent::Pending)),
         );
     }
 
@@ -415,20 +437,23 @@ impl AssembleWgpu for &mut legion::systems::CommandBuffer {
     ) {
         self.add_component(
             entity,
-            U::as_usage(TextureViewDescriptorComponent::new(desc.into(), false)),
+            U::as_usage(TextureViewDescriptorComponent::construct(desc).with(ChangedFlag(false))),
         );
 
         self.add_component(
             entity,
-            U::as_usage(TextureViewComponent::new(LazyComponent::Pending)),
+            U::as_usage(TextureViewComponent::construct(LazyComponent::Pending)),
         );
 
         self.add_indirect_component::<Usage<U, TextureComponent>>(entity, target);
     }
 
     fn assemble_wgpu_sampler(self, entity: Entity, desc: SamplerDescriptor<'static>) {
-        self.add_component(entity, SamplerDescriptorComponent::new(desc.into(), false));
-        self.add_component(entity, SamplerComponent::new(LazyComponent::Pending));
+        self.add_component(
+            entity,
+            SamplerDescriptorComponent::construct(desc).with(ChangedFlag(false)),
+        );
+        self.add_component(entity, SamplerComponent::construct(LazyComponent::Pending));
     }
 
     fn assemble_wgpu_sampler_with_usage<U: Send + Sync + 'static>(
@@ -438,11 +463,11 @@ impl AssembleWgpu for &mut legion::systems::CommandBuffer {
     ) {
         self.add_component(
             entity,
-            U::as_usage(SamplerDescriptorComponent::new(desc.into(), false)),
+            U::as_usage(SamplerDescriptorComponent::construct(desc).with(ChangedFlag(false))),
         );
         self.add_component(
             entity,
-            U::as_usage(SamplerComponent::new(LazyComponent::Pending)),
+            U::as_usage(SamplerComponent::construct(LazyComponent::Pending)),
         );
     }
 }

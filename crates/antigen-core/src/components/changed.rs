@@ -6,6 +6,8 @@ use std::{
 
 use crate::ReadWriteLock;
 
+pub struct ChangedFlag(pub bool);
+
 // Changed flag
 pub struct Changed<T> {
     pub data: T,
@@ -80,3 +82,46 @@ impl<T> ChangedTrait for Changed<T> {
     }
 }
 
+/// Construct implementation
+impl<T> crate::Construct<T, crate::peano::Z> for Changed<T> {
+    fn construct(t: T) -> Self {
+        Changed {
+            data: t,
+            flag: false.into(),
+        }
+    }
+}
+
+impl<T, I, N> crate::Construct<T, crate::peano::S<I>> for Changed<N>
+where
+    N: crate::Construct<T, I>,
+{
+    fn construct(t: T) -> Self {
+        Changed {
+            data: N::construct(t),
+            flag: false.into(),
+        }
+    }
+}
+
+/// With implementation
+impl<T> crate::With<ChangedFlag, crate::peano::Z> for Changed<T> {
+    fn with(self, t: ChangedFlag) -> Self {
+        Changed {
+            flag: t.0.into(),
+            ..self
+        }
+    }
+}
+
+impl<T, I, N> crate::With<T, crate::peano::S<I>> for Changed<N>
+where
+    N: crate::With<T, I>,
+{
+    fn with(self, t: T) -> Self {
+        Changed {
+            data: self.data.with(t),
+            ..self
+        }
+    }
+}

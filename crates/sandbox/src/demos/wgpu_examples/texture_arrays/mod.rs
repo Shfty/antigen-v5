@@ -8,8 +8,8 @@ pub use components::*;
 pub use systems::*;
 
 use antigen_core::{
-    parallel, serial, single, AddIndirectComponent, AsUsage, ImmutableSchedule, LazyComponent,
-    RwLock, Serial, Single,
+    parallel, serial, single, AddIndirectComponent, Construct, ImmutableSchedule, LazyComponent,
+    Serial, Single,
 };
 
 use antigen_wgpu::{
@@ -18,8 +18,7 @@ use antigen_wgpu::{
         ImageCopyTextureBase, ImageDataLayout, IndexFormat, TextureAspect, TextureDescriptor,
         TextureDimension, TextureFormat, TextureUsages,
     },
-    AssembleWgpu, RenderAttachmentTextureView, ShaderModuleComponent,
-    SurfaceConfigurationComponent,
+    AssembleWgpu, RenderAttachmentTextureView, SurfaceConfigurationComponent,
 };
 
 use bytemuck::{Pod, Zeroable};
@@ -111,13 +110,13 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     // Fragment shader is initialized in the prepare system
     cmd.add_component(
         renderer_entity,
-        Fragment::as_usage(ShaderModuleComponent::new(LazyComponent::Pending)),
+        FragmentShaderComponent::construct(LazyComponent::Pending),
     );
 
     // Uniform workaround flag
     cmd.add_component(
         renderer_entity,
-        UniformWorkaround::as_usage(RwLock::new(false)),
+        UniformWorkaroundComponent::construct(false),
     );
 
     // Buffer data
@@ -125,7 +124,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     let vertex_count = vertex_data.len();
     cmd.assemble_wgpu_buffer_data_with_usage::<Vertex, _>(
         renderer_entity,
-        RwLock::new(vertex_data),
+        VertexDataComponent::construct(vertex_data),
         0,
     );
 
@@ -133,7 +132,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     let index_count = index_data.len();
     cmd.assemble_wgpu_buffer_data_with_usage::<Index, _>(
         renderer_entity,
-        RwLock::new(index_data),
+        IndexDataComponent::construct(index_data),
         0,
     );
 
@@ -162,7 +161,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     let red_texture_data = create_texture_data(Color::Red);
     cmd.assemble_wgpu_texture_data_with_usage::<Red, _>(
         renderer_entity,
-        Red::as_usage(RwLock::new(red_texture_data)),
+        RedTexelComponent::construct(red_texture_data),
         ImageCopyTextureBase {
             texture: (),
             mip_level: 0,
@@ -179,7 +178,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     let green_texture_data = create_texture_data(Color::Green);
     cmd.assemble_wgpu_texture_data_with_usage::<Green, _>(
         renderer_entity,
-        Green::as_usage(RwLock::new(green_texture_data)),
+        GreenTexelComponent::construct(green_texture_data),
         ImageCopyTextureBase {
             texture: (),
             mip_level: 0,
@@ -236,8 +235,8 @@ pub fn prepare_schedule() -> ImmutableSchedule<Serial> {
             antigen_wgpu::create_samplers_system(),
         ],
         parallel![
-            antigen_wgpu::buffer_write_system::<Vertex, RwLock<Vec<Vertex>>, Vec<Vertex>>(),
-            antigen_wgpu::buffer_write_system::<Index, RwLock<Vec<Index>>, Vec<Index>>(),
+            antigen_wgpu::buffer_write_system::<Vertex, VertexDataComponent, Vec<Vertex>>(),
+            antigen_wgpu::buffer_write_system::<Index, IndexDataComponent, Vec<Index>>(),
             antigen_wgpu::texture_write_system::<Red, RedTexelComponent, [u8; 4]>(),
             antigen_wgpu::texture_write_system::<Green, GreenTexelComponent, [u8; 4]>(),
         ],
