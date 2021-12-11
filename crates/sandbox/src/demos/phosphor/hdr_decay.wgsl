@@ -31,9 +31,32 @@ fn vs_main([[builtin(vertex_index)]] vertex_index: u32) -> VertexOutput {
 [[stage(fragment)]]
 fn fs_main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     let hdr = textureSample(r_hdr, r_sampler, in.uv);
+
+    // Unpack HDR fragment
     let intensity = hdr.r;
     let delta_intensity = hdr.g;
-    let intensity = max(intensity + delta_intensity * r_time.delta, 0.0);
-    let gradient = hdr.b;
-    return vec4<f32>(intensity, delta_intensity, gradient, 1.0);
+    let delta_delta = hdr.b;
+    let gradient = hdr.a;
+
+    // Integrate intensity
+    let prev_intensity = intensity;
+    let intensity = intensity + delta_intensity * r_time.delta;
+    let intensity_changed = abs(sign(sign(intensity) + sign(prev_intensity)));
+
+    // Integrate delta intensity
+    let prev_delta = delta_intensity;
+    let delta_intensity = delta_intensity + delta_delta * r_time.delta;
+    let delta_changed = abs(sign(sign(delta_intensity) + sign(prev_delta)));
+
+    // Zero out intensity if it changes sign
+    let intensity = intensity * intensity_changed;
+
+    // Zero out delta intensity if intensity changes sign
+    let delta_intensity = delta_intensity * intensity_changed;
+
+    // Zero out delta intensity and delta delta if delta intensity changes sign
+    let delta_intensity = delta_intensity * delta_changed;
+    let delta_delta = delta_delta * delta_changed;
+
+    return vec4<f32>(intensity, delta_intensity, delta_delta, gradient);
 }

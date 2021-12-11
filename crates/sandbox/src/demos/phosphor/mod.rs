@@ -1,7 +1,7 @@
 mod components;
 mod systems;
 
-use std::{f32::consts::PI, num::NonZeroU32, time::Instant};
+use std::{num::NonZeroU32, time::Instant};
 
 use antigen_winit::{
     winit::{
@@ -19,15 +19,13 @@ use antigen_core::{parallel, serial, single, AddIndirectComponent, Construct, Im
 use antigen_wgpu::{
     wgpu::{
         AddressMode, BufferAddress, BufferDescriptor, BufferUsages, Device, Extent3d, FilterMode,
-        ImageCopyTextureBase, ImageDataLayout, Maintain, Origin3d, SamplerDescriptor,
-        ShaderModuleDescriptor, ShaderSource, TextureAspect, TextureDescriptor, TextureDimension,
-        TextureFormat, TextureUsages, TextureViewDescriptor,
+        ImageCopyTextureBase, ImageDataLayout, Maintain, SamplerDescriptor, ShaderModuleDescriptor,
+        ShaderSource, TextureAspect, TextureDescriptor, TextureDimension, TextureFormat,
+        TextureUsages, TextureViewDescriptor,
     },
     AssembleWgpu, RenderAttachmentTextureView, SurfaceConfigurationComponent,
 };
 
-const MAX_GRADIENT_SIZE: usize = 8;
-const MAX_GRADIENT_COUNT: usize = 4;
 const MAX_LINES: usize = 6;
 
 pub fn projection_matrix(aspect: f32, zoom: f32) -> [[f32; 4]; 4] {
@@ -54,7 +52,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     cmd.add_component(time_entity, TimestampComponent::construct(Instant::now()));
     cmd.assemble_wgpu_buffer_data_with_usage::<Uniform, _>(
         time_entity,
-        DeltaTimeComponent::construct(0.0),
+        DeltaTimeComponent::construct(1.0 / 60.0),
         std::mem::size_of::<f32>() as BufferAddress,
         Some(renderer_entity),
     );
@@ -149,20 +147,44 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     );
 
     // Gradients texture
+    let img_data = include_bytes!("gradients.png");
+    let decoder = png::Decoder::new(std::io::Cursor::new(img_data));
+    let mut reader = decoder.read_info().unwrap();
+    let mut buf = vec![0; reader.output_buffer_size()];
+    let info = reader.next_frame(&mut buf).unwrap();
+
+    let size = Extent3d {
+        width: info.width,
+        height: info.height,
+        depth_or_array_layers: 1,
+    };
+
     cmd.assemble_wgpu_texture_with_usage::<Gradients>(
         renderer_entity,
         TextureDescriptor {
             label: Some("Gradients Texture"),
-            size: Extent3d {
-                width: MAX_GRADIENT_SIZE as u32,
-                height: MAX_GRADIENT_COUNT as u32,
-                depth_or_array_layers: 1,
-            },
+            size,
             mip_level_count: 1,
             sample_count: 1,
             dimension: TextureDimension::D2,
-            format: TextureFormat::Rgba32Float,
+            format: TextureFormat::Rgba8UnormSrgb,
             usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
+        },
+    );
+
+    cmd.assemble_wgpu_texture_data_with_usage::<Gradients, _>(
+        renderer_entity,
+        GradientDataComponent::construct(buf),
+        ImageCopyTextureBase {
+            texture: (),
+            mip_level: 0,
+            origin: Default::default(),
+            aspect: TextureAspect::All,
+        },
+        ImageDataLayout {
+            offset: 0,
+            bytes_per_row: Some(NonZeroU32::new(info.line_size as u32).unwrap()),
+            rows_per_image: Some(NonZeroU32::new(size.height).unwrap()),
         },
     );
 
@@ -178,50 +200,6 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
             mip_level_count: None,
             base_array_layer: 0,
             array_layer_count: None,
-        },
-    );
-
-    fn red() -> [f32; 4] {
-        [1.0, 0.0, 0.0, 1.0]
-    }
-
-    fn green() -> [f32; 4] {
-        [0.0, 1.0, 0.0, 1.0]
-    }
-
-    fn blue() -> [f32; 4] {
-        [0.0, 0.0, 1.0, 1.0]
-    }
-
-    fn white() -> [f32; 4] {
-        [1.0, 1.0, 1.0, 1.0]
-    }
-
-    fn black() -> [f32; 4] {
-        [0.0, 0.0, 0.0, 1.0]
-    }
-
-    let mut gradient_data: GradientData = [Gradient::default(); MAX_GRADIENT_COUNT];
-    gradient_data[0] = Gradient::new(vec![black(), red(), white()]);
-    gradient_data[1] = Gradient::new(vec![black(), green(), white()]);
-    gradient_data[2] = Gradient::new(vec![black(), blue(), white()]);
-
-    cmd.assemble_wgpu_texture_data_with_usage::<Gradients, _>(
-        renderer_entity,
-        GradientDataComponent::construct(gradient_data),
-        ImageCopyTextureBase {
-            texture: (),
-            mip_level: 0,
-            origin: Origin3d::default(),
-            aspect: TextureAspect::All,
-        },
-        ImageDataLayout {
-            offset: 0,
-            bytes_per_row: Some(
-                NonZeroU32::new(std::mem::size_of::<f32>() as u32 * 4 * MAX_GRADIENT_SIZE as u32)
-                    .unwrap(),
-            ),
-            rows_per_image: None,
         },
     );
 
@@ -283,68 +261,48 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         Some(renderer_entity),
     );
 
+    fn circle_strip(subdiv: usize) -> Vec<VertexData> {
+        let subdiv = subdiv as isize;
+        let half = 1 + subdiv;
+
+        // Generate left quarter-circle
+        let mut left = (-half..1)
+            .map(|i| i as f32 / half as f32)
+            .map(|f| {
+                let f = f * (std::f32::consts::PI * 0.5);
+                (f.sin(), f.cos(), 0.0)
+            })
+            .collect::<Vec<_>>();
+
+        let mut right = (0..half + 1)
+            .map(|i| i as f32 / half as f32)
+            .map(|f| {
+                let f = f * (std::f32::consts::PI * 0.5);
+                (f.sin(), f.cos(), 1.0)
+            })
+            .collect::<Vec<_>>();
+
+        let first = left.remove(0);
+        let last = right.pop().unwrap();
+
+        let inter = left
+            .into_iter()
+            .chain(right.into_iter())
+            .flat_map(|(x, y, s)| [(x, y, s), (x, -y, s)]);
+
+        std::iter::once(first)
+            .chain(inter)
+            .chain(std::iter::once(last))
+            .map(|(x, y, s)| VertexData {
+                position: [x, y, 0.0, 1.0],
+                end: s,
+                ..Default::default()
+            })
+            .collect()
+    }
+
     // Vertex buffer
-    let intensity = 3.0;
-    let delta_intensity = -3.0;
-    let gradient = 0.0;
-    let vertices = vec![
-        VertexData {
-            position: [-1.0, -1.0, 0.0, 1.0],
-            intensity,
-            delta_intensity,
-            gradient,
-            ..Default::default()
-        },
-        VertexData {
-            position: [-1.0, 1.0, 0.0, 1.0],
-            intensity,
-            delta_intensity,
-            gradient,
-            ..Default::default()
-        },
-        VertexData {
-            position: [0.0, -1.0, 0.0, 1.0],
-            intensity,
-            delta_intensity,
-            gradient,
-            ..Default::default()
-        },
-        VertexData {
-            position: [0.0, 1.0, 0.0, 1.0],
-            intensity,
-            delta_intensity,
-            gradient,
-            ..Default::default()
-        },
-        VertexData {
-            position: [0.0, -1.0, 0.0, 1.0],
-            intensity,
-            delta_intensity,
-            gradient,
-            ..Default::default()
-        },
-        VertexData {
-            position: [0.0, 1.0, 0.0, 1.0],
-            intensity,
-            delta_intensity,
-            gradient,
-            ..Default::default()
-        },
-        VertexData {
-            position: [1.0, -1.0, 0.0, 1.0],
-            intensity,
-            delta_intensity,
-            gradient,
-            ..Default::default()
-        },
-        VertexData {
-            position: [1.0, 1.0, 0.0, 1.0],
-            intensity,
-            delta_intensity,
-            gradient,
-            ..Default::default()
-        },
-    ];
+    let vertices = circle_strip(2);
 
     cmd.assemble_wgpu_buffer_with_usage::<Vertex>(
         renderer_entity,
@@ -378,24 +336,48 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         cmd,
         renderer_entity,
         0,
-        (-80.0, 40.0),
-        Oscilloscope::new(3.33, 30.0, |f| (f.sin(), f.cos())),
+        (0.0, 0.0),
+        Oscilloscope::new(3.33, 30.0, |_| (0.0, 0.0)),
+        3.0,
+        -6.0,
+        -0.0,
+        0.0,
     );
 
     assemble_oscilloscope(
         cmd,
         renderer_entity,
         1,
-        (0.0, 40.0),
-        Oscilloscope::new(3.33, 30.0, |f| (f.sin(), (f * 1.2).sin())),
+        (-80.0, 40.0),
+        Oscilloscope::new(3.33, 30.0, |f| (f.sin(), f.cos())),
+        3.0,
+        -0.0,
+        -240.0,
+        0.0,
     );
 
     assemble_oscilloscope(
         cmd,
         renderer_entity,
         2,
+        (0.0, 40.0),
+        Oscilloscope::new(3.33, 30.0, |f| (f.sin(), (f * 1.2).sin())),
+        3.0,
+        -6.0,
+        0.0,
+        1.0,
+    );
+
+    assemble_oscilloscope(
+        cmd,
+        renderer_entity,
+        3,
         (80.0, 40.0),
-        Oscilloscope::new(3.33, 30.0, |f| (f.cos(), (f * 1.2).cos())),
+        Oscilloscope::new(3.33, 30.0, |f| (f.sin(), (f * 1.2).sin())),
+        3.0,
+        -12.0,
+        24.0,
+        2.0,
     );
 }
 
@@ -405,6 +387,10 @@ fn assemble_oscilloscope(
     buffer_index: usize,
     origin: (f32, f32),
     osc: Oscilloscope,
+    intensity: f32,
+    delta_intensity: f32,
+    delta_delta: f32,
+    gradient: f32,
 ) {
     let entity = cmd.push(());
     cmd.add_component(entity, OriginComponent::construct(origin));
@@ -414,6 +400,11 @@ fn assemble_oscilloscope(
         InstanceDataComponent::construct(InstanceData {
             position: [0.0, 0.0, 0.0, 1.0],
             prev_position: [0.0, 0.0, 0.0, 1.0],
+            intensity,
+            delta_intensity,
+            delta_delta,
+            gradient,
+            ..Default::default()
         }),
         (std::mem::size_of::<InstanceData>() * buffer_index) as BufferAddress,
         Some(buffer_target),

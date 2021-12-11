@@ -247,16 +247,6 @@ pub fn phosphor_prepare(
                             offset: std::mem::size_of::<[f32; 4]>() as BufferAddress,
                             shader_location: 1,
                         },
-                        VertexAttribute {
-                            format: VertexFormat::Float32,
-                            offset: std::mem::size_of::<[f32; 5]>() as BufferAddress,
-                            shader_location: 2,
-                        },
-                        VertexAttribute {
-                            format: VertexFormat::Float32,
-                            offset: std::mem::size_of::<[f32; 6]>() as BufferAddress,
-                            shader_location: 3,
-                        },
                     ],
                 },
                 VertexBufferLayout {
@@ -266,12 +256,32 @@ pub fn phosphor_prepare(
                         VertexAttribute {
                             format: VertexFormat::Float32x4,
                             offset: 0,
-                            shader_location: 4,
+                            shader_location: 2,
                         },
                         VertexAttribute {
                             format: VertexFormat::Float32x4,
                             offset: std::mem::size_of::<[f32; 4]>() as BufferAddress,
+                            shader_location: 3,
+                        },
+                        VertexAttribute {
+                            format: VertexFormat::Float32,
+                            offset: std::mem::size_of::<[f32; 8]>() as BufferAddress,
+                            shader_location: 4,
+                        },
+                        VertexAttribute {
+                            format: VertexFormat::Float32,
+                            offset: std::mem::size_of::<[f32; 9]>() as BufferAddress,
                             shader_location: 5,
+                        },
+                        VertexAttribute {
+                            format: VertexFormat::Float32,
+                            offset: std::mem::size_of::<[f32; 10]>() as BufferAddress,
+                            shader_location: 6,
+                        },
+                        VertexAttribute {
+                            format: VertexFormat::Float32,
+                            offset: std::mem::size_of::<[f32; 11]>() as BufferAddress,
+                            shader_location: 7,
                         },
                     ],
                 },
@@ -339,7 +349,7 @@ pub fn phosphor_update_delta_time(
     delta_time: &Changed<DeltaTimeComponent>,
 ) {
     let timestamp = *timestamp.read();
-    *delta_time.write() = 1.0 / 60.0; //Instant::now().duration_since(timestamp).as_secs_f32();
+    *delta_time.write() = Instant::now().duration_since(timestamp).as_secs_f32();
     println!("Delta time: {:#?}", delta_time.read());
     delta_time.set_changed(true);
 }
@@ -532,7 +542,7 @@ pub fn phosphor_render(
         },
         &[],
     );
-    rpass.draw(0..8, 0..instance_count as u32);
+    rpass.draw(0..14, 0..instance_count as u32);
     drop(rpass);
 
     let mut rpass = encoder.begin_render_pass(&RenderPassDescriptor {

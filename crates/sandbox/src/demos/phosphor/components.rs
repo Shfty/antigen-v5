@@ -1,13 +1,11 @@
 use bytemuck::{Pod, Zeroable};
-use std::{marker::PhantomData, time::Instant};
+use std::time::Instant;
 
 use antigen_core::{RwLock, Usage};
 use antigen_wgpu::{
     BindGroupComponent, BufferComponent, RenderPipelineComponent, SamplerComponent,
     ShaderModuleComponent, TextureComponent, TextureViewComponent, ToBytes,
 };
-
-use super::{MAX_GRADIENT_COUNT, MAX_GRADIENT_SIZE};
 
 // Phosphor renderer tag
 pub struct Phosphor;
@@ -85,36 +83,15 @@ pub type GradientTextureViewComponent = Usage<Gradients, TextureViewComponent>;
 
 pub type OriginComponent = Usage<Origin, RwLock<(f32, f32)>>;
 
-#[repr(C)]
-#[derive(Debug, Default, Copy, Clone, Pod, Zeroable)]
-pub struct Gradient([[f32; 4]; MAX_GRADIENT_SIZE]);
-
-impl Gradient {
-    pub fn new<T>(colors: T) -> Self
-    where
-        T: IntoIterator<Item = [f32; 4]>,
-    {
-        let mut buf = [[1.0, 1.0, 1.0, 1.0]; MAX_GRADIENT_SIZE];
-
-        for (i, c) in colors.into_iter().enumerate().take(buf.len()) {
-            buf[i] = c;
-        }
-
-        Gradient(buf)
-    }
-}
-
-pub type GradientData = [Gradient; MAX_GRADIENT_COUNT];
+pub type GradientData = Vec<u8>;
 pub type GradientDataComponent = Usage<Gradients, RwLock<GradientData>>;
 
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone, Pod, Zeroable)]
 pub struct VertexData {
     pub position: [f32; 4],
-    pub intensity: f32,
-    pub delta_intensity: f32,
-    pub gradient: f32,
-    pub _pad: f32,
+    pub end: f32,
+    pub _pad: [f32; 3],
 }
 
 pub type VertexDataComponent = Usage<Vertex, RwLock<Vec<VertexData>>>;
@@ -125,6 +102,10 @@ pub type VertexBufferComponent = Usage<Vertex, BufferComponent>;
 pub struct InstanceData {
     pub position: [f32; 4],
     pub prev_position: [f32; 4],
+    pub intensity: f32,
+    pub delta_intensity: f32,
+    pub delta_delta: f32,
+    pub gradient: f32,
 }
 
 impl ToBytes for InstanceData {
@@ -149,8 +130,7 @@ impl Oscilloscope {
     where
         F: Fn(f32) -> (f32, f32) + Send + Sync + 'static,
     {
-        Oscilloscope
-        {
+        Oscilloscope {
             speed,
             magnitude,
             f: Box::new(f),
