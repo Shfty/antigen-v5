@@ -6,8 +6,8 @@ pub use components::*;
 pub use systems::*;
 
 use antigen_core::{
-    parallel, serial, single, AddIndirectComponent, AsUsage, ImmutableSchedule, LazyComponent,
-    RwLock, Serial, Single, Construct
+    parallel, serial, single, AddIndirectComponent, AsUsage, Construct, ImmutableSchedule,
+    LazyComponent, RwLock, Serial, Single,
 };
 
 use antigen_wgpu::{
@@ -129,6 +129,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
                 object_entity,
                 VertexDataComponent::construct(vertices),
                 0,
+                None,
             );
             cmd.assemble_wgpu_buffer_with_usage::<Vertex>(
                 object_entity,

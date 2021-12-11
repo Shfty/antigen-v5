@@ -220,7 +220,7 @@ pub fn create_shader_modules(
 /// Create pending usage-tagged shader modules, recreating them if a Changed flag is set
 #[legion::system(par_for_each)]
 #[read_component(Device)]
-pub fn create_shader_modules_usage<T: Send + Sync + 'static>(
+pub fn create_shader_modules_with_usage<T: Send + Sync + 'static>(
     world: &SubWorld,
     shader_module_desc: &Usage<T, ShaderModuleDescriptorComponent>,
     shader_module: &Usage<T, ShaderModuleComponent>,

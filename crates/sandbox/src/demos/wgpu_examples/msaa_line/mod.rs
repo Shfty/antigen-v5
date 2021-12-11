@@ -88,6 +88,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         renderer_entity,
         MeshVerticesComponent::construct(vertex_data),
         0,
+        None,
     );
 
     // Vertex buffer

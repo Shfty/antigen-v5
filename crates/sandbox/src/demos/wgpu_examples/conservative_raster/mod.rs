@@ -100,8 +100,8 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
 
 pub fn prepare_schedule() -> ImmutableSchedule<Serial> {
     serial![
-        antigen_wgpu::create_shader_modules_usage_system::<TriangleAndLines>(),
-        antigen_wgpu::create_shader_modules_usage_system::<Upscale>(),
+        antigen_wgpu::create_shader_modules_with_usage_system::<TriangleAndLines>(),
+        antigen_wgpu::create_shader_modules_with_usage_system::<Upscale>(),
         antigen_wgpu::create_textures_system::<LowResTarget>(),
         antigen_wgpu::create_texture_views_system::<LowResTarget>(),
         antigen_wgpu::create_samplers_with_usage_system::<LowResTarget>(),

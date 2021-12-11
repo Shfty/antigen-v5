@@ -3,12 +3,7 @@ use antigen_core::{
 };
 
 use legion::{storage::Component, Entity, World};
-use wgpu::{
-    util::BufferInitDescriptor, Adapter, Backends, BufferAddress, BufferDescriptor, Device,
-    DeviceDescriptor, ImageCopyTextureBase, ImageDataLayout, Instance, Queue, SamplerDescriptor,
-    ShaderModuleDescriptor, ShaderModuleDescriptorSpirV, Surface, SurfaceConfiguration,
-    TextureDescriptor, TextureViewDescriptor,
-};
+use wgpu::{Adapter, Backends, BufferAddress, BufferDescriptor, Device, DeviceDescriptor, ImageCopyTextureBase, ImageDataLayout, Instance, Queue, SamplerDescriptor, ShaderModuleDescriptor, ShaderModuleDescriptorSpirV, Surface, SurfaceConfiguration, TextureDescriptor, TextureFormat, TextureUsages, TextureViewDescriptor, util::BufferInitDescriptor};
 
 use std::path::Path;
 
@@ -142,6 +137,7 @@ pub trait AssembleWgpu {
         entity: Entity,
         data: T,
         offset: BufferAddress,
+        target: Option<Entity>,
     ) where
         U: Send + Sync + 'static,
         T: Component;
@@ -188,8 +184,8 @@ impl AssembleWgpu for &mut legion::systems::CommandBuffer {
         self.add_component(
             entity,
             SurfaceConfigurationComponent::construct(SurfaceConfiguration {
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                format: wgpu::TextureFormat::Bgra8Unorm,
+                usage: TextureUsages::RENDER_ATTACHMENT,
+                format: TextureFormat::Bgra8UnormSrgb,
                 width: 0,
                 height: 0,
                 present_mode: wgpu::PresentMode::Mailbox,
@@ -378,13 +374,18 @@ impl AssembleWgpu for &mut legion::systems::CommandBuffer {
         entity: Entity,
         data: T,
         offset: BufferAddress,
+        target_entity: Option<Entity>,
     ) where
         U: Send + Sync + 'static,
         T: Component,
     {
         self.add_component(entity, Changed::new(data, true));
         self.add_component(entity, U::as_usage(BufferWriteComponent::<T>::new(offset)));
-        self.add_indirect_component_self::<Usage<U, BufferComponent>>(entity);
+        if let Some(target) = target_entity {
+            self.add_indirect_component::<Usage<U, BufferComponent>>(entity, target);
+        } else {
+            self.add_indirect_component_self::<Usage<U, BufferComponent>>(entity);
+        }
     }
 
     fn assemble_wgpu_texture_with_usage<U: Send + Sync + 'static>(

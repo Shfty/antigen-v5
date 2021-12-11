@@ -266,8 +266,8 @@ pub fn conservative_raster_prepare(
 pub fn conservative_raster_resize(
     world: &SubWorld,
     _: &ConservativeRaster,
-    bind_group_upscale_component: &UpscaleBindGroupComponent,
     surface_config: &IndirectComponent<SurfaceConfigurationComponent>,
+    bind_group_upscale_component: &UpscaleBindGroupComponent,
     low_res_desc: &IndirectComponent<LowResTextureDescriptorComponent<'static>>,
     low_res_view_desc: &IndirectComponent<
         Usage<LowResTarget, TextureViewDescriptorComponent<'static>>,

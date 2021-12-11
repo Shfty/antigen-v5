@@ -258,11 +258,13 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         plane_mesh_entity,
         RwLock::new(plane_vertices),
         0,
+        None,
     );
     cmd.assemble_wgpu_buffer_data_with_usage::<IndexTag, _>(
         plane_mesh_entity,
         RwLock::new(plane_indices),
         0,
+        None,
     );
 
     cmd.add_component(plane_mesh_entity, IndexFormat::Uint16);
@@ -305,11 +307,13 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         cube_mesh_entity,
         RwLock::new(cube_vertices),
         0,
+        None,
     );
     cmd.assemble_wgpu_buffer_data_with_usage::<IndexTag, _>(
         cube_mesh_entity,
         RwLock::new(cube_indices),
         0,
+        None,
     );
     cmd.add_component(cube_mesh_entity, IndexFormat::Uint16);
     cmd.add_component(

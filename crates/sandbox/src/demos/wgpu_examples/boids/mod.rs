@@ -89,11 +89,13 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         renderer_entity,
         initial_particle_data.clone(),
         0,
+        None,
     );
     cmd.assemble_wgpu_buffer_data_with_usage::<BackBuffer, _>(
         renderer_entity,
         initial_particle_data,
         0,
+        None,
     );
 
     // Uniforms
@@ -150,8 +152,8 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
 pub fn prepare_schedule() -> ImmutableSchedule<Serial> {
     serial![
         parallel![
-            antigen_wgpu::create_shader_modules_usage_system::<Compute>(),
-            antigen_wgpu::create_shader_modules_usage_system::<Draw>(),
+            antigen_wgpu::create_shader_modules_with_usage_system::<Compute>(),
+            antigen_wgpu::create_shader_modules_with_usage_system::<Draw>(),
             antigen_wgpu::create_buffers_init_system::<Vertex>(),
             antigen_wgpu::create_buffers_init_system::<Uniform>(),
             antigen_wgpu::create_buffers_system::<FrontBuffer>(),

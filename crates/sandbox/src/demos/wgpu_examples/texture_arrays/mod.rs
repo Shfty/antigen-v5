@@ -126,6 +126,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         renderer_entity,
         VertexDataComponent::construct(vertex_data),
         0,
+        None,
     );
 
     let index_data = create_indices();
@@ -134,6 +135,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         renderer_entity,
         IndexDataComponent::construct(index_data),
         0,
+        None,
     );
 
     // Buffers

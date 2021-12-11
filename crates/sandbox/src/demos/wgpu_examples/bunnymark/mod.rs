@@ -113,12 +113,14 @@ pub fn assemble(world: &SubWorld, cmd: &mut legion::systems::CommandBuffer) {
         renderer_entity,
         GlobalDataComponent::construct(globals),
         0,
+        None,
     );
 
     cmd.assemble_wgpu_buffer_data_with_usage::<Local, _>(
         renderer_entity,
         BunniesComponent::construct(Vec::default()),
         0,
+        None,
     );
 
     // Texture data

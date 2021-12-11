@@ -102,6 +102,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         renderer_entity,
         ViewProjectionMatrix::construct(buf),
         0,
+        None,
     );
 
     // Uniform buffer
@@ -181,7 +182,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
 pub fn prepare_schedule() -> ImmutableSchedule<Serial> {
     serial![
         parallel![
-            antigen_wgpu::create_shader_modules_usage_system::<Draw>(),
+            antigen_wgpu::create_shader_modules_with_usage_system::<Draw>(),
             antigen_wgpu::create_buffers_system::<Uniform>(),
             antigen_wgpu::create_textures_system::<JuliaSet>(),
             antigen_wgpu::create_texture_views_system::<JuliaSet>(),

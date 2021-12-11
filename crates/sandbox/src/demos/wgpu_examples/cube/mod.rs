@@ -174,6 +174,7 @@ pub fn assemble(cmd: &mut CommandBuffer) {
         renderer_entity,
         MeshVerticesComponent::construct(cube_vertices),
         0,
+        None,
     );
 
     let cube_uvs = create_uvs();
@@ -183,6 +184,7 @@ pub fn assemble(cmd: &mut CommandBuffer) {
         renderer_entity,
         MeshUvsComponent::construct(cube_uvs),
         uvs_offset,
+        None,
     );
 
     // Texture data
@@ -219,6 +221,7 @@ pub fn assemble(cmd: &mut CommandBuffer) {
         renderer_entity,
         ViewProjectionMatrix::construct(buf),
         0,
+        None,
     );
 
     // Buffers

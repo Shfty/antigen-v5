@@ -37,7 +37,7 @@ impl<T> LazyComponent<T> {
 #[macro_export]
 macro_rules! lazy_read_ready_else_panic {
     ($cmp:ident) => {
-        let $cmp = $cmp.read();
+        let $cmp = $crate::ReadWriteLock::read($cmp);
         let $cmp = if let LazyComponent::Ready($cmp) = &*$cmp {
             $cmp
         } else {
@@ -50,7 +50,7 @@ macro_rules! lazy_read_ready_else_panic {
 #[macro_export]
 macro_rules! lazy_read_ready_else_continue {
     ($cmp:ident) => {
-        let $cmp = $cmp.read();
+        let $cmp = $crate::ReadWriteLock::read($cmp);
         let $cmp = if let LazyComponent::Ready($cmp) = &*$cmp {
             $cmp
         } else {
@@ -63,7 +63,7 @@ macro_rules! lazy_read_ready_else_continue {
 #[macro_export]
 macro_rules! lazy_read_ready_else_return {
     ($cmp:ident) => {
-        let $cmp = $cmp.read();
+        let $cmp = $crate::ReadWriteLock::read($cmp);
         let $cmp = if let LazyComponent::Ready($cmp) = &*$cmp {
             $cmp
         } else {

@@ -101,7 +101,7 @@ pub use demos::*;
 use antigen_core::*;
 use antigen_wgpu::wgpu::{DeviceDescriptor, Features, Limits};
 
-const GAME_TICK_DURATION: std::time::Duration = std::time::Duration::from_secs(1);
+const GAME_TICK_DURATION: std::time::Duration = std::time::Duration::from_nanos(16670000);
 
 fn main() -> ! {
     //tracing_subscriber::fmt::fmt().pretty().init();
@@ -148,7 +148,8 @@ fn main() -> ! {
 
     // Assemble modules
     single![demos::transform_integration::assemble_system()].execute_and_flush(&world);
-    demos::wgpu_examples::assemble_schedule().execute_and_flush(&world);
+    //demos::wgpu_examples::assemble_schedule().execute_and_flush(&world);
+    single![demos::phosphor::assemble_system()].execute_and_flush(&world);
 
     // Spawn threads
     std::thread::spawn(game_thread(world.clone()));
@@ -160,7 +161,7 @@ pub fn game_thread(world: ImmutableWorld) -> impl Fn() {
         // Crate schedule
         let mut schedule = serial![
             crate::demos::transform_integration::integrate_schedule(),
-            crate::demos::transform_integration::print_schedule()
+            crate::demos::transform_integration::print_schedule(),
         ];
 
         // Run schedule in loop
@@ -173,7 +174,8 @@ pub fn winit_thread(world: ImmutableWorld) -> ! {
     antigen_winit::winit::event_loop::EventLoop::new().run(antigen_winit::wrap_event_loop(
         world,
         antigen_winit::winit_event_handler(antigen_wgpu::winit_event_handler(
-            demos::wgpu_examples::winit_event_handler(antigen_winit::winit_event_terminator()),
+            //demos::wgpu_examples::winit_event_handler(antigen_winit::winit_event_terminator()),
+            demos::phosphor::winit_event_handler(antigen_winit::winit_event_terminator()),
         )),
     ))
 }
