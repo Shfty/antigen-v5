@@ -1,7 +1,7 @@
 use bytemuck::{Pod, Zeroable};
 use std::time::Instant;
 
-use antigen_core::{RwLock, Usage};
+use antigen_core::{Changed, RwLock, Usage};
 use antigen_wgpu::{
     BindGroupComponent, BufferComponent, RenderPipelineComponent, SamplerComponent,
     ShaderModuleComponent, TextureComponent, TextureViewComponent, ToBytes,
@@ -22,17 +22,22 @@ pub enum Uniform {}
 
 pub enum Hdr {}
 pub enum HdrDecay {}
-pub enum HdrRaster {}
+pub enum HdrLine {}
+pub enum HdrMesh {}
 pub enum HdrFrontBuffer {}
 pub enum HdrBackBuffer {}
-pub enum Blit {}
+pub enum HdrDepthBuffer {}
+pub enum Tonemap {}
 
 pub enum Linear {}
 
 pub enum Gradients {}
 
-pub enum Vertex {}
-pub enum Instance {}
+pub enum LineVertex {}
+pub enum LineInstance {}
+
+pub enum MeshVertex {}
+pub enum MeshIndex {}
 
 pub enum Projection {}
 
@@ -62,65 +67,99 @@ pub type UniformDataComponent = Usage<Uniform, RwLock<UniformData>>;
 pub type UniformBufferComponent = Usage<Uniform, BufferComponent>;
 
 pub type HdrDecayShaderComponent = Usage<HdrDecay, ShaderModuleComponent>;
-pub type HdrRasterShaderComponent = Usage<HdrRaster, ShaderModuleComponent>;
+pub type HdrLineShaderComponent = Usage<HdrLine, ShaderModuleComponent>;
+pub type HdrMeshShaderComponent = Usage<HdrMesh, ShaderModuleComponent>;
 pub type HdrFrontBufferComponent = Usage<HdrFrontBuffer, TextureComponent>;
 pub type HdrBackBufferComponent = Usage<HdrBackBuffer, TextureComponent>;
+pub type HdrDepthBufferComponent = Usage<HdrDepthBuffer, TextureComponent>;
 pub type HdrFrontBufferViewComponent = Usage<HdrFrontBuffer, TextureViewComponent>;
 pub type HdrBackBufferViewComponent = Usage<HdrBackBuffer, TextureViewComponent>;
+pub type HdrDepthBufferViewComponent = Usage<HdrDepthBuffer, TextureViewComponent>;
 
 pub type LinearSamplerComponent = Usage<Linear, SamplerComponent>;
-pub type HdrBlitPipelineComponent = Usage<HdrDecay, RenderPipelineComponent>;
-pub type HdrRasterPipelineComponent = Usage<HdrRaster, RenderPipelineComponent>;
+pub type HdrDecayPipelineComponent = Usage<HdrDecay, RenderPipelineComponent>;
+pub type HdrLinePipelineComponent = Usage<HdrLine, RenderPipelineComponent>;
+pub type HdrMeshPipelineComponent = Usage<HdrMesh, RenderPipelineComponent>;
 pub type FrontBindGroupComponent = Usage<HdrFrontBuffer, BindGroupComponent>;
 pub type BackBindGroupComponent = Usage<HdrBackBuffer, BindGroupComponent>;
 pub type UniformBindGroupComponent = Usage<Uniform, BindGroupComponent>;
 
-pub type BlitShaderComponent = Usage<Blit, ShaderModuleComponent>;
-pub type BlitPipelineComponent = Usage<Blit, RenderPipelineComponent>;
+pub type TonemapShaderComponent = Usage<Tonemap, ShaderModuleComponent>;
+pub type TonemapPipelineComponent = Usage<Tonemap, RenderPipelineComponent>;
 
 pub type GradientTextureComponent = Usage<Gradients, TextureComponent>;
 pub type GradientTextureViewComponent = Usage<Gradients, TextureViewComponent>;
 
-pub type OriginComponent = Usage<Origin, RwLock<(f32, f32)>>;
+pub type OriginComponent = Usage<Origin, RwLock<(f32, f32, f32)>>;
 
 pub type GradientData = Vec<u8>;
 pub type GradientDataComponent = Usage<Gradients, RwLock<GradientData>>;
 
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone, Pod, Zeroable)]
-pub struct VertexData {
+pub struct LineVertexData {
     pub position: [f32; 4],
     pub end: f32,
     pub _pad: [f32; 3],
 }
 
-pub type VertexDataComponent = Usage<Vertex, RwLock<Vec<VertexData>>>;
-pub type VertexBufferComponent = Usage<Vertex, BufferComponent>;
+pub type LineVertexDataComponent = Usage<LineVertex, RwLock<Vec<LineVertexData>>>;
+pub type LineVertexBufferComponent = Usage<LineVertex, BufferComponent>;
 
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone, Pod, Zeroable)]
-pub struct InstanceData {
+pub struct LineInstanceData {
+    pub v0: MeshVertexData,
+    pub v1: MeshVertexData,
+}
+
+impl ToBytes for LineInstanceData {
+    fn to_bytes(&self) -> &[u8] {
+        bytemuck::bytes_of(self)
+    }
+}
+
+pub type LineInstanceDataComponent = Usage<LineInstance, RwLock<Vec<LineInstanceData>>>;
+pub type LineInstanceBufferComponent = Usage<LineInstance, BufferComponent>;
+
+#[repr(C)]
+#[derive(Debug, Default, Copy, Clone, Pod, Zeroable)]
+pub struct MeshVertexData {
     pub position: [f32; 4],
-    pub prev_position: [f32; 4],
     pub intensity: f32,
     pub delta_intensity: f32,
     pub delta_delta: f32,
     pub gradient: f32,
 }
 
-impl ToBytes for InstanceData {
-    fn to_bytes(&self) -> &[u8] {
-        bytemuck::bytes_of(self)
+impl MeshVertexData {
+    pub fn new(
+        position: (f32, f32, f32),
+        intensity: f32,
+        delta_intensity: f32,
+        delta_delta: f32,
+        gradient: f32,
+    ) -> Self {
+        MeshVertexData {
+            position: [position.0, position.1, position.2, 1.0],
+            intensity,
+            delta_intensity,
+            delta_delta,
+            gradient,
+        }
     }
 }
 
-pub type InstanceDataComponent = Usage<Instance, RwLock<InstanceData>>;
-pub type InstanceBufferComponent = Usage<Instance, BufferComponent>;
+pub type MeshVertexDataComponent = Usage<MeshVertex, RwLock<Vec<MeshVertexData>>>;
+pub type MeshVertexBufferComponent = Usage<MeshVertex, BufferComponent>;
+
+pub type MeshIndexDataComponent = Usage<MeshIndex, RwLock<Vec<u16>>>;
+pub type MeshIndexBufferComponent = Usage<MeshIndex, BufferComponent>;
 
 pub type BufferFlipFlopComponent = Usage<FlipFlop, RwLock<bool>>;
 
 pub struct Oscilloscope {
-    f: Box<dyn Fn(f32) -> (f32, f32) + Send + Sync>,
+    f: Box<dyn Fn(f32) -> (f32, f32, f32) + Send + Sync>,
     speed: f32,
     magnitude: f32,
 }
@@ -128,7 +167,7 @@ pub struct Oscilloscope {
 impl Oscilloscope {
     pub fn new<F>(speed: f32, magnitude: f32, f: F) -> Self
     where
-        F: Fn(f32) -> (f32, f32) + Send + Sync + 'static,
+        F: Fn(f32) -> (f32, f32, f32) + Send + Sync + 'static,
     {
         Oscilloscope {
             speed,
@@ -137,8 +176,16 @@ impl Oscilloscope {
         }
     }
 
-    pub fn eval(&self, f: f32) -> (f32, f32) {
-        let (x, y) = (self.f)(f * self.speed);
-        (x * self.magnitude, y * self.magnitude)
+    pub fn eval(&self, f: f32) -> (f32, f32, f32) {
+        let (x, y, z) = (self.f)(f * self.speed);
+        (x * self.magnitude, y * self.magnitude, z * self.magnitude)
     }
 }
+
+#[derive(Debug, Copy, Clone)]
+pub struct Timer {
+    pub timestamp: std::time::Instant,
+    pub duration: std::time::Duration,
+}
+
+pub type TimerComponent = Changed<RwLock<Timer>>;

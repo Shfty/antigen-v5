@@ -138,7 +138,7 @@ fn main() -> ! {
                 ),
             limits: Limits {
                 max_push_constant_size: 4,
-                max_texture_dimension_2d: 4096,
+                max_texture_dimension_2d: 5120,
                 ..Limits::downlevel_defaults()
             },
         },

@@ -19,7 +19,14 @@ pub use to_bytes::*;
 pub use wgpu;
 
 use antigen_core::{ImmutableSchedule, ImmutableWorld, ReadWriteLock, Serial, parallel, serial, single};
+use wgpu::BufferAddress;
 
+// Return the size of type T in bytes, respresented as a BufferAddress
+pub fn buffer_size_of<T>() -> BufferAddress {
+    std::mem::size_of::<T>() as BufferAddress
+}
+
+// Submit comomand buffers, present surface textures, and drop texture views
 pub fn submit_and_present_schedule() -> ImmutableSchedule<Serial> {
     serial![
         submit_command_buffers_system(),

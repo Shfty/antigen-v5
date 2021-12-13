@@ -26,7 +26,7 @@ fn vs_main([[builtin(vertex_index)]] vertex_index: u32) -> VertexOutput {
 fn fs_main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     let hdr = textureSample(r_hdr, r_sampler, in.uv);
 
-    let intensity = hdr.r;
+    let intensity = hdr.r + 0.5;
     let gradient = hdr.a + 0.5;
 
     let grad_size = vec2<f32>(textureDimensions(r_gradients));

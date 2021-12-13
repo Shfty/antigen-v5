@@ -1,5 +1,7 @@
 use std::time::Instant;
 
+use crate::phosphor::MAX_MESH_INDICES;
+
 use super::components::*;
 use antigen_core::{
     lazy_read_ready_else_return, Changed, ChangedTrait, GetIndirect, IndirectComponent,
@@ -7,19 +9,23 @@ use antigen_core::{
 };
 
 use antigen_wgpu::{
+    buffer_size_of,
     wgpu::{
         BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry,
-        BindingResource, BindingType, BufferAddress, BufferBindingType, BufferSize, Color,
-        CommandEncoderDescriptor, Device, Extent3d, FragmentState, LoadOp, MultisampleState,
+        BindingResource, BindingType, BufferBindingType, BufferSize, Color,
+        CommandEncoderDescriptor, CompareFunction, DepthBiasState, DepthStencilState, Device,
+        Extent3d, Face, FragmentState, FrontFace, IndexFormat, LoadOp, MultisampleState,
         Operations, PipelineLayoutDescriptor, PrimitiveState, PrimitiveTopology,
-        RenderPassColorAttachment, RenderPassDescriptor, RenderPipelineDescriptor, ShaderStages,
-        TextureFormat, TextureSampleType, TextureViewDimension, VertexAttribute,
-        VertexBufferLayout, VertexFormat, VertexState, VertexStepMode,
+        RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor,
+        RenderPipelineDescriptor, ShaderStages, StencilState, TextureFormat, TextureSampleType,
+        TextureViewDimension, VertexAttribute, VertexBufferLayout, VertexFormat, VertexState,
+        VertexStepMode,
     },
     CommandBuffersComponent, RenderAttachmentTextureView, SurfaceConfigurationComponent,
     TextureDescriptorComponent, TextureViewDescriptorComponent,
 };
 
+use antigen_winit::{winit::event::WindowEvent, WindowComponent, WindowEventComponent};
 use legion::{world::SubWorld, IntoQuery};
 
 // Initialize the hello triangle render pipeline
@@ -31,17 +37,19 @@ pub fn phosphor_prepare(
     _: &Phosphor,
     uniform_bind_group_component: &UniformBindGroupComponent,
     hdr_decay_shader: &HdrDecayShaderComponent,
-    hdr_raster_shader: &HdrRasterShaderComponent,
-    hdr_blit_pipeline_component: &HdrBlitPipelineComponent,
-    hdr_raster_pipeline_component: &HdrRasterPipelineComponent,
+    hdr_line_shader: &HdrLineShaderComponent,
+    hdr_mesh_shader: &HdrMeshShaderComponent,
+    hdr_decay_pipeline_component: &HdrDecayPipelineComponent,
+    hdr_line_pipeline_component: &HdrLinePipelineComponent,
+    hdr_mesh_pipeline_component: &HdrMeshPipelineComponent,
     hdr_front_bind_group_component: &FrontBindGroupComponent,
     hdr_front_buffer_view: &HdrFrontBufferViewComponent,
     hdr_back_bind_group_component: &BackBindGroupComponent,
     hdr_back_buffer_view: &HdrBackBufferViewComponent,
     gradients_view: &GradientTextureViewComponent,
     linear_sampler: &LinearSamplerComponent,
-    blit_shader: &BlitShaderComponent,
-    blit_pipeline_component: &BlitPipelineComponent,
+    tonemap_shader: &TonemapShaderComponent,
+    tonemap_pipeline_component: &TonemapPipelineComponent,
     uniform_buffer: &UniformBufferComponent,
     surface_component: &IndirectComponent<SurfaceConfigurationComponent>,
 ) {
@@ -49,7 +57,8 @@ pub fn phosphor_prepare(
     let device = <&Device>::query().iter(world).next().unwrap();
 
     lazy_read_ready_else_return!(hdr_decay_shader);
-    lazy_read_ready_else_return!(hdr_raster_shader);
+    lazy_read_ready_else_return!(hdr_line_shader);
+    lazy_read_ready_else_return!(hdr_mesh_shader);
     lazy_read_ready_else_return!(hdr_front_buffer_view);
     lazy_read_ready_else_return!(hdr_back_buffer_view);
 
@@ -57,7 +66,7 @@ pub fn phosphor_prepare(
 
     lazy_read_ready_else_return!(linear_sampler);
 
-    lazy_read_ready_else_return!(blit_shader);
+    lazy_read_ready_else_return!(tonemap_shader);
 
     lazy_read_ready_else_return!(uniform_buffer);
 
@@ -193,18 +202,19 @@ pub fn phosphor_prepare(
     }
 
     // Don't update if the pipeline has already been initialized
-    if !hdr_blit_pipeline_component.read().is_pending() {
+    if !hdr_decay_pipeline_component.read().is_pending() {
         return;
     }
 
-    // HDR pipeline
+    // HDR pipeline layout
     let hdr_pipeline_layout = device.create_pipeline_layout(&mut PipelineLayoutDescriptor {
         label: None,
         bind_group_layouts: &[&uniform_bind_group_layout, &hdr_bind_group_layout],
         push_constant_ranges: &[],
     });
 
-    let hdr_blit_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+    // HDR decay pipeline
+    let hdr_decay_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
         label: None,
         layout: Some(&hdr_pipeline_layout),
         vertex: VertexState {
@@ -222,19 +232,84 @@ pub fn phosphor_prepare(
         multisample: MultisampleState::default(),
     });
 
-    hdr_blit_pipeline_component
+    hdr_decay_pipeline_component
         .write()
-        .set_ready(hdr_blit_pipeline);
+        .set_ready(hdr_decay_pipeline);
 
-    let hdr_raster_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+    // HDR mesh pipeline
+    let hdr_mesh_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
         label: None,
         layout: Some(&hdr_pipeline_layout),
         vertex: VertexState {
-            module: &hdr_raster_shader,
+            module: &hdr_mesh_shader,
+            entry_point: "vs_main",
+            buffers: &[VertexBufferLayout {
+                array_stride: buffer_size_of::<MeshVertexData>(),
+                step_mode: VertexStepMode::Vertex,
+                attributes: &[
+                    VertexAttribute {
+                        format: VertexFormat::Float32x4,
+                        offset: 0,
+                        shader_location: 0,
+                    },
+                    VertexAttribute {
+                        format: VertexFormat::Float32,
+                        offset: buffer_size_of::<[f32; 4]>(),
+                        shader_location: 1,
+                    },
+                    VertexAttribute {
+                        format: VertexFormat::Float32,
+                        offset: buffer_size_of::<[f32; 5]>(),
+                        shader_location: 2,
+                    },
+                    VertexAttribute {
+                        format: VertexFormat::Float32,
+                        offset: buffer_size_of::<[f32; 6]>(),
+                        shader_location: 3,
+                    },
+                    VertexAttribute {
+                        format: VertexFormat::Float32,
+                        offset: buffer_size_of::<[f32; 7]>(),
+                        shader_location: 4,
+                    },
+                ],
+            }],
+        },
+        fragment: Some(FragmentState {
+            module: &hdr_line_shader,
+            entry_point: "fs_main",
+            targets: &[TextureFormat::Rgba32Float.into()],
+        }),
+        primitive: PrimitiveState {
+            topology: PrimitiveTopology::TriangleList,
+            front_face: FrontFace::Ccw,
+            cull_mode: Some(Face::Back),
+            ..Default::default()
+        },
+        depth_stencil: Some(DepthStencilState {
+            format: TextureFormat::Depth32Float,
+            depth_write_enabled: true,
+            depth_compare: CompareFunction::Less,
+            stencil: StencilState::default(),
+            bias: DepthBiasState::default(),
+        }),
+        multisample: MultisampleState::default(),
+    });
+
+    hdr_mesh_pipeline_component
+        .write()
+        .set_ready(hdr_mesh_pipeline);
+
+    // HDR line pipeline
+    let hdr_line_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+        label: None,
+        layout: Some(&hdr_pipeline_layout),
+        vertex: VertexState {
+            module: &hdr_line_shader,
             entry_point: "vs_main",
             buffers: &[
                 VertexBufferLayout {
-                    array_stride: std::mem::size_of::<VertexData>() as BufferAddress,
+                    array_stride: buffer_size_of::<LineVertexData>(),
                     step_mode: VertexStepMode::Vertex,
                     attributes: &[
                         VertexAttribute {
@@ -244,13 +319,13 @@ pub fn phosphor_prepare(
                         },
                         VertexAttribute {
                             format: VertexFormat::Float32,
-                            offset: std::mem::size_of::<[f32; 4]>() as BufferAddress,
+                            offset: buffer_size_of::<[f32; 4]>(),
                             shader_location: 1,
                         },
                     ],
                 },
                 VertexBufferLayout {
-                    array_stride: std::mem::size_of::<InstanceData>() as BufferAddress,
+                    array_stride: buffer_size_of::<LineInstanceData>(),
                     step_mode: VertexStepMode::Instance,
                     attributes: &[
                         VertexAttribute {
@@ -259,68 +334,96 @@ pub fn phosphor_prepare(
                             shader_location: 2,
                         },
                         VertexAttribute {
-                            format: VertexFormat::Float32x4,
-                            offset: std::mem::size_of::<[f32; 4]>() as BufferAddress,
+                            format: VertexFormat::Float32,
+                            offset: buffer_size_of::<[f32; 4]>(),
                             shader_location: 3,
                         },
                         VertexAttribute {
                             format: VertexFormat::Float32,
-                            offset: std::mem::size_of::<[f32; 8]>() as BufferAddress,
+                            offset: buffer_size_of::<[f32; 5]>(),
                             shader_location: 4,
                         },
                         VertexAttribute {
                             format: VertexFormat::Float32,
-                            offset: std::mem::size_of::<[f32; 9]>() as BufferAddress,
+                            offset: buffer_size_of::<[f32; 6]>(),
                             shader_location: 5,
                         },
                         VertexAttribute {
                             format: VertexFormat::Float32,
-                            offset: std::mem::size_of::<[f32; 10]>() as BufferAddress,
+                            offset: buffer_size_of::<[f32; 7]>(),
                             shader_location: 6,
                         },
                         VertexAttribute {
-                            format: VertexFormat::Float32,
-                            offset: std::mem::size_of::<[f32; 11]>() as BufferAddress,
+                            format: VertexFormat::Float32x4,
+                            offset: buffer_size_of::<[f32; 8]>(),
                             shader_location: 7,
+                        },
+                        VertexAttribute {
+                            format: VertexFormat::Float32,
+                            offset: buffer_size_of::<[f32; 12]>(),
+                            shader_location: 8,
+                        },
+                        VertexAttribute {
+                            format: VertexFormat::Float32,
+                            offset: buffer_size_of::<[f32; 13]>(),
+                            shader_location: 9,
+                        },
+                        VertexAttribute {
+                            format: VertexFormat::Float32,
+                            offset: buffer_size_of::<[f32; 14]>(),
+                            shader_location: 10,
+                        },
+                        VertexAttribute {
+                            format: VertexFormat::Float32,
+                            offset: buffer_size_of::<[f32; 15]>(),
+                            shader_location: 11,
                         },
                     ],
                 },
             ],
         },
         fragment: Some(FragmentState {
-            module: &hdr_raster_shader,
+            module: &hdr_line_shader,
             entry_point: "fs_main",
             targets: &[TextureFormat::Rgba32Float.into()],
         }),
         primitive: PrimitiveState {
             topology: PrimitiveTopology::TriangleStrip,
+            front_face: FrontFace::Ccw,
+            cull_mode: Some(Face::Back),
             ..Default::default()
         },
-        depth_stencil: None,
+        depth_stencil: Some(DepthStencilState {
+            format: TextureFormat::Depth32Float,
+            depth_write_enabled: true,
+            depth_compare: CompareFunction::Less,
+            stencil: StencilState::default(),
+            bias: DepthBiasState::default(),
+        }),
         multisample: MultisampleState::default(),
     });
 
-    hdr_raster_pipeline_component
+    hdr_line_pipeline_component
         .write()
-        .set_ready(hdr_raster_pipeline);
+        .set_ready(hdr_line_pipeline);
 
     // Blit pipeline
-    let blit_pipeline_layout = device.create_pipeline_layout(&mut PipelineLayoutDescriptor {
+    let tonemap_pipeline_layout = device.create_pipeline_layout(&mut PipelineLayoutDescriptor {
         label: None,
         bind_group_layouts: &[&uniform_bind_group_layout, &hdr_bind_group_layout],
         push_constant_ranges: &[],
     });
 
-    let blit_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+    let tonemap_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
         label: None,
-        layout: Some(&blit_pipeline_layout),
+        layout: Some(&tonemap_pipeline_layout),
         vertex: VertexState {
-            module: &blit_shader,
+            module: &tonemap_shader,
             entry_point: "vs_main",
             buffers: &[],
         },
         fragment: Some(FragmentState {
-            module: &blit_shader,
+            module: &tonemap_shader,
             entry_point: "fs_main",
             targets: &[config.format.into()],
         }),
@@ -329,7 +432,9 @@ pub fn phosphor_prepare(
         multisample: MultisampleState::default(),
     });
 
-    blit_pipeline_component.write().set_ready(blit_pipeline);
+    tonemap_pipeline_component
+        .write()
+        .set_ready(tonemap_pipeline);
 }
 
 // Game tick update
@@ -360,32 +465,52 @@ pub fn phosphor_update_timestamp(timestamp: &TimestampComponent) {
 }
 
 #[legion::system(par_for_each)]
+pub fn phosphor_update_timers(timer_component: &TimerComponent) {
+    let now = Instant::now();
+    let timer = *timer_component.read();
+    if now.duration_since(timer.timestamp) > timer.duration {
+        timer_component.write().timestamp = now;
+        timer_component.set_changed(true);
+    }
+}
+
+#[legion::system(par_for_each)]
 #[read_component(Device)]
 #[read_component(Changed<TotalTimeComponent>)]
-pub fn phosphor_update_instances(
+#[read_component(Changed<DeltaTimeComponent>)]
+pub fn phosphor_update_oscilloscopes(
     world: &legion::world::SubWorld,
     origin: &OriginComponent,
     oscilloscope: &Oscilloscope,
-    instance_data: &Changed<InstanceDataComponent>,
+    line_data: &Changed<LineInstanceDataComponent>,
 ) {
-    let time = <&Changed<TotalTimeComponent>>::query()
+    let total_time = <&Changed<TotalTimeComponent>>::query()
         .iter(world)
         .next()
         .unwrap();
-    let time = *time.read();
+    let total_time = *total_time.read();
+
+    let delta_time = <&Changed<DeltaTimeComponent>>::query()
+        .iter(world)
+        .next()
+        .unwrap();
+    let delta_time = *delta_time.read();
 
     {
-        let (x, y) = *origin.read();
-        let (fx, fy) = oscilloscope.eval(time);
+        let (x, y, z) = *origin.read();
+        let (fx, fy, fz) = oscilloscope.eval(total_time);
 
-        let mut instance = instance_data.write();
-        instance.prev_position = instance.position;
+        let mut instance = line_data.write();
 
-        instance.position[0] = x + fx;
-        instance.position[1] = y + fy;
+        instance[0].v0 = instance[0].v1;
+        instance[0].v0.intensity += instance[0].v0.delta_intensity * delta_time;
+
+        instance[0].v1.position[0] = x + fx;
+        instance[0].v1.position[1] = y + fy;
+        instance[0].v1.position[2] = z + fz;
     }
 
-    instance_data.set_changed(true);
+    line_data.set_changed(true);
 }
 
 #[legion::system(par_for_each)]
@@ -400,6 +525,8 @@ pub fn phosphor_resize(
     hdr_front_buffer_view_desc: &Usage<HdrFrontBuffer, TextureViewDescriptorComponent<'static>>,
     hdr_back_buffer_desc: &Usage<HdrBackBuffer, TextureDescriptorComponent<'static>>,
     hdr_back_buffer_view_desc: &Usage<HdrBackBuffer, TextureViewDescriptorComponent<'static>>,
+    hdr_depth_buffer_desc: &Usage<HdrDepthBuffer, TextureDescriptorComponent<'static>>,
+    hdr_depth_buffer_view_desc: &Usage<HdrDepthBuffer, TextureViewDescriptorComponent<'static>>,
     projection_matrix: &Changed<ProjectionMatrixComponent>,
 ) {
     let surface_config = world.get_indirect(surface_config).unwrap();
@@ -417,17 +544,80 @@ pub fn phosphor_resize(
 
     hdr_front_buffer_desc.write().size = extent;
     hdr_back_buffer_desc.write().size = extent;
+    hdr_depth_buffer_desc.write().size = extent;
 
     hdr_front_buffer_desc.set_changed(true);
     hdr_back_buffer_desc.set_changed(true);
+    hdr_depth_buffer_desc.set_changed(true);
+
     hdr_front_buffer_view_desc.set_changed(true);
     hdr_back_buffer_view_desc.set_changed(true);
+    hdr_depth_buffer_view_desc.set_changed(true);
+
     hdr_front_bind_group.write().set_pending();
     hdr_back_bind_group.write().set_pending();
 
     *projection_matrix.write() = super::projection_matrix(
         surface_config.width as f32 / surface_config.height as f32,
-        100.0,
+        (0.0, 0.0),
+        200.0,
+    );
+    projection_matrix.set_changed(true);
+}
+
+#[legion::system(par_for_each)]
+#[read_component(WindowComponent)]
+#[read_component(SurfaceConfigurationComponent)]
+#[read_component(WindowEventComponent)]
+pub fn phosphor_cursor_moved(
+    world: &SubWorld,
+    _: &Phosphor,
+    projection_matrix: &Changed<ProjectionMatrixComponent>,
+    window: &IndirectComponent<WindowComponent>,
+    surface_config: &IndirectComponent<SurfaceConfigurationComponent>,
+) {
+    let window = world
+        .get_indirect(window)
+        .expect("No indirect WindowComponent");
+    let window = window.read();
+    let window = if let LazyComponent::Ready(window) = &*window {
+        window
+    } else {
+        return;
+    };
+
+    let surface_config = world
+        .get_indirect(surface_config)
+        .expect("No indirect SurfaceConfigurationComponent");
+    let surface_config = surface_config.read();
+
+    let window_event = <&WindowEventComponent>::query()
+        .iter(world)
+        .next()
+        .expect("No WindowEventComponent");
+
+    let window_event = window_event.read();
+    let (window_id, position) = if let (
+        Some(window_id),
+        Some(WindowEvent::CursorMoved { position, .. }),
+    ) = &*window_event
+    {
+        (window_id, position)
+    } else {
+        return;
+    };
+
+    if window.id() != *window_id {
+        return;
+    }
+
+    let norm_x = ((position.x as f32 / surface_config.width as f32) * 2.0) - 1.0;
+    let norm_y = ((position.y as f32 / surface_config.height as f32) * 2.0) - 1.0;
+
+    *projection_matrix.write() = super::projection_matrix(
+        surface_config.width as f32 / surface_config.height as f32,
+        (-norm_x, norm_y),
+        200.0,
     );
     projection_matrix.set_changed(true);
 }
@@ -436,21 +626,26 @@ pub fn phosphor_resize(
 #[legion::system(par_for_each)]
 #[read_component(Device)]
 #[read_component(RenderAttachmentTextureView)]
-#[read_component(Changed<InstanceDataComponent>)]
+#[read_component(Changed<LineInstanceDataComponent>)]
 pub fn phosphor_render(
     world: &legion::world::SubWorld,
     _: &Phosphor,
     uniform_bind_group: &UniformBindGroupComponent,
-    hdr_blit_pipeline: &HdrBlitPipelineComponent,
-    hdr_raster_pipeline: &HdrRasterPipelineComponent,
+    hdr_decay_pipeline: &HdrDecayPipelineComponent,
+    hdr_line_pipeline: &HdrLinePipelineComponent,
+    hdr_mesh_pipeline: &HdrMeshPipelineComponent,
     hdr_front_bind_group: &FrontBindGroupComponent,
     hdr_back_bind_group: &BackBindGroupComponent,
     hdr_front_view: &HdrFrontBufferViewComponent,
     hdr_back_view: &HdrBackBufferViewComponent,
-    blit_pipeline: &BlitPipelineComponent,
-    vertex_buffer: &VertexBufferComponent,
-    instance_buffer: &InstanceBufferComponent,
+    hdr_depth_view: &HdrDepthBufferViewComponent,
+    tonemap_pipeline: &TonemapPipelineComponent,
+    line_vertex_buffer: &LineVertexBufferComponent,
+    line_instance_buffer: &LineInstanceBufferComponent,
+    mesh_vertex_buffer: &MeshVertexBufferComponent,
+    mesh_index_buffer: &MeshIndexBufferComponent,
     buffer_flip_flop: &BufferFlipFlopComponent,
+    timer: &TimerComponent,
     command_buffers: &CommandBuffersComponent,
     render_attachment_view: &IndirectComponent<RenderAttachmentTextureView>,
 ) {
@@ -462,25 +657,36 @@ pub fn phosphor_render(
 
     lazy_read_ready_else_return!(uniform_bind_group);
 
-    lazy_read_ready_else_return!(hdr_blit_pipeline);
-    lazy_read_ready_else_return!(hdr_raster_pipeline);
+    lazy_read_ready_else_return!(hdr_decay_pipeline);
     lazy_read_ready_else_return!(hdr_front_bind_group);
     lazy_read_ready_else_return!(hdr_back_bind_group);
     lazy_read_ready_else_return!(hdr_front_view);
     lazy_read_ready_else_return!(hdr_back_view);
+    lazy_read_ready_else_return!(hdr_depth_view);
 
-    lazy_read_ready_else_return!(vertex_buffer);
-    lazy_read_ready_else_return!(instance_buffer);
+    lazy_read_ready_else_return!(hdr_line_pipeline);
+    lazy_read_ready_else_return!(line_vertex_buffer);
+    lazy_read_ready_else_return!(line_instance_buffer);
+
+    lazy_read_ready_else_return!(hdr_mesh_pipeline);
+    lazy_read_ready_else_return!(mesh_vertex_buffer);
+    lazy_read_ready_else_return!(mesh_index_buffer);
 
     let buffer_flip_state = *buffer_flip_flop.read();
 
-    lazy_read_ready_else_return!(blit_pipeline);
+    lazy_read_ready_else_return!(tonemap_pipeline);
 
     let render_attachment_view = world.get_indirect(render_attachment_view).unwrap();
     lazy_read_ready_else_return!(render_attachment_view);
 
     let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor { label: None });
 
+    let draw_changed = timer.get_changed();
+    if draw_changed {
+        timer.set_changed(false);
+    }
+
+    // Copy texels from backbuffer and apply phosphor decay
     let mut rpass = encoder.begin_render_pass(&RenderPassDescriptor {
         label: None,
         color_attachments: &[RenderPassColorAttachment {
@@ -497,7 +703,7 @@ pub fn phosphor_render(
         }],
         depth_stencil_attachment: None,
     });
-    rpass.set_pipeline(hdr_blit_pipeline);
+    rpass.set_pipeline(hdr_decay_pipeline);
     rpass.set_bind_group(0, uniform_bind_group, &[]);
     rpass.set_bind_group(
         1,
@@ -511,8 +717,7 @@ pub fn phosphor_render(
     rpass.draw(0..4, 0..1);
     drop(rpass);
 
-    let instance_count = <&Changed<InstanceDataComponent>>::query().iter(world).count();
-
+    // Draw meshes
     let mut rpass = encoder.begin_render_pass(&RenderPassDescriptor {
         label: None,
         color_attachments: &[RenderPassColorAttachment {
@@ -527,11 +732,18 @@ pub fn phosphor_render(
                 store: true,
             },
         }],
-        depth_stencil_attachment: None,
+        depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
+            view: hdr_depth_view,
+            depth_ops: Some(Operations {
+            load: LoadOp::Clear(1.0),
+                store: true,
+            }),
+            stencil_ops: None,
+        }),
     });
-    rpass.set_pipeline(hdr_raster_pipeline);
-    rpass.set_vertex_buffer(0, vertex_buffer.slice(..));
-    rpass.set_vertex_buffer(1, instance_buffer.slice(..));
+    rpass.set_pipeline(hdr_mesh_pipeline);
+    rpass.set_vertex_buffer(0, mesh_vertex_buffer.slice(..));
+    rpass.set_index_buffer(mesh_index_buffer.slice(..), IndexFormat::Uint16);
     rpass.set_bind_group(0, uniform_bind_group, &[]);
     rpass.set_bind_group(
         1,
@@ -542,9 +754,58 @@ pub fn phosphor_render(
         },
         &[],
     );
-    rpass.draw(0..14, 0..instance_count as u32);
+    let draw_count = if draw_changed { 1 } else { 0 } as u32;
+    rpass.draw_indexed(0..MAX_MESH_INDICES as u32, 0, 0..1);
     drop(rpass);
 
+    // Draw lines
+    let mut rpass = encoder.begin_render_pass(&RenderPassDescriptor {
+        label: None,
+        color_attachments: &[RenderPassColorAttachment {
+            view: if buffer_flip_state {
+                hdr_front_view
+            } else {
+                hdr_back_view
+            },
+            resolve_target: None,
+            ops: Operations {
+                load: LoadOp::Load,
+                store: true,
+            },
+        }],
+        depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
+            view: hdr_depth_view,
+            depth_ops: Some(Operations {
+                load: LoadOp::Load,
+                store: true,
+            }),
+            stencil_ops: None,
+        }),
+    });
+    rpass.set_pipeline(hdr_line_pipeline);
+    rpass.set_vertex_buffer(0, line_vertex_buffer.slice(..));
+    rpass.set_vertex_buffer(1, line_instance_buffer.slice(..));
+    rpass.set_bind_group(0, uniform_bind_group, &[]);
+    rpass.set_bind_group(
+        1,
+        if buffer_flip_state {
+            hdr_front_bind_group
+        } else {
+            hdr_back_bind_group
+        },
+        &[],
+    );
+
+    let line_count = 10;
+    let draw_count = if draw_changed {
+        line_count
+    } else {
+        line_count - 6
+    } as u32;
+    rpass.draw(0..14, 0..draw_count);
+    drop(rpass);
+
+    // Tonemap HDR buffer to surface
     let mut rpass = encoder.begin_render_pass(&RenderPassDescriptor {
         label: None,
         color_attachments: &[RenderPassColorAttachment {
@@ -557,7 +818,7 @@ pub fn phosphor_render(
         }],
         depth_stencil_attachment: None,
     });
-    rpass.set_pipeline(blit_pipeline);
+    rpass.set_pipeline(tonemap_pipeline);
     rpass.set_bind_group(0, uniform_bind_group, &[]);
     rpass.set_bind_group(
         1,
@@ -571,7 +832,9 @@ pub fn phosphor_render(
     rpass.draw(0..4, 0..1);
     drop(rpass);
 
+    // Finish encoding
     command_buffers.write().push(encoder.finish());
 
+    // Flip buffer flag
     *buffer_flip_flop.write() = !buffer_flip_state;
 }

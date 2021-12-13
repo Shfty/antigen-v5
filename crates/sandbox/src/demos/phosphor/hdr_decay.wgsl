@@ -8,7 +8,7 @@ struct Time {
 var<uniform> r_time: Time;
 
 [[group(0), binding(2)]]
-var r_sampler: sampler;
+var r_linear_sampler: sampler;
 
 [[group(1), binding(0)]]
 var r_hdr: texture_2d<f32>;
@@ -30,7 +30,7 @@ fn vs_main([[builtin(vertex_index)]] vertex_index: u32) -> VertexOutput {
 
 [[stage(fragment)]]
 fn fs_main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
-    let hdr = textureSample(r_hdr, r_sampler, in.uv);
+    let hdr = textureSample(r_hdr, r_linear_sampler, in.uv);
 
     // Unpack HDR fragment
     let intensity = hdr.r;
