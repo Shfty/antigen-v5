@@ -2,9 +2,10 @@ let PI: f32 = 3.14159265359;
 
 [[block]]
 struct Uniforms {
+    perspective: mat4x4<f32>;
+    orthographic: mat4x4<f32>;
     total_time: f32;
     delta_time: f32;
-    projection: mat4x4<f32>;
 };
 
 [[group(0), binding(0)]]
@@ -28,7 +29,7 @@ fn vs_main(
     [[location(4)]] gradient: f32,
 ) -> VertexOutput {
     var output: VertexOutput;
-    output.position = r_uniforms.projection * position;
+    output.position = r_uniforms.perspective * position;
     output.intensity = intensity;
     output.delta_intensity = delta_intensity;
     output.delta_delta = delta_delta;
@@ -40,5 +41,5 @@ fn vs_main(
 fn fs_main(
     in: VertexOutput,
 ) -> [[location(0)]] vec4<f32> {
-    return vec4<f32>(in.intensity, in.delta_intensity, in.delta_delta, in.gradient);
+    return vec4<f32>(in.delta_intensity, in.delta_delta, in.gradient, in.intensity);
 }

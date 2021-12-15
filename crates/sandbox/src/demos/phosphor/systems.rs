@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use crate::phosphor::MAX_MESH_INDICES;
+use crate::phosphor::{HDR_TEXTURE_FORMAT, MAX_LINES, MAX_MESH_INDICES};
 
 use super::components::*;
 use antigen_core::{
@@ -8,22 +8,7 @@ use antigen_core::{
     LazyComponent, ReadWriteLock, Usage,
 };
 
-use antigen_wgpu::{
-    buffer_size_of,
-    wgpu::{
-        BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry,
-        BindingResource, BindingType, BufferBindingType, BufferSize, Color,
-        CommandEncoderDescriptor, CompareFunction, DepthBiasState, DepthStencilState, Device,
-        Extent3d, Face, FragmentState, FrontFace, IndexFormat, LoadOp, MultisampleState,
-        Operations, PipelineLayoutDescriptor, PrimitiveState, PrimitiveTopology,
-        RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor,
-        RenderPipelineDescriptor, ShaderStages, StencilState, TextureFormat, TextureSampleType,
-        TextureViewDimension, VertexAttribute, VertexBufferLayout, VertexFormat, VertexState,
-        VertexStepMode,
-    },
-    CommandBuffersComponent, RenderAttachmentTextureView, SurfaceConfigurationComponent,
-    TextureDescriptorComponent, TextureViewDescriptorComponent,
-};
+use antigen_wgpu::{CommandBuffersComponent, RenderAttachmentTextureView, SurfaceConfigurationComponent, TextureDescriptorComponent, TextureViewDescriptorComponent, buffer_size_of, wgpu::{BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource, BindingType, BlendComponent, BlendFactor, BlendOperation, BlendState, BufferBindingType, BufferSize, Color, ColorTargetState, ColorWrites, CommandEncoderDescriptor, CompareFunction, DepthBiasState, DepthStencilState, Device, Extent3d, Face, FragmentState, FrontFace, IndexFormat, LoadOp, MultisampleState, Operations, PipelineLayoutDescriptor, PrimitiveState, PrimitiveTopology, RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor, RenderPipelineDescriptor, ShaderStages, StencilState, TextureFormat, TextureSampleType, TextureViewDimension, VertexAttribute, VertexBufferLayout, VertexFormat, VertexState, VertexStepMode}};
 
 use antigen_winit::{winit::event::WindowEvent, WindowComponent, WindowEventComponent};
 use legion::{world::SubWorld, IntoQuery};
@@ -82,7 +67,7 @@ pub fn phosphor_prepare(
                 ty: BindingType::Buffer {
                     ty: BufferBindingType::Uniform,
                     has_dynamic_offset: false,
-                    min_binding_size: BufferSize::new(80),
+                    min_binding_size: BufferSize::new(144),
                 },
                 count: None,
             },
@@ -225,7 +210,7 @@ pub fn phosphor_prepare(
         fragment: Some(FragmentState {
             module: &hdr_decay_shader,
             entry_point: "fs_main",
-            targets: &[TextureFormat::Rgba32Float.into()],
+            targets: &[HDR_TEXTURE_FORMAT.into()],
         }),
         primitive: PrimitiveState::default(),
         depth_stencil: None,
@@ -278,7 +263,7 @@ pub fn phosphor_prepare(
         fragment: Some(FragmentState {
             module: &hdr_line_shader,
             entry_point: "fs_main",
-            targets: &[TextureFormat::Rgba32Float.into()],
+            targets: &[HDR_TEXTURE_FORMAT.into()],
         }),
         primitive: PrimitiveState {
             topology: PrimitiveTopology::TriangleList,
@@ -385,7 +370,18 @@ pub fn phosphor_prepare(
         fragment: Some(FragmentState {
             module: &hdr_line_shader,
             entry_point: "fs_main",
-            targets: &[TextureFormat::Rgba32Float.into()],
+            targets: &[ColorTargetState {
+                format: HDR_TEXTURE_FORMAT,
+                blend: Some(BlendState {
+                    color: BlendComponent::REPLACE,
+                    alpha: BlendComponent {
+                        src_factor: BlendFactor::One,
+                        dst_factor: BlendFactor::One,
+                        operation: BlendOperation::Add,
+                    },
+                }),
+                write_mask: ColorWrites::ALL,
+            }],
         }),
         primitive: PrimitiveState {
             topology: PrimitiveTopology::TriangleStrip,
@@ -527,7 +523,8 @@ pub fn phosphor_resize(
     hdr_back_buffer_view_desc: &Usage<HdrBackBuffer, TextureViewDescriptorComponent<'static>>,
     hdr_depth_buffer_desc: &Usage<HdrDepthBuffer, TextureDescriptorComponent<'static>>,
     hdr_depth_buffer_view_desc: &Usage<HdrDepthBuffer, TextureViewDescriptorComponent<'static>>,
-    projection_matrix: &Changed<ProjectionMatrixComponent>,
+    perspective_matrix: &Changed<PerspectiveMatrixComponent>,
+    orthographic_matrix: &Changed<OrthographicMatrixComponent>,
 ) {
     let surface_config = world.get_indirect(surface_config).unwrap();
     if !surface_config.get_changed() {
@@ -557,12 +554,13 @@ pub fn phosphor_resize(
     hdr_front_bind_group.write().set_pending();
     hdr_back_bind_group.write().set_pending();
 
-    *projection_matrix.write() = super::projection_matrix(
-        surface_config.width as f32 / surface_config.height as f32,
-        (0.0, 0.0),
-        200.0,
-    );
-    projection_matrix.set_changed(true);
+    let aspect = surface_config.width as f32 / surface_config.height as f32;
+
+    *perspective_matrix.write() = super::perspective_matrix(aspect, (0.0, 0.0));
+    perspective_matrix.set_changed(true);
+
+    *orthographic_matrix.write() = super::orthographic_matrix(aspect, 200.0);
+    orthographic_matrix.set_changed(true);
 }
 
 #[legion::system(par_for_each)]
@@ -572,7 +570,7 @@ pub fn phosphor_resize(
 pub fn phosphor_cursor_moved(
     world: &SubWorld,
     _: &Phosphor,
-    projection_matrix: &Changed<ProjectionMatrixComponent>,
+    projection_matrix: &Changed<PerspectiveMatrixComponent>,
     window: &IndirectComponent<WindowComponent>,
     surface_config: &IndirectComponent<SurfaceConfigurationComponent>,
 ) {
@@ -614,10 +612,9 @@ pub fn phosphor_cursor_moved(
     let norm_x = ((position.x as f32 / surface_config.width as f32) * 2.0) - 1.0;
     let norm_y = ((position.y as f32 / surface_config.height as f32) * 2.0) - 1.0;
 
-    *projection_matrix.write() = super::projection_matrix(
+    *projection_matrix.write() = super::perspective_matrix(
         surface_config.width as f32 / surface_config.height as f32,
         (-norm_x, norm_y),
-        200.0,
     );
     projection_matrix.set_changed(true);
 }
@@ -735,7 +732,7 @@ pub fn phosphor_render(
         depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
             view: hdr_depth_view,
             depth_ops: Some(Operations {
-            load: LoadOp::Clear(1.0),
+                load: LoadOp::Clear(1.0),
                 store: true,
             }),
             stencil_ops: None,
@@ -754,7 +751,6 @@ pub fn phosphor_render(
         },
         &[],
     );
-    let draw_count = if draw_changed { 1 } else { 0 } as u32;
     rpass.draw_indexed(0..MAX_MESH_INDICES as u32, 0, 0..1);
     drop(rpass);
 
@@ -777,7 +773,7 @@ pub fn phosphor_render(
             view: hdr_depth_view,
             depth_ops: Some(Operations {
                 load: LoadOp::Load,
-                store: true,
+                store: false,
             }),
             stencil_ops: None,
         }),
@@ -796,11 +792,10 @@ pub fn phosphor_render(
         &[],
     );
 
-    let line_count = 10;
     let draw_count = if draw_changed {
-        line_count
+        MAX_LINES
     } else {
-        line_count - 6
+        MAX_LINES / 2
     } as u32;
     rpass.draw(0..14, 0..draw_count);
     drop(rpass);

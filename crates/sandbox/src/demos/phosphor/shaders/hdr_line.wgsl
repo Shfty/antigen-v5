@@ -2,9 +2,10 @@ let PI: f32 = 3.14159265359;
 
 [[block]]
 struct Uniforms {
+    perspective: mat4x4<f32>;
+    orthographic: mat4x4<f32>;
     total_time: f32;
     delta_time: f32;
-    projection: mat4x4<f32>;
 };
 
 [[group(0), binding(0)]]
@@ -47,7 +48,14 @@ fn rotate(vec: vec2<f32>, angle: f32) -> vec2<f32> {
 fn vs_main(
     in: VertexInput
 ) -> VertexOutput {
-    var delta = in.v1.xy - in.v0.xy;
+    let v0 = r_uniforms.perspective * in.v0;
+    let v1 = r_uniforms.perspective * in.v1;
+
+    let v0 = v0.xyz / v0.w;
+    let v1 = v1.xyz / v1.w;
+
+    var delta = v1 - v0;
+
     let delta_norm = normalize(delta);
 
     var angle = 0.0;
@@ -55,16 +63,14 @@ fn vs_main(
         angle = atan2(delta_norm.y, delta_norm.x);
     }
 
-    let pos = in.position;
-    let ofs = max(sign(in.end), 0.0) * length(delta);
-    let pos = vec4<f32>(pos.x + ofs, pos.y, pos.z, pos.w);
-    let pos = vec4<f32>(rotate(pos.xy, angle), pos.z, pos.w);
-    let pos = vec4<f32>(pos.xyz + in.v0.xyz, pos.w);
+    let vert = in.position.xy;
+    let vert = rotate(vert.xy, angle);
+    let vert = (r_uniforms.orthographic * vec4<f32>(vert.xy, 0.0, 1.0)).xy;
 
-    let pos = r_uniforms.projection * pos;
+    let pos = vec3<f32>(vert, 0.0) + mix(v0, v1, in.end);
 
     var output: VertexOutput;
-    output.position = pos;
+    output.position = vec4<f32>(pos, 1.0);
     output.intensity = mix(in.v0_intensity, in.v1_intensity, in.end);
     output.delta_intensity = mix(in.v0_delta_intensity, in.v1_delta_intensity, in.end);
     output.delta_delta = mix(in.v0_delta_delta, in.v1_delta_delta, in.end);
@@ -72,9 +78,15 @@ fn vs_main(
     return output;
 }
 
+struct FragmentOutput {
+    [[location(0)]] color: vec4<f32>;
+};
+
 [[stage(fragment)]]
 fn fs_main(
     in: VertexOutput,
-) -> [[location(0)]] vec4<f32> {
-    return vec4<f32>(in.intensity, in.delta_intensity, in.delta_delta, in.gradient);
+) -> FragmentOutput {
+    var out: FragmentOutput;
+    out.color = vec4<f32>(in.delta_intensity, in.delta_delta, in.gradient, in.intensity);
+    return out;
 }

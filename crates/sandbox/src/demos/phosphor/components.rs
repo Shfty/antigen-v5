@@ -39,7 +39,8 @@ pub enum LineInstance {}
 pub enum MeshVertex {}
 pub enum MeshIndex {}
 
-pub enum Projection {}
+pub enum Perspective {}
+pub enum Orthographic {}
 
 pub enum FlipFlop {}
 
@@ -52,15 +53,17 @@ pub type StartTimeComponent = Usage<StartTime, Instant>;
 pub type TimestampComponent = Usage<Timestamp, RwLock<Instant>>;
 pub type TotalTimeComponent = Usage<TotalTime, RwLock<f32>>;
 pub type DeltaTimeComponent = Usage<DeltaTime, RwLock<f32>>;
-pub type ProjectionMatrixComponent = Usage<Projection, RwLock<[[f32; 4]; 4]>>;
+pub type PerspectiveMatrixComponent = Usage<Perspective, RwLock<[[f32; 4]; 4]>>;
+pub type OrthographicMatrixComponent = Usage<Orthographic, RwLock<[[f32; 4]; 4]>>;
 
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone, Pod, Zeroable)]
 pub struct UniformData {
+    perspective: [[f32; 4]; 4],
+    orthographic: [[f32; 4]; 4],
     total_time: f32,
     delta_time: f32,
     _pad: [f32; 2],
-    projection: [[f32; 4]; 4],
 }
 
 pub type UniformDataComponent = Usage<Uniform, RwLock<UniformData>>;

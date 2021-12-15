@@ -1,11 +1,13 @@
 [[block]]
-struct Time {
+struct Uniforms {
+    perspective: mat4x4<f32>;
+    orthographic: mat4x4<f32>;
     total: f32;
     delta: f32;
 };
 
 [[group(0), binding(0)]]
-var<uniform> r_time: Time;
+var<uniform> r_uniforms: Uniforms;
 
 [[group(0), binding(2)]]
 var r_linear_sampler: sampler;
@@ -33,19 +35,19 @@ fn fs_main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     let hdr = textureSample(r_hdr, r_linear_sampler, in.uv);
 
     // Unpack HDR fragment
-    let intensity = hdr.r;
-    let delta_intensity = hdr.g;
-    let delta_delta = hdr.b;
-    let gradient = hdr.a;
+    let delta_intensity = hdr.r;
+    let delta_delta = hdr.g;
+    let gradient = hdr.b;
+    let intensity = hdr.a;
 
     // Integrate intensity
     let prev_intensity = intensity;
-    let intensity = intensity + delta_intensity * r_time.delta;
+    let intensity = clamp(intensity + delta_intensity * r_uniforms.delta, 0.0, 8.0);
     let intensity_changed = abs(sign(sign(intensity) + sign(prev_intensity)));
 
     // Integrate delta intensity
     let prev_delta = delta_intensity;
-    let delta_intensity = delta_intensity + delta_delta * r_time.delta;
+    let delta_intensity = delta_intensity + delta_delta * r_uniforms.delta;
     let delta_changed = abs(sign(sign(delta_intensity) + sign(prev_delta)));
 
     // Zero out intensity if it changes sign
@@ -58,5 +60,5 @@ fn fs_main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     let delta_intensity = delta_intensity * delta_changed;
     let delta_delta = delta_delta * delta_changed;
 
-    return vec4<f32>(intensity, delta_intensity, delta_delta, gradient);
+    return vec4<f32>(delta_intensity, delta_delta, gradient, intensity);
 }

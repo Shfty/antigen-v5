@@ -1553,6 +1553,8 @@ dependencies = [
  "png",
  "pollster",
  "rand",
+ "shalrath",
+ "shambler",
  "tracing",
  "tracing-subscriber",
 ]
@@ -1593,6 +1595,22 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "shalrath"
+version = "0.2.2"
+dependencies = [
+ "nom",
+ "serde",
+]
+
+[[package]]
+name = "shambler"
+version = "0.1.0"
+dependencies = [
+ "nalgebra",
+ "shalrath",
 ]
 
 [[package]]

@@ -40,13 +40,15 @@
 //         * Overlay acts like a vectrex color overlay
 //         * Underlay respects depth and doesn't draw behind solid objects
 
+mod assemblage;
 mod components;
 mod systems;
 
-use std::{
-    num::NonZeroU32,
-    time::{Duration, Instant},
-};
+pub use assemblage::*;
+pub use components::*;
+pub use systems::*;
+
+use std::time::{Duration, Instant};
 
 use antigen_winit::{
     winit::{
@@ -55,9 +57,6 @@ use antigen_winit::{
     },
     AssembleWinit, EventLoopHandler, RedrawUnconditionally, WindowComponent,
 };
-pub use components::*;
-use legion::Entity;
-pub use systems::*;
 
 use antigen_core::{parallel, serial, single, AddIndirectComponent, Construct, ImmutableWorld};
 
@@ -65,18 +64,26 @@ use antigen_wgpu::{
     buffer_size_of,
     wgpu::{
         AddressMode, BufferAddress, BufferDescriptor, BufferUsages, Device, Extent3d, FilterMode,
-        ImageCopyTextureBase, ImageDataLayout, Maintain, SamplerDescriptor, ShaderModuleDescriptor,
-        ShaderSource, TextureAspect, TextureDescriptor, TextureDimension, TextureFormat,
-        TextureUsages, TextureViewDescriptor,
+        Maintain, SamplerDescriptor, ShaderModuleDescriptor, ShaderSource, TextureAspect,
+        TextureDescriptor, TextureDimension, TextureFormat, TextureUsages, TextureViewDescriptor,
     },
     AssembleWgpu, RenderAttachmentTextureView, SurfaceConfigurationComponent,
 };
 
+const HDR_TEXTURE_FORMAT: TextureFormat = TextureFormat::Rgba16Float;
 const MAX_MESH_VERTICES: usize = 100;
 const MAX_MESH_INDICES: usize = 100;
-const MAX_LINES: usize = 100;
+const MAX_LINES: usize = 10000;
+const BASE_FLASH_LINE: usize = MAX_LINES / 2;
 
-pub fn projection_matrix(aspect: f32, (ofs_x, ofs_y): (f32, f32), zoom: f32) -> [[f32; 4]; 4] {
+pub fn orthographic_matrix(aspect: f32, zoom: f32) -> [[f32; 4]; 4] {
+    println!("Zoomed aspect: {}", zoom * aspect);
+    let projection =
+        nalgebra_glm::ortho_lh_zo(-zoom * aspect, zoom * aspect, -zoom, zoom, 0.0, 1.0);
+    projection.into()
+}
+
+pub fn perspective_matrix(aspect: f32, (ofs_x, ofs_y): (f32, f32)) -> [[f32; 4]; 4] {
     let x = ofs_x * std::f32::consts::PI;
     let view = nalgebra_glm::look_at_lh(
         &nalgebra::vector![x.sin() * 300.0, ofs_y * 150.0, -x.cos() * 300.0],
@@ -103,14 +110,14 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     cmd.assemble_wgpu_buffer_data_with_usage::<Uniform, _>(
         time_entity,
         TotalTimeComponent::construct(0.0),
-        0,
+        buffer_size_of::<[[f32; 4]; 4]>() * 2,
         Some(renderer_entity),
     );
     cmd.add_component(time_entity, TimestampComponent::construct(Instant::now()));
     cmd.assemble_wgpu_buffer_data_with_usage::<Uniform, _>(
         time_entity,
         DeltaTimeComponent::construct(1.0 / 60.0),
-        buffer_size_of::<f32>(),
+        (buffer_size_of::<[[f32; 4]; 4]>() * 2) + buffer_size_of::<f32>(),
         Some(renderer_entity),
     );
 
@@ -154,7 +161,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
             mip_level_count: 1,
             sample_count: 1,
             dimension: TextureDimension::D2,
-            format: TextureFormat::Rgba32Float,
+            format: HDR_TEXTURE_FORMAT,
             usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
         },
     );
@@ -187,7 +194,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
             mip_level_count: 1,
             sample_count: 1,
             dimension: TextureDimension::D2,
-            format: TextureFormat::Rgba32Float,
+            format: HDR_TEXTURE_FORMAT,
             usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
         },
     );
@@ -241,60 +248,11 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     );
 
     // Gradients texture
-    let img_data = include_bytes!("gradients.png");
-    let decoder = png::Decoder::new(std::io::Cursor::new(img_data));
-    let mut reader = decoder.read_info().unwrap();
-    let mut buf = vec![0; reader.output_buffer_size()];
-    let info = reader.next_frame(&mut buf).unwrap();
-
-    let size = Extent3d {
-        width: info.width,
-        height: info.height,
-        depth_or_array_layers: 1,
-    };
-
-    cmd.assemble_wgpu_texture_with_usage::<Gradients>(
+    assemble_png_texture(
+        cmd,
         renderer_entity,
-        TextureDescriptor {
-            label: Some("Gradients Texture"),
-            size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: TextureDimension::D2,
-            format: TextureFormat::Rgba8UnormSrgb,
-            usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
-        },
-    );
-
-    cmd.assemble_wgpu_texture_data_with_usage::<Gradients, _>(
-        renderer_entity,
-        GradientDataComponent::construct(buf),
-        ImageCopyTextureBase {
-            texture: (),
-            mip_level: 0,
-            origin: Default::default(),
-            aspect: TextureAspect::All,
-        },
-        ImageDataLayout {
-            offset: 0,
-            bytes_per_row: Some(NonZeroU32::new(info.line_size as u32).unwrap()),
-            rows_per_image: Some(NonZeroU32::new(size.height).unwrap()),
-        },
-    );
-
-    cmd.assemble_wgpu_texture_view_with_usage::<Gradients>(
-        renderer_entity,
-        renderer_entity,
-        TextureViewDescriptor {
-            label: Some("Gradients Texture View"),
-            format: None,
-            dimension: None,
-            aspect: TextureAspect::All,
-            base_mip_level: 0,
-            mip_level_count: None,
-            base_array_layer: 0,
-            array_layer_count: None,
-        },
+        Some("Gradients Texture"),
+        include_bytes!("textures/gradients.png"),
     );
 
     // HDR sampler
@@ -317,7 +275,9 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         renderer_entity,
         ShaderModuleDescriptor {
             label: None,
-            source: ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!("hdr_decay.wgsl"))),
+            source: ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!(
+                "shaders/hdr_decay.wgsl"
+            ))),
         },
     );
 
@@ -325,14 +285,18 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         renderer_entity,
         ShaderModuleDescriptor {
             label: None,
-            source: ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!("hdr_line.wgsl"))),
+            source: ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!(
+                "shaders/hdr_line.wgsl"
+            ))),
         },
     );
     cmd.assemble_wgpu_shader_with_usage::<HdrMesh>(
         renderer_entity,
         ShaderModuleDescriptor {
             label: None,
-            source: ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!("hdr_mesh.wgsl"))),
+            source: ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!(
+                "shaders/hdr_mesh.wgsl"
+            ))),
         },
     );
 
@@ -340,7 +304,9 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         renderer_entity,
         ShaderModuleDescriptor {
             label: None,
-            source: ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!("tonemap.wgsl"))),
+            source: ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!(
+                "shaders/tonemap.wgsl"
+            ))),
         },
     );
 
@@ -357,8 +323,15 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
 
     cmd.assemble_wgpu_buffer_data_with_usage::<Uniform, _>(
         renderer_entity,
-        ProjectionMatrixComponent::construct(projection_matrix(640.0 / 480.0, (0.0, 0.0), 10.0)),
-        buffer_size_of::<[f32; 4]>(),
+        PerspectiveMatrixComponent::construct(perspective_matrix(640.0 / 480.0, (0.0, 0.0))),
+        0,
+        Some(renderer_entity),
+    );
+
+    cmd.assemble_wgpu_buffer_data_with_usage::<Uniform, _>(
+        renderer_entity,
+        OrthographicMatrixComponent::construct(orthographic_matrix(640.0 / 480.0, 200.0)),
+        buffer_size_of::<[[f32; 4]; 4]>(),
         Some(renderer_entity),
     );
 
@@ -482,7 +455,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         2.0,
     );
 
-    // Line
+    // Flash timer
     cmd.add_component(
         renderer_entity,
         TimerComponent::construct(Timer {
@@ -495,7 +468,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     assemble_line_strip(
         cmd,
         renderer_entity,
-        4,
+        BASE_FLASH_LINE,
         vec![
             MeshVertexData::new((-50.0, -20.0, 0.0), 11.0, -10.0, 0.0, 3.0),
             MeshVertexData::new((-90.0, -80.0, 0.0), 10.0, -10.0, 0.0, 3.0),
@@ -508,7 +481,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     assemble_line_list(
         cmd,
         renderer_entity,
-        7,
+        BASE_FLASH_LINE + 3,
         vec![
             MeshVertexData::new((50.0, -80.0, 0.0), 11.0, -10.0, 0.0, 2.0),
             MeshVertexData::new((90.0, -20.0, 0.0), 10.0, -10.0, 0.0, 2.0),
@@ -516,6 +489,49 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
             MeshVertexData::new((10.0, -20.0, 0.0), 9.0, -10.0, 0.0, 1.0),
             MeshVertexData::new((10.0, -20.0, 0.0), 9.0, -10.0, 0.0, 0.0),
             MeshVertexData::new((50.0, -80.0, 0.0), 8.0, -10.0, 0.0, 0.0),
+        ],
+    );
+
+    // Cube lines
+    assemble_line_strip(
+        cmd,
+        renderer_entity,
+        4,
+        vec![
+            MeshVertexData::new((-25.0, -25.0, -25.0), 7.0, -30.0, 0.0, 0.0),
+            MeshVertexData::new((25.0, -25.0, -25.0), 7.0, -30.0, 0.0, 1.0),
+            MeshVertexData::new((25.0, -25.0, 25.0), 7.0, -30.0, 0.0, 2.0),
+            MeshVertexData::new((-25.0, -25.0, 25.0), 7.0, -30.0, 0.0, 3.0),
+            MeshVertexData::new((-25.0, -25.0, -25.0), 7.0, -30.0, 0.0, 0.0),
+        ],
+    );
+
+    assemble_line_strip(
+        cmd,
+        renderer_entity,
+        8,
+        vec![
+            MeshVertexData::new((-25.0, 25.0, -25.0), 7.0, -30.0, 0.0, 0.0),
+            MeshVertexData::new((25.0, 25.0, -25.0), 7.0, -30.0, 0.0, 1.0),
+            MeshVertexData::new((25.0, 25.0, 25.0), 7.0, -30.0, 0.0, 2.0),
+            MeshVertexData::new((-25.0, 25.0, 25.0), 7.0, -30.0, 0.0, 3.0),
+            MeshVertexData::new((-25.0, 25.0, -25.0), 7.0, -30.0, 0.0, 0.0),
+        ],
+    );
+
+    assemble_line_list(
+        cmd,
+        renderer_entity,
+        12,
+        vec![
+            MeshVertexData::new((-25.0, -25.0, -25.0), 7.0, -30.0, 0.0, 0.0),
+            MeshVertexData::new((-25.0, 25.0, -25.0), 7.0, -30.0, 0.0, 0.0),
+            MeshVertexData::new((25.0, -25.0, -25.0), 7.0, -30.0, 0.0, 1.0),
+            MeshVertexData::new((25.0, 25.0, -25.0), 7.0, -30.0, 0.0, 1.0),
+            MeshVertexData::new((25.0, -25.0, 25.0), 7.0, -30.0, 0.0, 2.0),
+            MeshVertexData::new((25.0, 25.0, 25.0), 7.0, -30.0, 0.0, 2.0),
+            MeshVertexData::new((-25.0, -25.0, 25.0), 7.0, -30.0, 0.0, 3.0),
+            MeshVertexData::new((-25.0, 25.0, 25.0), 7.0, -30.0, 0.0, 3.0),
         ],
     );
 
@@ -539,40 +555,6 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
             usage: BufferUsages::INDEX | BufferUsages::COPY_DST,
             mapped_at_creation: false,
         },
-    );
-
-    assemble_mesh(
-        cmd,
-        renderer_entity,
-        0,
-        0,
-        vec![
-            MeshVertexData::new((1.0, 1.0, 1.0), 0.0, -14.0, 0.0, 0.0),
-            MeshVertexData::new((-1.0, 1.0, 1.0), 0.0, -14.0, 0.0, 0.0),
-            MeshVertexData::new((-1.0, 1.0, -1.0), 0.0, -14.0, 0.0, 0.0),
-            MeshVertexData::new((1.0, 1.0, -1.0), 0.0, -14.0, 0.0, 0.0),
-            MeshVertexData::new((1.0, -1.0, 1.0), 0.0, -14.0, 0.0, 0.0),
-            MeshVertexData::new((-1.0, -1.0, 1.0), 0.0, -14.0, 0.0, 0.0),
-            MeshVertexData::new((-1.0, -1.0, -1.0), 0.0, -14.0, 0.0, 0.0),
-            MeshVertexData::new((1.0, -1.0, -1.0), 0.0, -14.0, 0.0, 0.0),
-        ]
-        .into_iter()
-        .map(|mut vd| {
-            vd.position[0] *= 25.0;
-            vd.position[1] *= 25.0;
-            vd.position[2] *= 25.0;
-            vd
-        })
-        .collect(),
-        vec![
-            // Top
-            0, 1, 2, 0, 2, 3, // Bottom
-            4, 7, 5, 7, 6, 5, // Front
-            3, 2, 6, 3, 6, 7, // Back
-            0, 5, 1, 0, 4, 5, // Right
-            0, 3, 7, 0, 7, 4, // Left
-            1, 5, 6, 1, 6, 2,
-        ],
     );
 
     assemble_mesh(
@@ -613,7 +595,6 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         .collect(),
     );
 
-    /*
     assemble_triangle_list(
         cmd,
         renderer_entity,
@@ -621,15 +602,14 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         0,
         0,
         vec![
-            MeshVertexData::new((50.0, -80.0), 2.0, -10.0, 0.0, 7.0),
-            MeshVertexData::new((10.0, -20.0), 3.0, -10.0, 0.0, 7.0),
-            MeshVertexData::new((90.0, -20.0), 4.0, -10.0, 0.0, 7.0),
-            MeshVertexData::new((-50.0, -20.0), 9.0, -10.0, 0.0, 3.0),
-            MeshVertexData::new((-10.0, -80.0), 10.0, -10.0, 0.0, 3.0),
-            MeshVertexData::new((-90.0, -80.0), 11.0, -10.0, 0.0, 3.0),
+            MeshVertexData::new((50.0, -80.0, 0.0), 2.0, -10.0, 0.0, 7.0),
+            MeshVertexData::new((90.0, -20.0, 0.0), 4.0, -10.0, 0.0, 7.0),
+            MeshVertexData::new((10.0, -20.0, 0.0), 3.0, -10.0, 0.0, 7.0),
+            MeshVertexData::new((-50.0, -20.0, 0.0), 9.0, -10.0, 0.0, 3.0),
+            MeshVertexData::new((-90.0, -80.0, 0.0), 11.0, -10.0, 0.0, 3.0),
+            MeshVertexData::new((-10.0, -80.0, 0.0), 10.0, -10.0, 0.0, 3.0),
         ],
     );
-    */
 
     /*
     assemble_triangle_fan(
@@ -648,160 +628,170 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         ],
     );
     */
+
+    // Load map file
+    let map = include_str!("maps/lunatic_fringe.map");
+    let map = map.parse::<shambler::shalrath::repr::Map>().unwrap();
+    let map_data = build_map_data(map);
+
+    assemble_lines(cmd, renderer_entity, 16, map_data);
 }
 
-fn assemble_oscilloscope(
-    cmd: &mut legion::systems::CommandBuffer,
-    buffer_target: Entity,
-    buffer_index: usize,
-    origin: (f32, f32, f32),
-    osc: Oscilloscope,
-    intensity: f32,
-    delta_intensity: f32,
-    delta_delta: f32,
-    gradient: f32,
-) {
-    let entity = cmd.push(());
-    cmd.add_component(entity, OriginComponent::construct(origin));
-    cmd.add_component(entity, osc);
-    cmd.assemble_wgpu_buffer_data_with_usage::<LineInstance, _>(
-        entity,
-        LineInstanceDataComponent::construct(vec![LineInstanceData {
-            v0: MeshVertexData {
-                position: [0.0, 0.0, 0.0, 1.0],
+fn build_map_data(map: shambler::shalrath::repr::Map) -> Vec<LineInstanceData> {
+    // Convert to flat structure
+    let geo_map = shambler::GeoMap::from(map);
+
+    // Create geo planes from brush planes
+    let face_planes = shambler::face::FacePlanes::new(&geo_map.face_planes);
+
+    // Create per-brush hulls from brush planes
+    let brush_hulls = shambler::brush::BrushHulls::new(&geo_map.brush_faces, &face_planes);
+
+    // Generate face vertices
+    let face_vertices =
+        shambler::face::FaceVertices::new(&geo_map.brush_faces, &face_planes, &brush_hulls);
+
+    // Generate flat face normals
+    let face_normals = shambler::face::FaceNormals::flat(&face_vertices, &face_planes);
+
+    // Find duplicate faces
+    let face_duplicates =
+        shambler::face::FaceDuplicates::new(&geo_map.faces, &face_planes, &face_vertices);
+
+    // Generate centers
+    let face_centers = shambler::face::FaceCenters::new(&face_vertices);
+
+    // Generate per-plane CCW face indices
+    let face_indices = shambler::face::FaceIndices::new(
+        &geo_map.face_planes,
+        &face_planes,
+        &face_vertices,
+        &face_centers,
+        shambler::face::FaceWinding::Clockwise,
+    );
+
+    // Generate tangents
+    let face_bases = shambler::face::FaceBases::new(
+        &geo_map.faces,
+        &face_planes,
+        &geo_map.face_offsets,
+        &geo_map.face_angles,
+        &geo_map.face_scales,
+    );
+
+    // Generate line indices
+    let lines = shambler::line::Lines::new(&face_indices);
+
+    // Calculate face-face containment
+    let face_face_containment = shambler::face::FaceFaceContainment::new(
+        &geo_map.faces,
+        &face_planes,
+        &face_bases,
+        &face_vertices,
+        &lines,
+    );
+
+    // Calculate brush-face containment
+    let brush_face_containment = shambler::brush::BrushFaceContainment::new(
+        &geo_map.brushes,
+        &geo_map.faces,
+        &geo_map.brush_faces,
+        &brush_hulls,
+        &face_vertices,
+    );
+
+    // Generate mesh
+    let mut mesh_normals: Vec<shambler::Vector3> = Default::default();
+    let mut mesh_vertices: Vec<shambler::Vector3> = Default::default();
+    let mut mesh_lines: Vec<(shambler::face::FaceId, shambler::line::LineIndices)> =
+        Default::default();
+
+    let scale_factor = 1.0;
+
+    for face_id in &geo_map.faces {
+        if face_duplicates.contains(&face_id) {
+            continue;
+        }
+
+        if face_face_containment.is_contained(&face_id) {
+            continue;
+        }
+
+        if brush_face_containment.is_contained(&face_id) {
+            continue;
+        }
+
+        let index_offset = mesh_vertices.len();
+        let face_lines = &lines.face_lines[&face_id];
+
+        mesh_vertices.extend(face_vertices.vertices(&face_id).unwrap().iter().map(|v| {
+            nalgebra::vector![-v.x * scale_factor, v.z * scale_factor, v.y * scale_factor]
+        }));
+        mesh_normals.extend(
+            face_normals[&face_id]
+                .iter()
+                .map(|n| nalgebra::vector![-n.x, n.z, n.y]),
+        );
+        mesh_lines.extend(face_lines.iter().map(|line_id| {
+            let shambler::line::LineIndices { v0, v1 } = lines.line_indices[line_id];
+            (
+                *face_id,
+                shambler::line::LineIndices {
+                    v0: v0 + index_offset,
+                    v1: v1 + index_offset,
+                },
+            )
+        }));
+    }
+
+    mesh_lines
+        .into_iter()
+        .map(|(face, shambler::line::LineIndices { v0, v1 })| {
+            let texture_id = geo_map.face_textures[&face];
+            let texture_name = &geo_map.textures[&texture_id];
+
+            let gradient = if texture_name.contains("blood") {
+                0.0
+            } else if texture_name.contains("green") {
+                1.0
+            } else if texture_name.contains("blue") {
+                2.0
+            } else {
+                7.0
+            };
+
+            let intensity = if texture_name.ends_with("3") {
+                2.0
+            } else if texture_name.ends_with("2") {
+                4.0
+            } else if texture_name.ends_with("1") {
+                6.0
+            } else {
+                0.0
+            };
+
+            let v0 = mesh_vertices[v0];
+            let v1 = mesh_vertices[v1];
+
+            let v0 = MeshVertexData {
+                position: [v0.x, v0.y, v0.z, 1.0],
                 intensity,
-                delta_intensity,
-                delta_delta,
+                delta_intensity: -160.0,
+                delta_delta: 0.0,
                 gradient,
-            },
-            v1: MeshVertexData {
-                position: [0.0, 0.0, 0.0, 1.0],
+            };
+
+            let v1 = MeshVertexData {
+                position: [v1.x, v1.y, v1.z, 1.0],
                 intensity,
-                delta_intensity,
-                delta_delta,
+                delta_intensity: -160.0,
+                delta_delta: 0.0,
                 gradient,
-            },
-        }]),
-        buffer_size_of::<LineInstanceData>() * buffer_index as BufferAddress,
-        Some(buffer_target),
-    );
-}
+            };
 
-fn assemble_line_list(
-    cmd: &mut legion::systems::CommandBuffer,
-    buffer_target: Entity,
-    buffer_index: usize,
-    vertices: Vec<MeshVertexData>,
-) {
-    let lines = vertices
-        .chunks(2)
-        .map(|vs| LineInstanceData {
-            v0: vs[0],
-            v1: vs[1],
+            LineInstanceData { v0, v1 }
         })
-        .collect::<Vec<_>>();
-
-    let entity = cmd.push(());
-    cmd.assemble_wgpu_buffer_data_with_usage::<LineInstance, _>(
-        entity,
-        LineInstanceDataComponent::construct(lines),
-        buffer_size_of::<LineInstanceData>() * buffer_index as BufferAddress,
-        Some(buffer_target),
-    );
-}
-
-fn assemble_line_strip(
-    cmd: &mut legion::systems::CommandBuffer,
-    buffer_target: Entity,
-    buffer_index: usize,
-    mut vertices: Vec<MeshVertexData>,
-) {
-    let first = vertices.remove(0);
-    let last = vertices.pop().unwrap();
-    let inter = vertices.into_iter().flat_map(|v| [v, v]);
-    let vertices = std::iter::once(first)
-        .chain(inter)
-        .chain(std::iter::once(last))
-        .collect();
-
-    assemble_line_list(cmd, buffer_target, buffer_index, vertices)
-}
-
-fn assemble_mesh(
-    cmd: &mut legion::systems::CommandBuffer,
-    buffer_target: Entity,
-    vertex_buffer_index: BufferAddress,
-    index_buffer_index: BufferAddress,
-    vertices: Vec<MeshVertexData>,
-    indices: Vec<u16>,
-) {
-    let entity = cmd.push(());
-    cmd.assemble_wgpu_buffer_data_with_usage::<MeshVertex, _>(
-        entity,
-        MeshVertexDataComponent::construct(vertices),
-        buffer_size_of::<MeshVertexData>() * vertex_buffer_index,
-        Some(buffer_target),
-    );
-    cmd.assemble_wgpu_buffer_data_with_usage::<MeshIndex, _>(
-        entity,
-        MeshIndexDataComponent::construct(indices),
-        buffer_size_of::<u16>() * index_buffer_index,
-        Some(buffer_target),
-    );
-}
-
-fn assemble_triangle_list(
-    cmd: &mut legion::systems::CommandBuffer,
-    buffer_target: Entity,
-    vertex_buffer_index: BufferAddress,
-    index_buffer_index: BufferAddress,
-    mut base_index: u16,
-    vertices: Vec<MeshVertexData>,
-) {
-    let indices = vertices
-        .chunks(3)
-        .flat_map(|_| {
-            let is = [base_index, base_index + 1, base_index + 2];
-            base_index += 3;
-            is
-        })
-        .collect::<Vec<_>>();
-
-    assemble_mesh(
-        cmd,
-        buffer_target,
-        vertex_buffer_index,
-        index_buffer_index,
-        vertices,
-        indices,
-    );
-}
-
-fn assemble_triangle_fan(
-    cmd: &mut legion::systems::CommandBuffer,
-    buffer_target: Entity,
-    vertex_buffer_index: BufferAddress,
-    index_buffer_index: BufferAddress,
-    base_index: u16,
-    vertices: Vec<MeshVertexData>,
-) {
-    let mut current_index = base_index;
-    let indices = (0..vertices.len() - 2)
-        .flat_map(|_| {
-            let is = [base_index, current_index + 1, current_index + 2];
-            current_index += 1;
-            is
-        })
-        .collect::<Vec<_>>();
-
-    assemble_mesh(
-        cmd,
-        buffer_target,
-        vertex_buffer_index,
-        index_buffer_index,
-        vertices,
-        indices,
-    );
+        .collect()
 }
 
 pub fn winit_event_handler<T>(mut f: impl EventLoopHandler<T>) -> impl EventLoopHandler<T> {
@@ -826,7 +816,8 @@ pub fn winit_event_handler<T>(mut f: impl EventLoopHandler<T>) -> impl EventLoop
         antigen_wgpu::create_samplers_with_usage_system::<Linear>(),
         antigen_wgpu::buffer_write_system::<Uniform, TotalTimeComponent, f32>(),
         antigen_wgpu::buffer_write_system::<Uniform, DeltaTimeComponent, f32>(),
-        antigen_wgpu::buffer_write_system::<Uniform, ProjectionMatrixComponent, [[f32; 4]; 4]>(),
+        antigen_wgpu::buffer_write_system::<Uniform, PerspectiveMatrixComponent, [[f32; 4]; 4]>(),
+        antigen_wgpu::buffer_write_system::<Uniform, OrthographicMatrixComponent, [[f32; 4]; 4]>(),
         antigen_wgpu::buffer_write_system::<LineVertex, LineVertexDataComponent, Vec<LineVertexData>>(
         ),
         antigen_wgpu::buffer_write_system::<
