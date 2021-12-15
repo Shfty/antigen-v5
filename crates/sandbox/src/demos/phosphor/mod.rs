@@ -132,13 +132,13 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     cmd.add_component(window_entity, RedrawUnconditionally);
 
     // Renderer
-    cmd.add_component(renderer_entity, Phosphor);
-    cmd.assemble_wgpu_render_pipeline_with_usage::<HdrDecay>(renderer_entity);
-    cmd.assemble_wgpu_render_pipeline_with_usage::<HdrLine>(renderer_entity);
-    cmd.assemble_wgpu_render_pipeline_with_usage::<HdrMesh>(renderer_entity);
+    cmd.add_component(renderer_entity, PhosphorRenderer);
+    cmd.assemble_wgpu_render_pipeline_with_usage::<PhosphorDecay>(renderer_entity);
+    cmd.assemble_wgpu_render_pipeline_with_usage::<BeamLine>(renderer_entity);
+    cmd.assemble_wgpu_render_pipeline_with_usage::<BeamMesh>(renderer_entity);
     cmd.assemble_wgpu_bind_group_with_usage::<Uniform>(renderer_entity);
-    cmd.assemble_wgpu_bind_group_with_usage::<HdrFrontBuffer>(renderer_entity);
-    cmd.assemble_wgpu_bind_group_with_usage::<HdrBackBuffer>(renderer_entity);
+    cmd.assemble_wgpu_bind_group_with_usage::<PhosphorFrontBuffer>(renderer_entity);
+    cmd.assemble_wgpu_bind_group_with_usage::<PhosphorBackBuffer>(renderer_entity);
     cmd.assemble_wgpu_render_pipeline_with_usage::<Tonemap>(renderer_entity);
     cmd.assemble_wgpu_command_buffers(renderer_entity);
     cmd.add_component(renderer_entity, BufferFlipFlopComponent::construct(false));
@@ -148,11 +148,11 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     // Window reference for input handling
     cmd.add_indirect_component::<WindowComponent>(renderer_entity, window_entity);
 
-    // HDR front buffer
-    cmd.assemble_wgpu_texture_with_usage::<HdrFrontBuffer>(
+    // Beam buffer
+    cmd.assemble_wgpu_texture_with_usage::<BeamBuffer>(
         renderer_entity,
         TextureDescriptor {
-            label: Some("HDR Front Buffer"),
+            label: Some("Beam Buffer"),
             size: Extent3d {
                 width: 640,
                 height: 480,
@@ -166,11 +166,11 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         },
     );
 
-    cmd.assemble_wgpu_texture_view_with_usage::<HdrFrontBuffer>(
+    cmd.assemble_wgpu_texture_view_with_usage::<BeamBuffer>(
         renderer_entity,
         renderer_entity,
         TextureViewDescriptor {
-            label: Some("HDR Front Buffer View"),
+            label: Some("Beam Buffer View"),
             format: None,
             dimension: None,
             aspect: TextureAspect::All,
@@ -181,44 +181,11 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         },
     );
 
-    // HDR back buffer
-    cmd.assemble_wgpu_texture_with_usage::<HdrBackBuffer>(
+    // Beam depth buffer
+    cmd.assemble_wgpu_texture_with_usage::<BeamDepthBuffer>(
         renderer_entity,
         TextureDescriptor {
-            label: Some("HDR Back Buffer"),
-            size: Extent3d {
-                width: 640,
-                height: 480,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: TextureDimension::D2,
-            format: HDR_TEXTURE_FORMAT,
-            usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
-        },
-    );
-
-    cmd.assemble_wgpu_texture_view_with_usage::<HdrBackBuffer>(
-        renderer_entity,
-        renderer_entity,
-        TextureViewDescriptor {
-            label: Some("HDR Back Buffer View"),
-            format: None,
-            dimension: None,
-            aspect: TextureAspect::All,
-            base_mip_level: 0,
-            mip_level_count: None,
-            base_array_layer: 0,
-            array_layer_count: None,
-        },
-    );
-
-    // HDR depth buffer
-    cmd.assemble_wgpu_texture_with_usage::<HdrDepthBuffer>(
-        renderer_entity,
-        TextureDescriptor {
-            label: Some("HDR Depth Buffer"),
+            label: Some("Beam Depth Buffer"),
             size: Extent3d {
                 width: 640,
                 height: 480,
@@ -232,11 +199,77 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         },
     );
 
-    cmd.assemble_wgpu_texture_view_with_usage::<HdrDepthBuffer>(
+    cmd.assemble_wgpu_texture_view_with_usage::<BeamDepthBuffer>(
         renderer_entity,
         renderer_entity,
         TextureViewDescriptor {
-            label: Some("HDR Depth Buffer View"),
+            label: Some("Beam Depth Buffer View"),
+            format: None,
+            dimension: None,
+            aspect: TextureAspect::All,
+            base_mip_level: 0,
+            mip_level_count: None,
+            base_array_layer: 0,
+            array_layer_count: None,
+        },
+    );
+
+    // Phosphor front buffer
+    cmd.assemble_wgpu_texture_with_usage::<PhosphorFrontBuffer>(
+        renderer_entity,
+        TextureDescriptor {
+            label: Some("Phosphor Front Buffer"),
+            size: Extent3d {
+                width: 640,
+                height: 480,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: HDR_TEXTURE_FORMAT,
+            usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
+        },
+    );
+
+    cmd.assemble_wgpu_texture_view_with_usage::<PhosphorFrontBuffer>(
+        renderer_entity,
+        renderer_entity,
+        TextureViewDescriptor {
+            label: Some("Phosphor Front Buffer View"),
+            format: None,
+            dimension: None,
+            aspect: TextureAspect::All,
+            base_mip_level: 0,
+            mip_level_count: None,
+            base_array_layer: 0,
+            array_layer_count: None,
+        },
+    );
+
+    // Phosphor back buffer
+    cmd.assemble_wgpu_texture_with_usage::<PhosphorBackBuffer>(
+        renderer_entity,
+        TextureDescriptor {
+            label: Some("Phosphor Back Buffer"),
+            size: Extent3d {
+                width: 640,
+                height: 480,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: HDR_TEXTURE_FORMAT,
+            usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
+        },
+    );
+
+    cmd.assemble_wgpu_texture_view_with_usage::<PhosphorBackBuffer>(
+        renderer_entity,
+        renderer_entity,
+        TextureViewDescriptor {
+            label: Some("Phosphor Back Buffer View"),
             format: None,
             dimension: None,
             aspect: TextureAspect::All,
@@ -255,7 +288,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         include_bytes!("textures/gradients.png"),
     );
 
-    // HDR sampler
+    // Phosphor sampler
     cmd.assemble_wgpu_sampler_with_usage::<Linear>(
         renderer_entity,
         SamplerDescriptor {
@@ -271,7 +304,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     );
 
     // Shaders
-    cmd.assemble_wgpu_shader_with_usage::<HdrDecay>(
+    cmd.assemble_wgpu_shader_with_usage::<PhosphorDecay>(
         renderer_entity,
         ShaderModuleDescriptor {
             label: None,
@@ -281,7 +314,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         },
     );
 
-    cmd.assemble_wgpu_shader_with_usage::<HdrLine>(
+    cmd.assemble_wgpu_shader_with_usage::<BeamLine>(
         renderer_entity,
         ShaderModuleDescriptor {
             label: None,
@@ -290,7 +323,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
             ))),
         },
     );
-    cmd.assemble_wgpu_shader_with_usage::<HdrMesh>(
+    cmd.assemble_wgpu_shader_with_usage::<BeamMesh>(
         renderer_entity,
         ShaderModuleDescriptor {
             label: None,
@@ -796,22 +829,24 @@ fn build_map_data(map: shambler::shalrath::repr::Map) -> Vec<LineInstanceData> {
 
 pub fn winit_event_handler<T>(mut f: impl EventLoopHandler<T>) -> impl EventLoopHandler<T> {
     let mut prepare_schedule = serial![
-        antigen_wgpu::create_shader_modules_with_usage_system::<HdrDecay>(),
-        antigen_wgpu::create_shader_modules_with_usage_system::<HdrLine>(),
-        antigen_wgpu::create_shader_modules_with_usage_system::<HdrMesh>(),
+        antigen_wgpu::create_shader_modules_with_usage_system::<BeamLine>(),
+        antigen_wgpu::create_shader_modules_with_usage_system::<BeamMesh>(),
+        antigen_wgpu::create_shader_modules_with_usage_system::<PhosphorDecay>(),
         antigen_wgpu::create_shader_modules_with_usage_system::<Tonemap>(),
         antigen_wgpu::create_buffers_system::<Uniform>(),
         antigen_wgpu::create_buffers_system::<LineVertex>(),
         antigen_wgpu::create_buffers_system::<LineInstance>(),
         antigen_wgpu::create_buffers_system::<MeshVertex>(),
         antigen_wgpu::create_buffers_system::<MeshIndex>(),
-        antigen_wgpu::create_textures_system::<HdrFrontBuffer>(),
-        antigen_wgpu::create_textures_system::<HdrBackBuffer>(),
-        antigen_wgpu::create_textures_system::<HdrDepthBuffer>(),
+        antigen_wgpu::create_textures_system::<BeamBuffer>(),
+        antigen_wgpu::create_textures_system::<BeamDepthBuffer>(),
+        antigen_wgpu::create_textures_system::<PhosphorFrontBuffer>(),
+        antigen_wgpu::create_textures_system::<PhosphorBackBuffer>(),
         antigen_wgpu::create_textures_system::<Gradients>(),
-        antigen_wgpu::create_texture_views_system::<HdrFrontBuffer>(),
-        antigen_wgpu::create_texture_views_system::<HdrBackBuffer>(),
-        antigen_wgpu::create_texture_views_system::<HdrDepthBuffer>(),
+        antigen_wgpu::create_texture_views_system::<BeamBuffer>(),
+        antigen_wgpu::create_texture_views_system::<BeamDepthBuffer>(),
+        antigen_wgpu::create_texture_views_system::<PhosphorFrontBuffer>(),
+        antigen_wgpu::create_texture_views_system::<PhosphorBackBuffer>(),
         antigen_wgpu::create_texture_views_system::<Gradients>(),
         antigen_wgpu::create_samplers_with_usage_system::<Linear>(),
         antigen_wgpu::buffer_write_system::<Uniform, TotalTimeComponent, f32>(),

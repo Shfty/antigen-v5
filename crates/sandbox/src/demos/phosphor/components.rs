@@ -8,7 +8,7 @@ use antigen_wgpu::{
 };
 
 // Phosphor renderer tag
-pub struct Phosphor;
+pub struct PhosphorRenderer;
 
 // Usage tags
 pub enum Position {}
@@ -20,13 +20,13 @@ pub enum DeltaTime {}
 
 pub enum Uniform {}
 
-pub enum Hdr {}
-pub enum HdrDecay {}
-pub enum HdrLine {}
-pub enum HdrMesh {}
-pub enum HdrFrontBuffer {}
-pub enum HdrBackBuffer {}
-pub enum HdrDepthBuffer {}
+pub enum PhosphorDecay {}
+pub enum BeamLine {}
+pub enum BeamMesh {}
+pub enum BeamBuffer {}
+pub enum BeamDepthBuffer {}
+pub enum PhosphorFrontBuffer {}
+pub enum PhosphorBackBuffer {}
 pub enum Tonemap {}
 
 pub enum Linear {}
@@ -69,23 +69,28 @@ pub struct UniformData {
 pub type UniformDataComponent = Usage<Uniform, RwLock<UniformData>>;
 pub type UniformBufferComponent = Usage<Uniform, BufferComponent>;
 
-pub type HdrDecayShaderComponent = Usage<HdrDecay, ShaderModuleComponent>;
-pub type HdrLineShaderComponent = Usage<HdrLine, ShaderModuleComponent>;
-pub type HdrMeshShaderComponent = Usage<HdrMesh, ShaderModuleComponent>;
-pub type HdrFrontBufferComponent = Usage<HdrFrontBuffer, TextureComponent>;
-pub type HdrBackBufferComponent = Usage<HdrBackBuffer, TextureComponent>;
-pub type HdrDepthBufferComponent = Usage<HdrDepthBuffer, TextureComponent>;
-pub type HdrFrontBufferViewComponent = Usage<HdrFrontBuffer, TextureViewComponent>;
-pub type HdrBackBufferViewComponent = Usage<HdrBackBuffer, TextureViewComponent>;
-pub type HdrDepthBufferViewComponent = Usage<HdrDepthBuffer, TextureViewComponent>;
+pub type PhosphorDecayShaderComponent = Usage<PhosphorDecay, ShaderModuleComponent>;
+pub type BeamLineShaderComponent = Usage<BeamLine, ShaderModuleComponent>;
+pub type BeamMeshShaderComponent = Usage<BeamMesh, ShaderModuleComponent>;
+
+pub type BeamDepthBufferComponent = Usage<BeamDepthBuffer, TextureComponent>;
+pub type PhosphorFrontBufferComponent = Usage<PhosphorFrontBuffer, TextureComponent>;
+pub type PhosphorBackBufferComponent = Usage<PhosphorBackBuffer, TextureComponent>;
+
+pub type BeamBufferViewComponent = Usage<BeamBuffer, TextureViewComponent>;
+pub type BeamDepthBufferViewComponent = Usage<BeamDepthBuffer, TextureViewComponent>;
+pub type PhosphorFrontBufferViewComponent = Usage<PhosphorFrontBuffer, TextureViewComponent>;
+pub type PhosphorBackBufferViewComponent = Usage<PhosphorBackBuffer, TextureViewComponent>;
 
 pub type LinearSamplerComponent = Usage<Linear, SamplerComponent>;
-pub type HdrDecayPipelineComponent = Usage<HdrDecay, RenderPipelineComponent>;
-pub type HdrLinePipelineComponent = Usage<HdrLine, RenderPipelineComponent>;
-pub type HdrMeshPipelineComponent = Usage<HdrMesh, RenderPipelineComponent>;
-pub type FrontBindGroupComponent = Usage<HdrFrontBuffer, BindGroupComponent>;
-pub type BackBindGroupComponent = Usage<HdrBackBuffer, BindGroupComponent>;
+
+pub type BeamLinePipelineComponent = Usage<BeamLine, RenderPipelineComponent>;
+pub type BeamMeshPipelineComponent = Usage<BeamMesh, RenderPipelineComponent>;
+pub type PhosphorDecayPipelineComponent = Usage<PhosphorDecay, RenderPipelineComponent>;
+
 pub type UniformBindGroupComponent = Usage<Uniform, BindGroupComponent>;
+pub type FrontBindGroupComponent = Usage<PhosphorFrontBuffer, BindGroupComponent>;
+pub type BackBindGroupComponent = Usage<PhosphorBackBuffer, BindGroupComponent>;
 
 pub type TonemapShaderComponent = Usage<Tonemap, ShaderModuleComponent>;
 pub type TonemapPipelineComponent = Usage<Tonemap, RenderPipelineComponent>;

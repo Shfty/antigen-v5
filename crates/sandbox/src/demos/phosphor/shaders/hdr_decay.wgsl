@@ -13,7 +13,10 @@ var<uniform> r_uniforms: Uniforms;
 var r_linear_sampler: sampler;
 
 [[group(1), binding(0)]]
-var r_hdr: texture_2d<f32>;
+var r_back_buffer: texture_2d<f32>;
+
+[[group(1), binding(1)]]
+var r_beam_buffer: texture_2d<f32>;
 
 struct VertexOutput {
     [[builtin(position)]] position: vec4<f32>;
@@ -32,13 +35,13 @@ fn vs_main([[builtin(vertex_index)]] vertex_index: u32) -> VertexOutput {
 
 [[stage(fragment)]]
 fn fs_main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
-    let hdr = textureSample(r_hdr, r_linear_sampler, in.uv);
+    let back = textureSample(r_back_buffer, r_linear_sampler, in.uv);
 
-    // Unpack HDR fragment
-    let delta_intensity = hdr.r;
-    let delta_delta = hdr.g;
-    let gradient = hdr.b;
-    let intensity = hdr.a;
+    // Unpack beam fragment
+    let delta_intensity = back.r;
+    let delta_delta = back.g;
+    let gradient = back.b;
+    let intensity = back.a;
 
     // Integrate intensity
     let prev_intensity = intensity;
@@ -59,6 +62,13 @@ fn fs_main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     // Zero out delta intensity and delta delta if delta intensity changes sign
     let delta_intensity = delta_intensity * delta_changed;
     let delta_delta = delta_delta * delta_changed;
+
+    let beam = textureSample(r_beam_buffer, r_linear_sampler, in.uv);
+
+    let delta_intensity = beam.r;
+    let delta_delta = beam.g;
+    let gradient = beam.b;
+    let intensity = max(intensity, beam.a);
 
     return vec4<f32>(delta_intensity, delta_delta, gradient, intensity);
 }

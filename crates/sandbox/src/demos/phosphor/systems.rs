@@ -8,7 +8,23 @@ use antigen_core::{
     LazyComponent, ReadWriteLock, Usage,
 };
 
-use antigen_wgpu::{CommandBuffersComponent, RenderAttachmentTextureView, SurfaceConfigurationComponent, TextureDescriptorComponent, TextureViewDescriptorComponent, buffer_size_of, wgpu::{BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource, BindingType, BlendComponent, BlendFactor, BlendOperation, BlendState, BufferBindingType, BufferSize, Color, ColorTargetState, ColorWrites, CommandEncoderDescriptor, CompareFunction, DepthBiasState, DepthStencilState, Device, Extent3d, Face, FragmentState, FrontFace, IndexFormat, LoadOp, MultisampleState, Operations, PipelineLayoutDescriptor, PrimitiveState, PrimitiveTopology, RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor, RenderPipelineDescriptor, ShaderStages, StencilState, TextureFormat, TextureSampleType, TextureViewDimension, VertexAttribute, VertexBufferLayout, VertexFormat, VertexState, VertexStepMode}};
+use antigen_wgpu::{
+    buffer_size_of,
+    wgpu::{
+        BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry,
+        BindingResource, BindingType, BlendComponent, BlendFactor, BlendOperation, BlendState,
+        BufferBindingType, BufferSize, Color, ColorTargetState, ColorWrites,
+        CommandEncoderDescriptor, CompareFunction, DepthBiasState, DepthStencilState, Device,
+        Extent3d, Face, FragmentState, FrontFace, IndexFormat, LoadOp, MultisampleState,
+        Operations, PipelineLayoutDescriptor, PrimitiveState, PrimitiveTopology,
+        RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor,
+        RenderPipelineDescriptor, ShaderStages, StencilState, TextureFormat, TextureSampleType,
+        TextureViewDimension, VertexAttribute, VertexBufferLayout, VertexFormat, VertexState,
+        VertexStepMode,
+    },
+    CommandBuffersComponent, RenderAttachmentTextureView, SurfaceConfigurationComponent,
+    TextureDescriptorComponent, TextureViewDescriptorComponent,
+};
 
 use antigen_winit::{winit::event::WindowEvent, WindowComponent, WindowEventComponent};
 use legion::{world::SubWorld, IntoQuery};
@@ -19,39 +35,47 @@ use legion::{world::SubWorld, IntoQuery};
 #[read_component(SurfaceConfigurationComponent)]
 pub fn phosphor_prepare(
     world: &legion::world::SubWorld,
-    _: &Phosphor,
-    uniform_bind_group_component: &UniformBindGroupComponent,
-    hdr_decay_shader: &HdrDecayShaderComponent,
-    hdr_line_shader: &HdrLineShaderComponent,
-    hdr_mesh_shader: &HdrMeshShaderComponent,
-    hdr_decay_pipeline_component: &HdrDecayPipelineComponent,
-    hdr_line_pipeline_component: &HdrLinePipelineComponent,
-    hdr_mesh_pipeline_component: &HdrMeshPipelineComponent,
-    hdr_front_bind_group_component: &FrontBindGroupComponent,
-    hdr_front_buffer_view: &HdrFrontBufferViewComponent,
-    hdr_back_bind_group_component: &BackBindGroupComponent,
-    hdr_back_buffer_view: &HdrBackBufferViewComponent,
-    gradients_view: &GradientTextureViewComponent,
-    linear_sampler: &LinearSamplerComponent,
-    tonemap_shader: &TonemapShaderComponent,
+    _: &PhosphorRenderer,
+    // Render pipelines
+    beam_line_pipeline_component: &BeamLinePipelineComponent,
+    beam_mesh_pipeline_component: &BeamMeshPipelineComponent,
+    phosphor_decay_pipeline_component: &PhosphorDecayPipelineComponent,
     tonemap_pipeline_component: &TonemapPipelineComponent,
+    // Bind groups
+    uniform_bind_group_component: &UniformBindGroupComponent,
+    front_bind_group_component: &FrontBindGroupComponent,
+    back_bind_group_component: &BackBindGroupComponent,
+    // Shaders
+    beam_line_shader: &BeamLineShaderComponent,
+    beam_mesh_shader: &BeamMeshShaderComponent,
+    phosphor_decay_shader: &PhosphorDecayShaderComponent,
+    tonemap_shader: &TonemapShaderComponent,
+    // Texture views
+    beam_buffer_view: &BeamBufferViewComponent,
+    phosphor_front_buffer_view: &PhosphorFrontBufferViewComponent,
+    phosphor_back_buffer_view: &PhosphorBackBufferViewComponent,
+    gradients_view: &GradientTextureViewComponent,
+    // Samplers
+    linear_sampler: &LinearSamplerComponent,
+    // Buffers
     uniform_buffer: &UniformBufferComponent,
+    // Misc
     surface_component: &IndirectComponent<SurfaceConfigurationComponent>,
 ) {
     // Fetch resources
     let device = <&Device>::query().iter(world).next().unwrap();
 
-    lazy_read_ready_else_return!(hdr_decay_shader);
-    lazy_read_ready_else_return!(hdr_line_shader);
-    lazy_read_ready_else_return!(hdr_mesh_shader);
-    lazy_read_ready_else_return!(hdr_front_buffer_view);
-    lazy_read_ready_else_return!(hdr_back_buffer_view);
+    lazy_read_ready_else_return!(phosphor_decay_shader);
+    lazy_read_ready_else_return!(beam_line_shader);
+    lazy_read_ready_else_return!(beam_mesh_shader);
+    lazy_read_ready_else_return!(tonemap_shader);
 
+    lazy_read_ready_else_return!(beam_buffer_view);
+    lazy_read_ready_else_return!(phosphor_front_buffer_view);
+    lazy_read_ready_else_return!(phosphor_back_buffer_view);
     lazy_read_ready_else_return!(gradients_view);
 
     lazy_read_ready_else_return!(linear_sampler);
-
-    lazy_read_ready_else_return!(tonemap_shader);
 
     lazy_read_ready_else_return!(uniform_buffer);
 
@@ -119,114 +143,19 @@ pub fn phosphor_prepare(
             .set_ready(uniform_bind_group);
     }
 
-    // HDR bind group
-    let hdr_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-        label: Some("HDR Bind Group Layout"),
-        entries: &[
-            BindGroupLayoutEntry {
-                binding: 0,
-                visibility: ShaderStages::FRAGMENT,
-                ty: BindingType::Texture {
-                    sample_type: TextureSampleType::Float { filterable: false },
-                    view_dimension: TextureViewDimension::D2,
-                    multisampled: false,
-                },
-                count: None,
-            },
-            BindGroupLayoutEntry {
-                binding: 1,
-                visibility: ShaderStages::FRAGMENT,
-                ty: BindingType::Texture {
-                    sample_type: TextureSampleType::Float { filterable: false },
-                    view_dimension: TextureViewDimension::D2,
-                    multisampled: false,
-                },
-                count: None,
-            },
-        ],
-    });
-
-    if hdr_front_bind_group_component.read().is_pending() {
-        let hdr_front_bind_group = device.create_bind_group(&BindGroupDescriptor {
-            layout: &hdr_bind_group_layout,
-            entries: &[
-                BindGroupEntry {
-                    binding: 0,
-                    resource: BindingResource::TextureView(&hdr_back_buffer_view),
-                },
-                BindGroupEntry {
-                    binding: 1,
-                    resource: BindingResource::TextureView(&gradients_view),
-                },
-            ],
-            label: None,
-        });
-        hdr_front_bind_group_component
-            .write()
-            .set_ready(hdr_front_bind_group);
-    }
-
-    if hdr_back_bind_group_component.read().is_pending() {
-        let hdr_back_bind_group = device.create_bind_group(&BindGroupDescriptor {
-            layout: &hdr_bind_group_layout,
-            entries: &[
-                BindGroupEntry {
-                    binding: 0,
-                    resource: BindingResource::TextureView(&hdr_front_buffer_view),
-                },
-                BindGroupEntry {
-                    binding: 1,
-                    resource: BindingResource::TextureView(&gradients_view),
-                },
-            ],
-            label: None,
-        });
-        hdr_back_bind_group_component
-            .write()
-            .set_ready(hdr_back_bind_group);
-    }
-
-    // Don't update if the pipeline has already been initialized
-    if !hdr_decay_pipeline_component.read().is_pending() {
-        return;
-    }
-
-    // HDR pipeline layout
-    let hdr_pipeline_layout = device.create_pipeline_layout(&mut PipelineLayoutDescriptor {
+    // Beam pipeline layout
+    let beam_pipeline_layout = device.create_pipeline_layout(&mut PipelineLayoutDescriptor {
         label: None,
-        bind_group_layouts: &[&uniform_bind_group_layout, &hdr_bind_group_layout],
+        bind_group_layouts: &[&uniform_bind_group_layout],
         push_constant_ranges: &[],
     });
 
-    // HDR decay pipeline
-    let hdr_decay_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+    // Beam mesh pipeline
+    let beam_mesh_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
         label: None,
-        layout: Some(&hdr_pipeline_layout),
+        layout: Some(&beam_pipeline_layout),
         vertex: VertexState {
-            module: &hdr_decay_shader,
-            entry_point: "vs_main",
-            buffers: &[],
-        },
-        fragment: Some(FragmentState {
-            module: &hdr_decay_shader,
-            entry_point: "fs_main",
-            targets: &[HDR_TEXTURE_FORMAT.into()],
-        }),
-        primitive: PrimitiveState::default(),
-        depth_stencil: None,
-        multisample: MultisampleState::default(),
-    });
-
-    hdr_decay_pipeline_component
-        .write()
-        .set_ready(hdr_decay_pipeline);
-
-    // HDR mesh pipeline
-    let hdr_mesh_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
-        label: None,
-        layout: Some(&hdr_pipeline_layout),
-        vertex: VertexState {
-            module: &hdr_mesh_shader,
+            module: &beam_mesh_shader,
             entry_point: "vs_main",
             buffers: &[VertexBufferLayout {
                 array_stride: buffer_size_of::<MeshVertexData>(),
@@ -261,7 +190,7 @@ pub fn phosphor_prepare(
             }],
         },
         fragment: Some(FragmentState {
-            module: &hdr_line_shader,
+            module: &beam_mesh_shader,
             entry_point: "fs_main",
             targets: &[HDR_TEXTURE_FORMAT.into()],
         }),
@@ -281,16 +210,16 @@ pub fn phosphor_prepare(
         multisample: MultisampleState::default(),
     });
 
-    hdr_mesh_pipeline_component
+    beam_mesh_pipeline_component
         .write()
-        .set_ready(hdr_mesh_pipeline);
+        .set_ready(beam_mesh_pipeline);
 
-    // HDR line pipeline
-    let hdr_line_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+    // Beam line pipeline
+    let beam_line_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
         label: None,
-        layout: Some(&hdr_pipeline_layout),
+        layout: Some(&beam_pipeline_layout),
         vertex: VertexState {
-            module: &hdr_line_shader,
+            module: &beam_line_shader,
             entry_point: "vs_main",
             buffers: &[
                 VertexBufferLayout {
@@ -368,7 +297,7 @@ pub fn phosphor_prepare(
             ],
         },
         fragment: Some(FragmentState {
-            module: &hdr_line_shader,
+            module: &beam_line_shader,
             entry_point: "fs_main",
             targets: &[ColorTargetState {
                 format: HDR_TEXTURE_FORMAT,
@@ -399,14 +328,133 @@ pub fn phosphor_prepare(
         multisample: MultisampleState::default(),
     });
 
-    hdr_line_pipeline_component
+    beam_line_pipeline_component
         .write()
-        .set_ready(hdr_line_pipeline);
+        .set_ready(beam_line_pipeline);
 
-    // Blit pipeline
+    // Phosphor bind group
+    let phosphor_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+        label: Some("Phosphor Bind Group Layout"),
+        entries: &[
+            BindGroupLayoutEntry {
+                binding: 0,
+                visibility: ShaderStages::FRAGMENT,
+                ty: BindingType::Texture {
+                    sample_type: TextureSampleType::Float { filterable: false },
+                    view_dimension: TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            BindGroupLayoutEntry {
+                binding: 1,
+                visibility: ShaderStages::FRAGMENT,
+                ty: BindingType::Texture {
+                    sample_type: TextureSampleType::Float { filterable: false },
+                    view_dimension: TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            BindGroupLayoutEntry {
+                binding: 2,
+                visibility: ShaderStages::FRAGMENT,
+                ty: BindingType::Texture {
+                    sample_type: TextureSampleType::Float { filterable: false },
+                    view_dimension: TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+        ],
+    });
+
+    if front_bind_group_component.read().is_pending() {
+        let front_bind_group = device.create_bind_group(&BindGroupDescriptor {
+            layout: &phosphor_bind_group_layout,
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: BindingResource::TextureView(&phosphor_back_buffer_view),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: BindingResource::TextureView(&beam_buffer_view),
+                },
+                BindGroupEntry {
+                    binding: 2,
+                    resource: BindingResource::TextureView(&gradients_view),
+                },
+            ],
+            label: None,
+        });
+        front_bind_group_component
+            .write()
+            .set_ready(front_bind_group);
+    }
+
+    if back_bind_group_component.read().is_pending() {
+        let back_bind_group = device.create_bind_group(&BindGroupDescriptor {
+            layout: &phosphor_bind_group_layout,
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: BindingResource::TextureView(&phosphor_front_buffer_view),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: BindingResource::TextureView(&beam_buffer_view),
+                },
+                BindGroupEntry {
+                    binding: 2,
+                    resource: BindingResource::TextureView(&gradients_view),
+                },
+            ],
+            label: None,
+        });
+        back_bind_group_component.write().set_ready(back_bind_group);
+    }
+
+    // Don't update if the pipeline has already been initialized
+    if !phosphor_decay_pipeline_component.read().is_pending() {
+        return;
+    }
+
+    // Phosphor pipeline layout
+    let phosphor_decay_pipeline_layout =
+        device.create_pipeline_layout(&mut PipelineLayoutDescriptor {
+            label: None,
+            bind_group_layouts: &[&uniform_bind_group_layout, &phosphor_bind_group_layout],
+            push_constant_ranges: &[],
+        });
+
+    // Phosphor decay pipeline
+    let phosphor_decay_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+        label: None,
+        layout: Some(&phosphor_decay_pipeline_layout),
+        vertex: VertexState {
+            module: &phosphor_decay_shader,
+            entry_point: "vs_main",
+            buffers: &[],
+        },
+        fragment: Some(FragmentState {
+            module: &phosphor_decay_shader,
+            entry_point: "fs_main",
+            targets: &[HDR_TEXTURE_FORMAT.into()],
+        }),
+        primitive: PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: MultisampleState::default(),
+    });
+
+    phosphor_decay_pipeline_component
+        .write()
+        .set_ready(phosphor_decay_pipeline);
+
+    // Tonemap pipeline
     let tonemap_pipeline_layout = device.create_pipeline_layout(&mut PipelineLayoutDescriptor {
         label: None,
-        bind_group_layouts: &[&uniform_bind_group_layout, &hdr_bind_group_layout],
+        bind_group_layouts: &[&uniform_bind_group_layout, &phosphor_bind_group_layout],
         push_constant_ranges: &[],
     });
 
@@ -513,16 +561,25 @@ pub fn phosphor_update_oscilloscopes(
 #[read_component(SurfaceConfigurationComponent)]
 pub fn phosphor_resize(
     world: &SubWorld,
-    _: &Phosphor,
+    _: &PhosphorRenderer,
     surface_config: &IndirectComponent<SurfaceConfigurationComponent>,
-    hdr_front_bind_group: &FrontBindGroupComponent,
-    hdr_back_bind_group: &BackBindGroupComponent,
-    hdr_front_buffer_desc: &Usage<HdrFrontBuffer, TextureDescriptorComponent<'static>>,
-    hdr_front_buffer_view_desc: &Usage<HdrFrontBuffer, TextureViewDescriptorComponent<'static>>,
-    hdr_back_buffer_desc: &Usage<HdrBackBuffer, TextureDescriptorComponent<'static>>,
-    hdr_back_buffer_view_desc: &Usage<HdrBackBuffer, TextureViewDescriptorComponent<'static>>,
-    hdr_depth_buffer_desc: &Usage<HdrDepthBuffer, TextureDescriptorComponent<'static>>,
-    hdr_depth_buffer_view_desc: &Usage<HdrDepthBuffer, TextureViewDescriptorComponent<'static>>,
+    // Bind groups
+    front_bind_group: &FrontBindGroupComponent,
+    back_bind_group: &BackBindGroupComponent,
+    // Buffer descriptors
+    beam_buffer_desc: &Usage<BeamBuffer, TextureDescriptorComponent<'static>>,
+    beam_depth_buffer_desc: &Usage<BeamDepthBuffer, TextureDescriptorComponent<'static>>,
+    phosphor_front_buffer_desc: &Usage<PhosphorFrontBuffer, TextureDescriptorComponent<'static>>,
+    phosphor_back_buffer_desc: &Usage<PhosphorBackBuffer, TextureDescriptorComponent<'static>>,
+    // Buffer view descriptors
+    beam_buffer_view_desc: &Usage<BeamBuffer, TextureViewDescriptorComponent<'static>>,
+    beam_depth_buffer_view_desc: &Usage<BeamDepthBuffer, TextureViewDescriptorComponent<'static>>,
+    phosphor_front_buffer_view_desc: &Usage<
+        PhosphorFrontBuffer,
+        TextureViewDescriptorComponent<'static>,
+    >,
+    phosphor_back_buffer_view_desc: &Usage<PhosphorBackBuffer, TextureViewDescriptorComponent<'static>>,
+    // Matrices
     perspective_matrix: &Changed<PerspectiveMatrixComponent>,
     orthographic_matrix: &Changed<OrthographicMatrixComponent>,
 ) {
@@ -539,20 +596,23 @@ pub fn phosphor_resize(
         depth_or_array_layers: 1,
     };
 
-    hdr_front_buffer_desc.write().size = extent;
-    hdr_back_buffer_desc.write().size = extent;
-    hdr_depth_buffer_desc.write().size = extent;
+    beam_buffer_desc.write().size = extent;
+    beam_depth_buffer_desc.write().size = extent;
+    phosphor_front_buffer_desc.write().size = extent;
+    phosphor_back_buffer_desc.write().size = extent;
 
-    hdr_front_buffer_desc.set_changed(true);
-    hdr_back_buffer_desc.set_changed(true);
-    hdr_depth_buffer_desc.set_changed(true);
+    beam_buffer_desc.set_changed(true);
+    beam_depth_buffer_desc.set_changed(true);
+    phosphor_front_buffer_desc.set_changed(true);
+    phosphor_back_buffer_desc.set_changed(true);
 
-    hdr_front_buffer_view_desc.set_changed(true);
-    hdr_back_buffer_view_desc.set_changed(true);
-    hdr_depth_buffer_view_desc.set_changed(true);
+    beam_buffer_view_desc.set_changed(true);
+    beam_depth_buffer_view_desc.set_changed(true);
+    phosphor_front_buffer_view_desc.set_changed(true);
+    phosphor_back_buffer_view_desc.set_changed(true);
 
-    hdr_front_bind_group.write().set_pending();
-    hdr_back_bind_group.write().set_pending();
+    front_bind_group.write().set_pending();
+    back_bind_group.write().set_pending();
 
     let aspect = surface_config.width as f32 / surface_config.height as f32;
 
@@ -569,7 +629,7 @@ pub fn phosphor_resize(
 #[read_component(WindowEventComponent)]
 pub fn phosphor_cursor_moved(
     world: &SubWorld,
-    _: &Phosphor,
+    _: &PhosphorRenderer,
     projection_matrix: &Changed<PerspectiveMatrixComponent>,
     window: &IndirectComponent<WindowComponent>,
     surface_config: &IndirectComponent<SurfaceConfigurationComponent>,
@@ -626,21 +686,27 @@ pub fn phosphor_cursor_moved(
 #[read_component(Changed<LineInstanceDataComponent>)]
 pub fn phosphor_render(
     world: &legion::world::SubWorld,
-    _: &Phosphor,
-    uniform_bind_group: &UniformBindGroupComponent,
-    hdr_decay_pipeline: &HdrDecayPipelineComponent,
-    hdr_line_pipeline: &HdrLinePipelineComponent,
-    hdr_mesh_pipeline: &HdrMeshPipelineComponent,
-    hdr_front_bind_group: &FrontBindGroupComponent,
-    hdr_back_bind_group: &BackBindGroupComponent,
-    hdr_front_view: &HdrFrontBufferViewComponent,
-    hdr_back_view: &HdrBackBufferViewComponent,
-    hdr_depth_view: &HdrDepthBufferViewComponent,
+    _: &PhosphorRenderer,
+    // Pipelines
+    beam_line_pipeline: &BeamLinePipelineComponent,
+    beam_mesh_pipeline: &BeamMeshPipelineComponent,
+    phosphor_decay_pipeline: &PhosphorDecayPipelineComponent,
     tonemap_pipeline: &TonemapPipelineComponent,
+    // Bind groups
+    uniform_bind_group: &UniformBindGroupComponent,
+    front_bind_group: &FrontBindGroupComponent,
+    back_bind_group: &BackBindGroupComponent,
+    // Texture views
+    beam_buffer_view: &BeamBufferViewComponent,
+    beam_depth_view: &BeamDepthBufferViewComponent,
+    phosphor_front_view: &PhosphorFrontBufferViewComponent,
+    phosphor_back_view: &PhosphorBackBufferViewComponent,
+    // Buffers
     line_vertex_buffer: &LineVertexBufferComponent,
     line_instance_buffer: &LineInstanceBufferComponent,
     mesh_vertex_buffer: &MeshVertexBufferComponent,
     mesh_index_buffer: &MeshIndexBufferComponent,
+    // Misc
     buffer_flip_flop: &BufferFlipFlopComponent,
     timer: &TimerComponent,
     command_buffers: &CommandBuffersComponent,
@@ -654,18 +720,19 @@ pub fn phosphor_render(
 
     lazy_read_ready_else_return!(uniform_bind_group);
 
-    lazy_read_ready_else_return!(hdr_decay_pipeline);
-    lazy_read_ready_else_return!(hdr_front_bind_group);
-    lazy_read_ready_else_return!(hdr_back_bind_group);
-    lazy_read_ready_else_return!(hdr_front_view);
-    lazy_read_ready_else_return!(hdr_back_view);
-    lazy_read_ready_else_return!(hdr_depth_view);
+    lazy_read_ready_else_return!(phosphor_decay_pipeline);
+    lazy_read_ready_else_return!(front_bind_group);
+    lazy_read_ready_else_return!(back_bind_group);
+    lazy_read_ready_else_return!(beam_buffer_view);
+    lazy_read_ready_else_return!(beam_depth_view);
+    lazy_read_ready_else_return!(phosphor_front_view);
+    lazy_read_ready_else_return!(phosphor_back_view);
 
-    lazy_read_ready_else_return!(hdr_line_pipeline);
+    lazy_read_ready_else_return!(beam_line_pipeline);
     lazy_read_ready_else_return!(line_vertex_buffer);
     lazy_read_ready_else_return!(line_instance_buffer);
 
-    lazy_read_ready_else_return!(hdr_mesh_pipeline);
+    lazy_read_ready_else_return!(beam_mesh_pipeline);
     lazy_read_ready_else_return!(mesh_vertex_buffer);
     lazy_read_ready_else_return!(mesh_index_buffer);
 
@@ -683,54 +750,24 @@ pub fn phosphor_render(
         timer.set_changed(false);
     }
 
-    // Copy texels from backbuffer and apply phosphor decay
+    // Draw beam meshes
     let mut rpass = encoder.begin_render_pass(&RenderPassDescriptor {
         label: None,
         color_attachments: &[RenderPassColorAttachment {
-            view: if buffer_flip_state {
-                hdr_front_view
-            } else {
-                hdr_back_view
-            },
+            view: beam_buffer_view,
             resolve_target: None,
             ops: Operations {
-                load: LoadOp::Clear(Color::BLACK),
-                store: true,
-            },
-        }],
-        depth_stencil_attachment: None,
-    });
-    rpass.set_pipeline(hdr_decay_pipeline);
-    rpass.set_bind_group(0, uniform_bind_group, &[]);
-    rpass.set_bind_group(
-        1,
-        if buffer_flip_state {
-            hdr_front_bind_group
-        } else {
-            hdr_back_bind_group
-        },
-        &[],
-    );
-    rpass.draw(0..4, 0..1);
-    drop(rpass);
-
-    // Draw meshes
-    let mut rpass = encoder.begin_render_pass(&RenderPassDescriptor {
-        label: None,
-        color_attachments: &[RenderPassColorAttachment {
-            view: if buffer_flip_state {
-                hdr_front_view
-            } else {
-                hdr_back_view
-            },
-            resolve_target: None,
-            ops: Operations {
-                load: LoadOp::Load,
+                load: LoadOp::Clear(Color {
+                    r: -7.0,
+                    g: 0.0,
+                    b: 0.0,
+                    a: 0.0,
+                }),
                 store: true,
             },
         }],
         depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
-            view: hdr_depth_view,
+            view: beam_depth_view,
             depth_ops: Some(Operations {
                 load: LoadOp::Clear(1.0),
                 store: true,
@@ -738,31 +775,18 @@ pub fn phosphor_render(
             stencil_ops: None,
         }),
     });
-    rpass.set_pipeline(hdr_mesh_pipeline);
+    rpass.set_pipeline(beam_mesh_pipeline);
     rpass.set_vertex_buffer(0, mesh_vertex_buffer.slice(..));
     rpass.set_index_buffer(mesh_index_buffer.slice(..), IndexFormat::Uint16);
     rpass.set_bind_group(0, uniform_bind_group, &[]);
-    rpass.set_bind_group(
-        1,
-        if buffer_flip_state {
-            hdr_front_bind_group
-        } else {
-            hdr_back_bind_group
-        },
-        &[],
-    );
     rpass.draw_indexed(0..MAX_MESH_INDICES as u32, 0, 0..1);
     drop(rpass);
 
-    // Draw lines
+    // Draw beam lines
     let mut rpass = encoder.begin_render_pass(&RenderPassDescriptor {
         label: None,
         color_attachments: &[RenderPassColorAttachment {
-            view: if buffer_flip_state {
-                hdr_front_view
-            } else {
-                hdr_back_view
-            },
+            view: beam_buffer_view,
             resolve_target: None,
             ops: Operations {
                 load: LoadOp::Load,
@@ -770,27 +794,18 @@ pub fn phosphor_render(
             },
         }],
         depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
-            view: hdr_depth_view,
+            view: beam_depth_view,
             depth_ops: Some(Operations {
                 load: LoadOp::Load,
-                store: false,
+                store: true,
             }),
             stencil_ops: None,
         }),
     });
-    rpass.set_pipeline(hdr_line_pipeline);
+    rpass.set_pipeline(beam_line_pipeline);
     rpass.set_vertex_buffer(0, line_vertex_buffer.slice(..));
     rpass.set_vertex_buffer(1, line_instance_buffer.slice(..));
     rpass.set_bind_group(0, uniform_bind_group, &[]);
-    rpass.set_bind_group(
-        1,
-        if buffer_flip_state {
-            hdr_front_bind_group
-        } else {
-            hdr_back_bind_group
-        },
-        &[],
-    );
 
     let draw_count = if draw_changed {
         MAX_LINES
@@ -800,7 +815,38 @@ pub fn phosphor_render(
     rpass.draw(0..14, 0..draw_count);
     drop(rpass);
 
-    // Tonemap HDR buffer to surface
+    // Combine beam buffer with phosphor back buffer in phosphor front buffer
+    let mut rpass = encoder.begin_render_pass(&RenderPassDescriptor {
+        label: None,
+        color_attachments: &[RenderPassColorAttachment {
+            view: if buffer_flip_state {
+                phosphor_front_view
+            } else {
+                phosphor_back_view
+            },
+            resolve_target: None,
+            ops: Operations {
+                load: LoadOp::Clear(Color::BLACK),
+                store: true,
+            },
+        }],
+        depth_stencil_attachment: None,
+    });
+    rpass.set_pipeline(phosphor_decay_pipeline);
+    rpass.set_bind_group(0, uniform_bind_group, &[]);
+    rpass.set_bind_group(
+        1,
+        if buffer_flip_state {
+            front_bind_group
+        } else {
+            back_bind_group
+        },
+        &[],
+    );
+    rpass.draw(0..4, 0..1);
+    drop(rpass);
+
+    // Tonemap phosphor buffer to surface
     let mut rpass = encoder.begin_render_pass(&RenderPassDescriptor {
         label: None,
         color_attachments: &[RenderPassColorAttachment {
@@ -818,9 +864,9 @@ pub fn phosphor_render(
     rpass.set_bind_group(
         1,
         if buffer_flip_state {
-            hdr_back_bind_group
+            back_bind_group
         } else {
-            hdr_front_bind_group
+            front_bind_group
         },
         &[],
     );
