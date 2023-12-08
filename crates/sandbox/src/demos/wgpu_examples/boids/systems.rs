@@ -164,6 +164,7 @@ pub fn boids_prepare(
         primitive: PrimitiveState::default(),
         depth_stencil: None,
         multisample: MultisampleState::default(),
+        multiview: None,
     });
 
     render_pipeline_component.write().set_ready(render_pipeline);

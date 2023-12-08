@@ -17,24 +17,7 @@ use antigen_core::{
     ReadWriteLock, Usage,
 };
 
-use antigen_wgpu::{
-    wgpu::{
-        util::{BufferInitDescriptor, DeviceExt},
-        vertex_attr_array, Adapter, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor,
-        BindGroupLayoutEntry, BindingResource, BindingType, BufferAddress, BufferBinding,
-        BufferBindingType, BufferDescriptor, BufferSize, BufferUsages, Color,
-        CommandEncoderDescriptor, CompareFunction, DepthBiasState, DepthStencilState, Device,
-        DownlevelFlags, Extent3d, Face, FragmentState, FrontFace, IndexFormat, LoadOp,
-        MultisampleState, Operations, PipelineLayoutDescriptor, PrimitiveState, PrimitiveTopology,
-        Queue, RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor,
-        RenderPipelineDescriptor, ShaderStages, StencilState, SurfaceConfiguration,
-        TextureDescriptor, TextureDimension, TextureSampleType, TextureUsages, TextureView,
-        TextureViewDescriptor, TextureViewDimension, VertexBufferLayout, VertexState,
-        VertexStepMode,
-    },
-    CommandBuffersComponent, RenderAttachmentTextureView, ShaderModuleComponent,
-    SurfaceConfigurationComponent,
-};
+use antigen_wgpu::{CommandBuffersComponent, RenderAttachmentTextureView, ShaderModuleComponent, SurfaceConfigurationComponent, wgpu::{Adapter, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource, BindingType, BufferAddress, BufferBinding, BufferBindingType, BufferDescriptor, BufferSize, BufferUsages, Color, CommandEncoderDescriptor, CompareFunction, DepthBiasState, DepthStencilState, Device, DownlevelFlags, Extent3d, Face, FragmentState, FrontFace, IndexFormat, LoadOp, MultisampleState, Operations, PipelineLayoutDescriptor, PrimitiveState, PrimitiveTopology, Queue, RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor, RenderPipelineDescriptor, SamplerBindingType, ShaderStages, StencilState, SurfaceConfiguration, TextureDescriptor, TextureDimension, TextureSampleType, TextureUsages, TextureView, TextureViewDescriptor, TextureViewDimension, VertexBufferLayout, VertexState, VertexStepMode, util::{BufferInitDescriptor, DeviceExt}, vertex_attr_array}};
 
 use legion::{world::SubWorld, IntoQuery};
 
@@ -256,6 +239,7 @@ pub fn shadow_prepare(
             },
         }),
         multisample: MultisampleState::default(),
+        multiview: None,
     });
 
     shadow_render_pipeline_component
@@ -309,10 +293,7 @@ pub fn shadow_prepare(
             BindGroupLayoutEntry {
                 binding: 3,
                 visibility: ShaderStages::FRAGMENT,
-                ty: BindingType::Sampler {
-                    comparison: true,
-                    filtering: true,
-                },
+                ty: BindingType::Sampler(SamplerBindingType::Comparison),
                 count: None,
             },
         ],
@@ -397,6 +378,7 @@ pub fn shadow_prepare(
             bias: DepthBiasState::default(),
         }),
         multisample: MultisampleState::default(),
+        multiview: None,
     });
 
     forward_render_pipeline_component

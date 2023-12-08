@@ -81,6 +81,7 @@ fn generate_mipmaps(
         },
         depth_stencil: None,
         multisample: MultisampleState::default(),
+        multiview: None,
     });
 
     let bind_group_layout = pipeline.get_bind_group_layout(0);
@@ -276,6 +277,7 @@ pub fn mipmap_prepare(
         },
         depth_stencil: None,
         multisample: MultisampleState::default(),
+        multiview: None,
     });
 
     // Create bind group

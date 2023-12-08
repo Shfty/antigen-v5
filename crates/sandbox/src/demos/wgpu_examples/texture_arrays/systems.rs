@@ -7,19 +7,7 @@ use super::{
 };
 use antigen_core::{GetIndirect, IndirectComponent, LazyComponent, ReadWriteLock};
 
-use antigen_wgpu::{
-    wgpu::{
-        include_spirv_raw, vertex_attr_array, BindGroupDescriptor, BindGroupEntry,
-        BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource, BindingType,
-        BufferAddress, Color, CommandEncoderDescriptor, Device, Features, FragmentState, FrontFace,
-        LoadOp, MultisampleState, Operations, PipelineLayoutDescriptor, PrimitiveState,
-        PushConstantRange, RenderPassColorAttachment, RenderPassDescriptor,
-        RenderPipelineDescriptor, ShaderStages, TextureSampleType, TextureViewDimension,
-        VertexBufferLayout, VertexState, VertexStepMode,
-    },
-    BindGroupComponent, CommandBuffersComponent, RenderAttachmentTextureView,
-    RenderPipelineComponent, SamplerComponent, SurfaceConfigurationComponent,
-};
+use antigen_wgpu::{BindGroupComponent, CommandBuffersComponent, RenderAttachmentTextureView, RenderPipelineComponent, SamplerComponent, SurfaceConfigurationComponent, wgpu::{BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource, BindingType, BufferAddress, Color, CommandEncoderDescriptor, Device, Features, FragmentState, FrontFace, LoadOp, MultisampleState, Operations, PipelineLayoutDescriptor, PrimitiveState, PushConstantRange, RenderPassColorAttachment, RenderPassDescriptor, RenderPipelineDescriptor, SamplerBindingType, ShaderStages, TextureSampleType, TextureViewDimension, VertexBufferLayout, VertexState, VertexStepMode, include_spirv_raw, vertex_attr_array}};
 
 use legion::IntoQuery;
 
@@ -123,10 +111,7 @@ pub fn texture_arrays_prepare(
             BindGroupLayoutEntry {
                 binding: 1,
                 visibility: ShaderStages::FRAGMENT,
-                ty: BindingType::Sampler {
-                    filtering: true,
-                    comparison: false,
-                },
+                ty: BindingType::Sampler(SamplerBindingType::Filtering),
                 count: None,
             },
         ],
@@ -187,6 +172,7 @@ pub fn texture_arrays_prepare(
         },
         depth_stencil: None,
         multisample: MultisampleState::default(),
+        multiview: None,
     });
     render_pipeline_component.write().set_ready(pipeline);
 }

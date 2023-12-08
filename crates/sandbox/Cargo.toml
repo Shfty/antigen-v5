@@ -22,6 +22,9 @@ antigen-core = { path = "../antigen-core" }
 antigen-winit = { path = "../antigen-winit" }
 antigen-wgpu = { path = "../antigen-wgpu" }
 antigen-util = { path = "../antigen-util" }
+antigen-fs = { path = "../antigen-fs" }
+antigen-shambler = { path = "../antigen-shambler" }
 
 shalrath = { path = "../../../sif/crates/shalrath" }
 shambler = { path = "../../../sif/crates/shambler" }
+expression = { path = "../../../expression" }

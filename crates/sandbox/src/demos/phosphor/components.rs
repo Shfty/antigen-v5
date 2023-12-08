@@ -3,8 +3,8 @@ use std::time::Instant;
 
 use antigen_core::{Changed, RwLock, Usage};
 use antigen_wgpu::{
-    BindGroupComponent, BufferComponent, RenderPipelineComponent, SamplerComponent,
-    ShaderModuleComponent, TextureComponent, TextureViewComponent, ToBytes,
+    BindGroupComponent, BufferComponent, ComputePipelineComponent, RenderPipelineComponent,
+    SamplerComponent, ShaderModuleComponent, TextureComponent, TextureViewComponent, ToBytes,
 };
 
 // Phosphor renderer tag
@@ -24,6 +24,7 @@ pub enum PhosphorDecay {}
 pub enum BeamLine {}
 pub enum BeamMesh {}
 pub enum BeamBuffer {}
+pub enum BeamMultisample {}
 pub enum BeamDepthBuffer {}
 pub enum PhosphorFrontBuffer {}
 pub enum PhosphorBackBuffer {}
@@ -31,9 +32,8 @@ pub enum Tonemap {}
 
 pub enum Linear {}
 
-pub enum Gradients {}
-
 pub enum LineVertex {}
+pub enum LineIndex {}
 pub enum LineInstance {}
 
 pub enum MeshVertex {}
@@ -46,6 +46,19 @@ pub enum FlipFlop {}
 
 pub enum Origin {}
 
+pub enum ComputeLineInstances {}
+
+pub enum MapFile {}
+
+#[derive(Debug)]
+pub enum VertexCount {}
+
+#[derive(Debug)]
+pub enum MeshIndexCount {}
+
+#[derive(Debug)]
+pub enum LineIndexCount {}
+
 // Usage-tagged components
 pub type PositionComponent = Usage<Position, RwLock<(f32, f32)>>;
 
@@ -55,6 +68,9 @@ pub type TotalTimeComponent = Usage<TotalTime, RwLock<f32>>;
 pub type DeltaTimeComponent = Usage<DeltaTime, RwLock<f32>>;
 pub type PerspectiveMatrixComponent = Usage<Perspective, RwLock<[[f32; 4]; 4]>>;
 pub type OrthographicMatrixComponent = Usage<Orthographic, RwLock<[[f32; 4]; 4]>>;
+pub type VertexCountComponent = Usage<VertexCount, RwLock<u64>>;
+pub type MeshIndexCountComponent = Usage<MeshIndexCount, RwLock<u64>>;
+pub type LineIndexCountComponent = Usage<LineIndexCount, RwLock<u64>>;
 
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone, Pod, Zeroable)]
@@ -69,25 +85,31 @@ pub struct UniformData {
 pub type UniformDataComponent = Usage<Uniform, RwLock<UniformData>>;
 pub type UniformBufferComponent = Usage<Uniform, BufferComponent>;
 
+pub type ComputeLineInstancesShader = Usage<ComputeLineInstances, ShaderModuleComponent>;
 pub type PhosphorDecayShaderComponent = Usage<PhosphorDecay, ShaderModuleComponent>;
 pub type BeamLineShaderComponent = Usage<BeamLine, ShaderModuleComponent>;
 pub type BeamMeshShaderComponent = Usage<BeamMesh, ShaderModuleComponent>;
 
+pub type BeamBufferComponent = Usage<BeamBuffer, TextureComponent>;
 pub type BeamDepthBufferComponent = Usage<BeamDepthBuffer, TextureComponent>;
+pub type BeamMultisampleComponent = Usage<BeamMultisample, TextureComponent>;
 pub type PhosphorFrontBufferComponent = Usage<PhosphorFrontBuffer, TextureComponent>;
 pub type PhosphorBackBufferComponent = Usage<PhosphorBackBuffer, TextureComponent>;
 
 pub type BeamBufferViewComponent = Usage<BeamBuffer, TextureViewComponent>;
 pub type BeamDepthBufferViewComponent = Usage<BeamDepthBuffer, TextureViewComponent>;
+pub type BeamMultisampleViewComponent = Usage<BeamMultisample, TextureViewComponent>;
 pub type PhosphorFrontBufferViewComponent = Usage<PhosphorFrontBuffer, TextureViewComponent>;
 pub type PhosphorBackBufferViewComponent = Usage<PhosphorBackBuffer, TextureViewComponent>;
 
 pub type LinearSamplerComponent = Usage<Linear, SamplerComponent>;
 
+pub type ComputeLineInstancesPipeline = Usage<ComputeLineInstances, ComputePipelineComponent>;
 pub type BeamLinePipelineComponent = Usage<BeamLine, RenderPipelineComponent>;
 pub type BeamMeshPipelineComponent = Usage<BeamMesh, RenderPipelineComponent>;
 pub type PhosphorDecayPipelineComponent = Usage<PhosphorDecay, RenderPipelineComponent>;
 
+pub type ComputeBindGroupComponent = Usage<ComputeLineInstances, BindGroupComponent>;
 pub type UniformBindGroupComponent = Usage<Uniform, BindGroupComponent>;
 pub type FrontBindGroupComponent = Usage<PhosphorFrontBuffer, BindGroupComponent>;
 pub type BackBindGroupComponent = Usage<PhosphorBackBuffer, BindGroupComponent>;
@@ -95,20 +117,13 @@ pub type BackBindGroupComponent = Usage<PhosphorBackBuffer, BindGroupComponent>;
 pub type TonemapShaderComponent = Usage<Tonemap, ShaderModuleComponent>;
 pub type TonemapPipelineComponent = Usage<Tonemap, RenderPipelineComponent>;
 
-pub type GradientTextureComponent = Usage<Gradients, TextureComponent>;
-pub type GradientTextureViewComponent = Usage<Gradients, TextureViewComponent>;
-
 pub type OriginComponent = Usage<Origin, RwLock<(f32, f32, f32)>>;
-
-pub type GradientData = Vec<u8>;
-pub type GradientDataComponent = Usage<Gradients, RwLock<GradientData>>;
 
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone, Pod, Zeroable)]
 pub struct LineVertexData {
-    pub position: [f32; 4],
+    pub position: [f32; 3],
     pub end: f32,
-    pub _pad: [f32; 3],
 }
 
 pub type LineVertexDataComponent = Usage<LineVertex, RwLock<Vec<LineVertexData>>>;
@@ -127,33 +142,37 @@ impl ToBytes for LineInstanceData {
     }
 }
 
-pub type LineInstanceDataComponent = Usage<LineInstance, RwLock<Vec<LineInstanceData>>>;
+pub type LineIndexDataComponent = Usage<LineIndex, RwLock<Vec<u32>>>;
+pub type LineIndexBufferComponent = Usage<LineIndex, BufferComponent>;
+
 pub type LineInstanceBufferComponent = Usage<LineInstance, BufferComponent>;
 
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone, Pod, Zeroable)]
 pub struct MeshVertexData {
-    pub position: [f32; 4],
+    pub position: [f32; 3],
+    pub surface_color: [f32; 3],
+    pub line_color: [f32; 3],
     pub intensity: f32,
     pub delta_intensity: f32,
-    pub delta_delta: f32,
-    pub gradient: f32,
+    pub _pad: f32,
 }
 
 impl MeshVertexData {
     pub fn new(
         position: (f32, f32, f32),
+        surface_color: (f32, f32, f32),
+        line_color: (f32, f32, f32),
         intensity: f32,
         delta_intensity: f32,
-        delta_delta: f32,
-        gradient: f32,
     ) -> Self {
         MeshVertexData {
-            position: [position.0, position.1, position.2, 1.0],
+            position: [position.0, position.1, position.2],
+            surface_color: [surface_color.0, surface_color.1, surface_color.2],
+            line_color: [line_color.0, line_color.1, line_color.2],
             intensity,
             delta_intensity,
-            delta_delta,
-            gradient,
+            ..Default::default()
         }
     }
 }

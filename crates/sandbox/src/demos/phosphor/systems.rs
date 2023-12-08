@@ -1,8 +1,8 @@
 use std::time::Instant;
 
-use crate::phosphor::{HDR_TEXTURE_FORMAT, MAX_LINES, MAX_MESH_INDICES};
+use crate::phosphor::HDR_TEXTURE_FORMAT;
 
-use super::components::*;
+use super::*;
 use antigen_core::{
     lazy_read_ready_else_return, Changed, ChangedTrait, GetIndirect, IndirectComponent,
     LazyComponent, ReadWriteLock, Usage,
@@ -14,11 +14,12 @@ use antigen_wgpu::{
         BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry,
         BindingResource, BindingType, BlendComponent, BlendFactor, BlendOperation, BlendState,
         BufferBindingType, BufferSize, Color, ColorTargetState, ColorWrites,
-        CommandEncoderDescriptor, CompareFunction, DepthBiasState, DepthStencilState, Device,
-        Extent3d, Face, FragmentState, FrontFace, IndexFormat, LoadOp, MultisampleState,
-        Operations, PipelineLayoutDescriptor, PrimitiveState, PrimitiveTopology,
-        RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor,
-        RenderPipelineDescriptor, ShaderStages, StencilState, TextureFormat, TextureSampleType,
+        CommandEncoderDescriptor, CompareFunction, ComputePassDescriptor,
+        ComputePipelineDescriptor, DepthBiasState, DepthStencilState, Device, Extent3d, Face,
+        FragmentState, FrontFace, IndexFormat, LoadOp, MultisampleState, Operations,
+        PipelineLayoutDescriptor, PrimitiveState, PrimitiveTopology, RenderPassColorAttachment,
+        RenderPassDepthStencilAttachment, RenderPassDescriptor, RenderPipelineDescriptor,
+        SamplerBindingType, ShaderStages, StencilState, TextureFormat, TextureSampleType,
         TextureViewDimension, VertexAttribute, VertexBufferLayout, VertexFormat, VertexState,
         VertexStepMode,
     },
@@ -37,15 +38,18 @@ pub fn phosphor_prepare(
     world: &legion::world::SubWorld,
     _: &PhosphorRenderer,
     // Render pipelines
+    compute_pipeline_component: &ComputeLineInstancesPipeline,
     beam_line_pipeline_component: &BeamLinePipelineComponent,
     beam_mesh_pipeline_component: &BeamMeshPipelineComponent,
     phosphor_decay_pipeline_component: &PhosphorDecayPipelineComponent,
     tonemap_pipeline_component: &TonemapPipelineComponent,
     // Bind groups
+    compute_bind_group_component: &ComputeBindGroupComponent,
     uniform_bind_group_component: &UniformBindGroupComponent,
     front_bind_group_component: &FrontBindGroupComponent,
     back_bind_group_component: &BackBindGroupComponent,
     // Shaders
+    compute_line_instances_shader: &ComputeLineInstancesShader,
     beam_line_shader: &BeamLineShaderComponent,
     beam_mesh_shader: &BeamMeshShaderComponent,
     phosphor_decay_shader: &PhosphorDecayShaderComponent,
@@ -54,17 +58,20 @@ pub fn phosphor_prepare(
     beam_buffer_view: &BeamBufferViewComponent,
     phosphor_front_buffer_view: &PhosphorFrontBufferViewComponent,
     phosphor_back_buffer_view: &PhosphorBackBufferViewComponent,
-    gradients_view: &GradientTextureViewComponent,
     // Samplers
     linear_sampler: &LinearSamplerComponent,
     // Buffers
     uniform_buffer: &UniformBufferComponent,
+    mesh_vertex_buffer: &MeshVertexBufferComponent,
+    line_index_buffer: &LineIndexBufferComponent,
+    line_instance_buffer: &LineInstanceBufferComponent,
     // Misc
     surface_component: &IndirectComponent<SurfaceConfigurationComponent>,
 ) {
     // Fetch resources
     let device = <&Device>::query().iter(world).next().unwrap();
 
+    lazy_read_ready_else_return!(compute_line_instances_shader);
     lazy_read_ready_else_return!(phosphor_decay_shader);
     lazy_read_ready_else_return!(beam_line_shader);
     lazy_read_ready_else_return!(beam_mesh_shader);
@@ -73,68 +80,119 @@ pub fn phosphor_prepare(
     lazy_read_ready_else_return!(beam_buffer_view);
     lazy_read_ready_else_return!(phosphor_front_buffer_view);
     lazy_read_ready_else_return!(phosphor_back_buffer_view);
-    lazy_read_ready_else_return!(gradients_view);
 
     lazy_read_ready_else_return!(linear_sampler);
 
     lazy_read_ready_else_return!(uniform_buffer);
+    lazy_read_ready_else_return!(mesh_vertex_buffer);
+    lazy_read_ready_else_return!(line_index_buffer);
+    lazy_read_ready_else_return!(line_instance_buffer);
 
     let surface_component = world.get_indirect(surface_component).unwrap();
     let config = surface_component.read();
 
-    let uniform_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-        label: Some("Uniform Bind Group Layout"),
+    // Compute bind group
+    let compute_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+        label: Some("Compute Bind Group Layout"),
         entries: &[
             BindGroupLayoutEntry {
                 binding: 0,
-                visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
+                visibility: ShaderStages::COMPUTE,
                 ty: BindingType::Buffer {
-                    ty: BufferBindingType::Uniform,
+                    ty: BufferBindingType::Storage { read_only: true },
                     has_dynamic_offset: false,
-                    min_binding_size: BufferSize::new(144),
+                    min_binding_size: BufferSize::new(48),
                 },
                 count: None,
             },
             BindGroupLayoutEntry {
                 binding: 1,
-                visibility: ShaderStages::FRAGMENT,
-                ty: BindingType::Texture {
-                    sample_type: TextureSampleType::Float { filterable: false },
-                    view_dimension: TextureViewDimension::D2,
-                    multisampled: false,
+                visibility: ShaderStages::COMPUTE,
+                ty: BindingType::Buffer {
+                    ty: BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: BufferSize::new(4),
                 },
                 count: None,
             },
             BindGroupLayoutEntry {
                 binding: 2,
-                visibility: ShaderStages::FRAGMENT,
-                ty: BindingType::Sampler {
-                    filtering: true,
-                    comparison: false,
+                visibility: ShaderStages::COMPUTE,
+                ty: BindingType::Buffer {
+                    ty: BufferBindingType::Storage { read_only: false },
+                    has_dynamic_offset: false,
+                    min_binding_size: BufferSize::new(96),
                 },
                 count: None,
             },
         ],
     });
 
-    // Uniform bind group
-    if uniform_bind_group_component.read().is_pending() {
-        let uniform_bind_group = device.create_bind_group(&BindGroupDescriptor {
-            layout: &uniform_bind_group_layout,
+    if compute_bind_group_component.read().is_pending() {
+        let compute_bind_group = device.create_bind_group(&BindGroupDescriptor {
+            layout: &compute_bind_group_layout,
             entries: &[
                 BindGroupEntry {
                     binding: 0,
-                    resource: uniform_buffer.as_entire_binding(),
+                    resource: mesh_vertex_buffer.as_entire_binding(),
                 },
                 BindGroupEntry {
                     binding: 1,
-                    resource: BindingResource::TextureView(&gradients_view),
+                    resource: line_index_buffer.as_entire_binding(),
                 },
                 BindGroupEntry {
                     binding: 2,
-                    resource: BindingResource::Sampler(&linear_sampler),
+                    resource: line_instance_buffer.as_entire_binding(),
                 },
             ],
+            label: None,
+        });
+
+        compute_bind_group_component
+            .write()
+            .set_ready(compute_bind_group);
+    }
+
+    // Compute pipeline
+    let compute_pipeline_layout = device.create_pipeline_layout(&mut PipelineLayoutDescriptor {
+        label: None,
+        bind_group_layouts: &[&compute_bind_group_layout],
+        push_constant_ranges: &[],
+    });
+
+    let compute_pipeline = device.create_compute_pipeline(&ComputePipelineDescriptor {
+        label: Some("Compute Pipeline"),
+        layout: Some(&compute_pipeline_layout),
+        module: compute_line_instances_shader,
+        entry_point: "main",
+    });
+
+    compute_pipeline_component
+        .write()
+        .set_ready(compute_pipeline);
+
+    // Uniform bind group
+    let uniform_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+        label: Some("Uniform Bind Group Layout"),
+        entries: &[BindGroupLayoutEntry {
+            binding: 0,
+            visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
+            ty: BindingType::Buffer {
+                ty: BufferBindingType::Uniform,
+                has_dynamic_offset: false,
+                min_binding_size: BufferSize::new(144),
+            },
+            count: None,
+        }],
+    });
+
+    if uniform_bind_group_component.read().is_pending() {
+        let uniform_bind_group = device.create_bind_group(&BindGroupDescriptor {
+            layout: &uniform_bind_group_layout,
+            entries: &[BindGroupEntry {
+                binding: 0,
+                resource: uniform_buffer.as_entire_binding(),
+            }],
             label: None,
         });
 
@@ -162,28 +220,28 @@ pub fn phosphor_prepare(
                 step_mode: VertexStepMode::Vertex,
                 attributes: &[
                     VertexAttribute {
-                        format: VertexFormat::Float32x4,
+                        format: VertexFormat::Float32x3,
                         offset: 0,
                         shader_location: 0,
                     },
                     VertexAttribute {
-                        format: VertexFormat::Float32,
-                        offset: buffer_size_of::<[f32; 4]>(),
+                        format: VertexFormat::Float32x3,
+                        offset: buffer_size_of::<[f32; 3]>(),
                         shader_location: 1,
                     },
                     VertexAttribute {
-                        format: VertexFormat::Float32,
-                        offset: buffer_size_of::<[f32; 5]>(),
+                        format: VertexFormat::Float32x3,
+                        offset: buffer_size_of::<[f32; 6]>(),
                         shader_location: 2,
                     },
                     VertexAttribute {
                         format: VertexFormat::Float32,
-                        offset: buffer_size_of::<[f32; 6]>(),
+                        offset: buffer_size_of::<[f32; 9]>(),
                         shader_location: 3,
                     },
                     VertexAttribute {
                         format: VertexFormat::Float32,
-                        offset: buffer_size_of::<[f32; 7]>(),
+                        offset: buffer_size_of::<[f32; 10]>(),
                         shader_location: 4,
                     },
                 ],
@@ -207,7 +265,11 @@ pub fn phosphor_prepare(
             stencil: StencilState::default(),
             bias: DepthBiasState::default(),
         }),
-        multisample: MultisampleState::default(),
+        multisample: MultisampleState {
+            count: 4,
+            ..Default::default()
+        },
+        multiview: None,
     });
 
     beam_mesh_pipeline_component
@@ -227,13 +289,13 @@ pub fn phosphor_prepare(
                     step_mode: VertexStepMode::Vertex,
                     attributes: &[
                         VertexAttribute {
-                            format: VertexFormat::Float32x4,
+                            format: VertexFormat::Float32x3,
                             offset: 0,
                             shader_location: 0,
                         },
                         VertexAttribute {
                             format: VertexFormat::Float32,
-                            offset: buffer_size_of::<[f32; 4]>(),
+                            offset: buffer_size_of::<[f32; 3]>(),
                             shader_location: 1,
                         },
                     ],
@@ -243,53 +305,53 @@ pub fn phosphor_prepare(
                     step_mode: VertexStepMode::Instance,
                     attributes: &[
                         VertexAttribute {
-                            format: VertexFormat::Float32x4,
+                            format: VertexFormat::Float32x3,
                             offset: 0,
                             shader_location: 2,
                         },
                         VertexAttribute {
-                            format: VertexFormat::Float32,
-                            offset: buffer_size_of::<[f32; 4]>(),
+                            format: VertexFormat::Float32x3,
+                            offset: buffer_size_of::<[f32; 3]>(),
                             shader_location: 3,
                         },
                         VertexAttribute {
-                            format: VertexFormat::Float32,
-                            offset: buffer_size_of::<[f32; 5]>(),
+                            format: VertexFormat::Float32x3,
+                            offset: buffer_size_of::<[f32; 6]>(),
                             shader_location: 4,
                         },
                         VertexAttribute {
                             format: VertexFormat::Float32,
-                            offset: buffer_size_of::<[f32; 6]>(),
+                            offset: buffer_size_of::<[f32; 9]>(),
                             shader_location: 5,
                         },
                         VertexAttribute {
                             format: VertexFormat::Float32,
-                            offset: buffer_size_of::<[f32; 7]>(),
+                            offset: buffer_size_of::<[f32; 10]>(),
                             shader_location: 6,
                         },
                         VertexAttribute {
-                            format: VertexFormat::Float32x4,
-                            offset: buffer_size_of::<[f32; 8]>(),
+                            format: VertexFormat::Float32x3,
+                            offset: buffer_size_of::<[f32; 12]>(),
                             shader_location: 7,
                         },
                         VertexAttribute {
-                            format: VertexFormat::Float32,
-                            offset: buffer_size_of::<[f32; 12]>(),
+                            format: VertexFormat::Float32x3,
+                            offset: buffer_size_of::<[f32; 15]>(),
                             shader_location: 8,
                         },
                         VertexAttribute {
-                            format: VertexFormat::Float32,
-                            offset: buffer_size_of::<[f32; 13]>(),
+                            format: VertexFormat::Float32x3,
+                            offset: buffer_size_of::<[f32; 18]>(),
                             shader_location: 9,
                         },
                         VertexAttribute {
                             format: VertexFormat::Float32,
-                            offset: buffer_size_of::<[f32; 14]>(),
+                            offset: buffer_size_of::<[f32; 21]>(),
                             shader_location: 10,
                         },
                         VertexAttribute {
                             format: VertexFormat::Float32,
-                            offset: buffer_size_of::<[f32; 15]>(),
+                            offset: buffer_size_of::<[f32; 22]>(),
                             shader_location: 11,
                         },
                     ],
@@ -302,12 +364,12 @@ pub fn phosphor_prepare(
             targets: &[ColorTargetState {
                 format: HDR_TEXTURE_FORMAT,
                 blend: Some(BlendState {
-                    color: BlendComponent::REPLACE,
-                    alpha: BlendComponent {
+                    color: BlendComponent {
                         src_factor: BlendFactor::One,
                         dst_factor: BlendFactor::One,
                         operation: BlendOperation::Add,
                     },
+                    alpha: BlendComponent::REPLACE,
                 }),
                 write_mask: ColorWrites::ALL,
             }],
@@ -320,12 +382,16 @@ pub fn phosphor_prepare(
         },
         depth_stencil: Some(DepthStencilState {
             format: TextureFormat::Depth32Float,
-            depth_write_enabled: true,
+            depth_write_enabled: false,
             depth_compare: CompareFunction::Less,
             stencil: StencilState::default(),
             bias: DepthBiasState::default(),
         }),
-        multisample: MultisampleState::default(),
+        multisample: MultisampleState {
+            count: 4,
+            ..Default::default()
+        },
+        multiview: None,
     });
 
     beam_line_pipeline_component
@@ -340,7 +406,7 @@ pub fn phosphor_prepare(
                 binding: 0,
                 visibility: ShaderStages::FRAGMENT,
                 ty: BindingType::Texture {
-                    sample_type: TextureSampleType::Float { filterable: false },
+                    sample_type: TextureSampleType::Float { filterable: true },
                     view_dimension: TextureViewDimension::D2,
                     multisampled: false,
                 },
@@ -350,7 +416,7 @@ pub fn phosphor_prepare(
                 binding: 1,
                 visibility: ShaderStages::FRAGMENT,
                 ty: BindingType::Texture {
-                    sample_type: TextureSampleType::Float { filterable: false },
+                    sample_type: TextureSampleType::Float { filterable: true },
                     view_dimension: TextureViewDimension::D2,
                     multisampled: false,
                 },
@@ -359,11 +425,7 @@ pub fn phosphor_prepare(
             BindGroupLayoutEntry {
                 binding: 2,
                 visibility: ShaderStages::FRAGMENT,
-                ty: BindingType::Texture {
-                    sample_type: TextureSampleType::Float { filterable: false },
-                    view_dimension: TextureViewDimension::D2,
-                    multisampled: false,
-                },
+                ty: BindingType::Sampler(SamplerBindingType::Filtering),
                 count: None,
             },
         ],
@@ -383,7 +445,7 @@ pub fn phosphor_prepare(
                 },
                 BindGroupEntry {
                     binding: 2,
-                    resource: BindingResource::TextureView(&gradients_view),
+                    resource: BindingResource::Sampler(&linear_sampler),
                 },
             ],
             label: None,
@@ -407,7 +469,7 @@ pub fn phosphor_prepare(
                 },
                 BindGroupEntry {
                     binding: 2,
-                    resource: BindingResource::TextureView(&gradients_view),
+                    resource: BindingResource::Sampler(&linear_sampler),
                 },
             ],
             label: None,
@@ -445,6 +507,7 @@ pub fn phosphor_prepare(
         primitive: PrimitiveState::default(),
         depth_stencil: None,
         multisample: MultisampleState::default(),
+        multiview: None,
     });
 
     phosphor_decay_pipeline_component
@@ -454,7 +517,7 @@ pub fn phosphor_prepare(
     // Tonemap pipeline
     let tonemap_pipeline_layout = device.create_pipeline_layout(&mut PipelineLayoutDescriptor {
         label: None,
-        bind_group_layouts: &[&uniform_bind_group_layout, &phosphor_bind_group_layout],
+        bind_group_layouts: &[&phosphor_bind_group_layout],
         push_constant_ranges: &[],
     });
 
@@ -474,6 +537,7 @@ pub fn phosphor_prepare(
         primitive: PrimitiveState::default(),
         depth_stencil: None,
         multisample: MultisampleState::default(),
+        multiview: None,
     });
 
     tonemap_pipeline_component
@@ -526,7 +590,7 @@ pub fn phosphor_update_oscilloscopes(
     world: &legion::world::SubWorld,
     origin: &OriginComponent,
     oscilloscope: &Oscilloscope,
-    line_data: &Changed<LineInstanceDataComponent>,
+    vertex_data: &Changed<MeshVertexDataComponent>,
 ) {
     let total_time = <&Changed<TotalTimeComponent>>::query()
         .iter(world)
@@ -544,17 +608,17 @@ pub fn phosphor_update_oscilloscopes(
         let (x, y, z) = *origin.read();
         let (fx, fy, fz) = oscilloscope.eval(total_time);
 
-        let mut instance = line_data.write();
+        let mut vertices = vertex_data.write();
 
-        instance[0].v0 = instance[0].v1;
-        instance[0].v0.intensity += instance[0].v0.delta_intensity * delta_time;
+        vertices[0] = vertices[1];
+        vertices[0].intensity += vertices[0].delta_intensity * delta_time;
 
-        instance[0].v1.position[0] = x + fx;
-        instance[0].v1.position[1] = y + fy;
-        instance[0].v1.position[2] = z + fz;
+        vertices[1].position[0] = x + fx;
+        vertices[1].position[1] = y + fy;
+        vertices[1].position[2] = z + fz;
     }
 
-    line_data.set_changed(true);
+    vertex_data.set_changed(true);
 }
 
 #[legion::system(par_for_each)]
@@ -569,16 +633,21 @@ pub fn phosphor_resize(
     // Buffer descriptors
     beam_buffer_desc: &Usage<BeamBuffer, TextureDescriptorComponent<'static>>,
     beam_depth_buffer_desc: &Usage<BeamDepthBuffer, TextureDescriptorComponent<'static>>,
+    beam_multisample_desc: &Usage<BeamMultisample, TextureDescriptorComponent<'static>>,
     phosphor_front_buffer_desc: &Usage<PhosphorFrontBuffer, TextureDescriptorComponent<'static>>,
     phosphor_back_buffer_desc: &Usage<PhosphorBackBuffer, TextureDescriptorComponent<'static>>,
     // Buffer view descriptors
     beam_buffer_view_desc: &Usage<BeamBuffer, TextureViewDescriptorComponent<'static>>,
     beam_depth_buffer_view_desc: &Usage<BeamDepthBuffer, TextureViewDescriptorComponent<'static>>,
+    beam_multisample_view_desc: &Usage<BeamMultisample, TextureViewDescriptorComponent<'static>>,
     phosphor_front_buffer_view_desc: &Usage<
         PhosphorFrontBuffer,
         TextureViewDescriptorComponent<'static>,
     >,
-    phosphor_back_buffer_view_desc: &Usage<PhosphorBackBuffer, TextureViewDescriptorComponent<'static>>,
+    phosphor_back_buffer_view_desc: &Usage<
+        PhosphorBackBuffer,
+        TextureViewDescriptorComponent<'static>,
+    >,
     // Matrices
     perspective_matrix: &Changed<PerspectiveMatrixComponent>,
     orthographic_matrix: &Changed<OrthographicMatrixComponent>,
@@ -598,16 +667,19 @@ pub fn phosphor_resize(
 
     beam_buffer_desc.write().size = extent;
     beam_depth_buffer_desc.write().size = extent;
+    beam_multisample_desc.write().size = extent;
     phosphor_front_buffer_desc.write().size = extent;
     phosphor_back_buffer_desc.write().size = extent;
 
     beam_buffer_desc.set_changed(true);
     beam_depth_buffer_desc.set_changed(true);
+    beam_multisample_desc.set_changed(true);
     phosphor_front_buffer_desc.set_changed(true);
     phosphor_back_buffer_desc.set_changed(true);
 
     beam_buffer_view_desc.set_changed(true);
     beam_depth_buffer_view_desc.set_changed(true);
+    beam_multisample_view_desc.set_changed(true);
     phosphor_front_buffer_view_desc.set_changed(true);
     phosphor_back_buffer_view_desc.set_changed(true);
 
@@ -616,10 +688,10 @@ pub fn phosphor_resize(
 
     let aspect = surface_config.width as f32 / surface_config.height as f32;
 
-    *perspective_matrix.write() = super::perspective_matrix(aspect, (0.0, 0.0));
+    *perspective_matrix.write() = super::perspective_matrix(aspect, (0.0, 0.0), 1.0, 500.0);
     perspective_matrix.set_changed(true);
 
-    *orthographic_matrix.write() = super::orthographic_matrix(aspect, 200.0);
+    *orthographic_matrix.write() = super::orthographic_matrix(aspect, 200.0, 1.0, 500.0);
     orthographic_matrix.set_changed(true);
 }
 
@@ -675,6 +747,8 @@ pub fn phosphor_cursor_moved(
     *projection_matrix.write() = super::perspective_matrix(
         surface_config.width as f32 / surface_config.height as f32,
         (-norm_x, norm_y),
+        1.0,
+        500.0,
     );
     projection_matrix.set_changed(true);
 }
@@ -683,22 +757,24 @@ pub fn phosphor_cursor_moved(
 #[legion::system(par_for_each)]
 #[read_component(Device)]
 #[read_component(RenderAttachmentTextureView)]
-#[read_component(Changed<LineInstanceDataComponent>)]
 pub fn phosphor_render(
     world: &legion::world::SubWorld,
     _: &PhosphorRenderer,
     // Pipelines
+    compute_pipeline: &ComputeLineInstancesPipeline,
     beam_line_pipeline: &BeamLinePipelineComponent,
     beam_mesh_pipeline: &BeamMeshPipelineComponent,
     phosphor_decay_pipeline: &PhosphorDecayPipelineComponent,
     tonemap_pipeline: &TonemapPipelineComponent,
     // Bind groups
+    compute_bind_group: &ComputeBindGroupComponent,
     uniform_bind_group: &UniformBindGroupComponent,
     front_bind_group: &FrontBindGroupComponent,
     back_bind_group: &BackBindGroupComponent,
     // Texture views
     beam_buffer_view: &BeamBufferViewComponent,
     beam_depth_view: &BeamDepthBufferViewComponent,
+    beam_multisample_view: &BeamMultisampleViewComponent,
     phosphor_front_view: &PhosphorFrontBufferViewComponent,
     phosphor_back_view: &PhosphorBackBufferViewComponent,
     // Buffers
@@ -708,9 +784,10 @@ pub fn phosphor_render(
     mesh_index_buffer: &MeshIndexBufferComponent,
     // Misc
     buffer_flip_flop: &BufferFlipFlopComponent,
-    timer: &TimerComponent,
     command_buffers: &CommandBuffersComponent,
     render_attachment_view: &IndirectComponent<RenderAttachmentTextureView>,
+    mesh_index_count: &MeshIndexCountComponent,
+    line_index_count: &LineIndexCountComponent,
 ) {
     let device = if let Some(components) = <&Device>::query().iter(world).next() {
         components
@@ -718,51 +795,60 @@ pub fn phosphor_render(
         return;
     };
 
-    lazy_read_ready_else_return!(uniform_bind_group);
-
+    lazy_read_ready_else_return!(compute_pipeline);
     lazy_read_ready_else_return!(phosphor_decay_pipeline);
+    lazy_read_ready_else_return!(beam_line_pipeline);
+    lazy_read_ready_else_return!(beam_mesh_pipeline);
+    lazy_read_ready_else_return!(tonemap_pipeline);
+
+    lazy_read_ready_else_return!(uniform_bind_group);
+    lazy_read_ready_else_return!(compute_bind_group);
     lazy_read_ready_else_return!(front_bind_group);
     lazy_read_ready_else_return!(back_bind_group);
+
     lazy_read_ready_else_return!(beam_buffer_view);
     lazy_read_ready_else_return!(beam_depth_view);
+    lazy_read_ready_else_return!(beam_multisample_view);
     lazy_read_ready_else_return!(phosphor_front_view);
     lazy_read_ready_else_return!(phosphor_back_view);
 
-    lazy_read_ready_else_return!(beam_line_pipeline);
     lazy_read_ready_else_return!(line_vertex_buffer);
     lazy_read_ready_else_return!(line_instance_buffer);
-
-    lazy_read_ready_else_return!(beam_mesh_pipeline);
     lazy_read_ready_else_return!(mesh_vertex_buffer);
     lazy_read_ready_else_return!(mesh_index_buffer);
 
     let buffer_flip_state = *buffer_flip_flop.read();
-
-    lazy_read_ready_else_return!(tonemap_pipeline);
+    let mesh_index_count = *mesh_index_count.read();
+    let line_index_count = *line_index_count.read();
+    let line_count = line_index_count / 2;
 
     let render_attachment_view = world.get_indirect(render_attachment_view).unwrap();
     lazy_read_ready_else_return!(render_attachment_view);
 
     let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor { label: None });
 
-    let draw_changed = timer.get_changed();
-    if draw_changed {
-        timer.set_changed(false);
-    }
+    // Compute line instances
+    let mut cpass = encoder.begin_compute_pass(&ComputePassDescriptor {
+        label: Some("Compute Pass"),
+    });
+    cpass.set_pipeline(compute_pipeline);
+    cpass.set_bind_group(0, compute_bind_group, &[]);
+    cpass.dispatch(line_count as u32, 1, 1);
+    drop(cpass);
 
     // Draw beam meshes
+    println!(
+        "Drawing {} mesh indices ({} triangles)",
+        mesh_index_count,
+        mesh_index_count / 3
+    );
     let mut rpass = encoder.begin_render_pass(&RenderPassDescriptor {
         label: None,
         color_attachments: &[RenderPassColorAttachment {
-            view: beam_buffer_view,
-            resolve_target: None,
+            view: beam_multisample_view,
+            resolve_target: Some(beam_buffer_view),
             ops: Operations {
-                load: LoadOp::Clear(Color {
-                    r: -7.0,
-                    g: 0.0,
-                    b: 0.0,
-                    a: 0.0,
-                }),
+                load: LoadOp::Clear(CLEAR_COLOR),
                 store: true,
             },
         }],
@@ -779,15 +865,15 @@ pub fn phosphor_render(
     rpass.set_vertex_buffer(0, mesh_vertex_buffer.slice(..));
     rpass.set_index_buffer(mesh_index_buffer.slice(..), IndexFormat::Uint16);
     rpass.set_bind_group(0, uniform_bind_group, &[]);
-    rpass.draw_indexed(0..MAX_MESH_INDICES as u32, 0, 0..1);
+    rpass.draw_indexed(0..mesh_index_count as u32, 0, 0..1);
     drop(rpass);
 
     // Draw beam lines
     let mut rpass = encoder.begin_render_pass(&RenderPassDescriptor {
         label: None,
         color_attachments: &[RenderPassColorAttachment {
-            view: beam_buffer_view,
-            resolve_target: None,
+            view: beam_multisample_view,
+            resolve_target: Some(beam_buffer_view),
             ops: Operations {
                 load: LoadOp::Load,
                 store: true,
@@ -797,7 +883,7 @@ pub fn phosphor_render(
             view: beam_depth_view,
             depth_ops: Some(Operations {
                 load: LoadOp::Load,
-                store: true,
+                store: false,
             }),
             stencil_ops: None,
         }),
@@ -807,12 +893,7 @@ pub fn phosphor_render(
     rpass.set_vertex_buffer(1, line_instance_buffer.slice(..));
     rpass.set_bind_group(0, uniform_bind_group, &[]);
 
-    let draw_count = if draw_changed {
-        MAX_LINES
-    } else {
-        MAX_LINES / 2
-    } as u32;
-    rpass.draw(0..14, 0..draw_count);
+    rpass.draw(0..14, 0..line_count as u32);
     drop(rpass);
 
     // Combine beam buffer with phosphor back buffer in phosphor front buffer
@@ -860,9 +941,8 @@ pub fn phosphor_render(
         depth_stencil_attachment: None,
     });
     rpass.set_pipeline(tonemap_pipeline);
-    rpass.set_bind_group(0, uniform_bind_group, &[]);
     rpass.set_bind_group(
-        1,
+        0,
         if buffer_flip_state {
             back_bind_group
         } else {

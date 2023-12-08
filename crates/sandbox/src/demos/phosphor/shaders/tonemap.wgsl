@@ -1,11 +1,8 @@
-[[group(0), binding(1)]]
-var r_gradients: texture_2d<f32>;
+[[group(0), binding(0)]]
+var r_phosphor: texture_2d<f32>;
 
 [[group(0), binding(2)]]
 var r_sampler: sampler;
-
-[[group(1), binding(0)]]
-var r_hdr: texture_2d<f32>;
 
 struct VertexOutput {
     [[builtin(position)]] position: vec4<f32>;
@@ -24,15 +21,16 @@ fn vs_main([[builtin(vertex_index)]] vertex_index: u32) -> VertexOutput {
 
 [[stage(fragment)]]
 fn fs_main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
-    let hdr = textureSample(r_hdr, r_sampler, in.uv);
+    let phosphor = textureSample(r_phosphor, r_sampler, in.uv);
 
-    let gradient = hdr.b + 0.5;
-    let intensity = hdr.a + 0.5;
+    let color = phosphor.rgb;
+    let black = vec3<f32>(0.0, 0.0, 0.0);
+    let white = vec3<f32>(1.0, 1.0, 1.0);
 
-    let grad_size = vec2<f32>(textureDimensions(r_gradients));
-    let u = intensity / grad_size.x;
-    let v = gradient / grad_size.y;
+    let fac = max(color - white, black);
+    let fac = fac.r + fac.g + fac.b;
 
-    let color = textureSample(r_gradients, r_sampler, vec2<f32>(u, v));
-    return color;
+    let color = mix(color, white, clamp(fac, 0.0, 1.0));
+
+    return vec4<f32>(color, 1.0);
 }

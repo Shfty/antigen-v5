@@ -63,7 +63,7 @@ macro_rules! lazy_read_ready_else_continue {
 #[macro_export]
 macro_rules! lazy_read_ready_else_return {
     ($cmp:ident) => {
-        let $cmp = $crate::ReadWriteLock::read($cmp);
+        let $cmp = $cmp.read();
         let $cmp = if let LazyComponent::Ready($cmp) = &*$cmp {
             $cmp
         } else {

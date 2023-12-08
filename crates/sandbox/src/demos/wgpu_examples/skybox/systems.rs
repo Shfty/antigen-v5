@@ -10,22 +10,7 @@ use antigen_core::{
     ReadWriteLock, RwLock,
 };
 
-use antigen_wgpu::{
-    wgpu::{
-        util::DeviceExt, vertex_attr_array, BindGroupDescriptor, BindGroupEntry,
-        BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource, BindingType,
-        BufferAddress, BufferBindingType, Color, CommandEncoderDescriptor, CompareFunction,
-        DepthBiasState, DepthStencilState, Device, Extent3d, Features, FragmentState, FrontFace,
-        LoadOp, MultisampleState, Operations, PipelineLayoutDescriptor, PrimitiveState, Queue,
-        RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor,
-        RenderPipelineDescriptor, ShaderStages, StencilState, SurfaceConfiguration,
-        TextureDescriptor, TextureDimension, TextureFormat, TextureSampleType, TextureUsages,
-        TextureView, TextureViewDescriptor, TextureViewDimension, VertexBufferLayout, VertexState,
-        VertexStepMode,
-    },
-    BindGroupComponent, CommandBuffersComponent, RenderAttachmentTextureView, SamplerComponent,
-    ShaderModuleComponent, SurfaceConfigurationComponent,
-};
+use antigen_wgpu::{BindGroupComponent, CommandBuffersComponent, RenderAttachmentTextureView, SamplerComponent, ShaderModuleComponent, SurfaceConfigurationComponent, wgpu::{BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource, BindingType, BufferAddress, BufferBindingType, Color, CommandEncoderDescriptor, CompareFunction, DepthBiasState, DepthStencilState, Device, Extent3d, Features, FragmentState, FrontFace, LoadOp, MultisampleState, Operations, PipelineLayoutDescriptor, PrimitiveState, Queue, RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor, RenderPipelineDescriptor, SamplerBindingType, ShaderStages, StencilState, SurfaceConfiguration, TextureDescriptor, TextureDimension, TextureFormat, TextureSampleType, TextureUsages, TextureView, TextureViewDescriptor, TextureViewDimension, VertexBufferLayout, VertexState, VertexStepMode, util::DeviceExt, vertex_attr_array}};
 
 use antigen_winit::{winit::event::WindowEvent, WindowComponent, WindowEventComponent};
 use legion::{world::SubWorld, IntoQuery};
@@ -136,10 +121,7 @@ pub fn skybox_prepare(
             BindGroupLayoutEntry {
                 binding: 2,
                 visibility: ShaderStages::FRAGMENT,
-                ty: BindingType::Sampler {
-                    filtering: true,
-                    comparison: false,
-                },
+                ty: BindingType::Sampler(SamplerBindingType::Filtering),
                 count: None,
             },
         ],
@@ -177,6 +159,7 @@ pub fn skybox_prepare(
             bias: DepthBiasState::default(),
         }),
         multisample: MultisampleState::default(),
+        multiview: None,
     });
     sky_pipeline_component.write().set_ready(sky_pipeline);
 
@@ -209,6 +192,7 @@ pub fn skybox_prepare(
             bias: DepthBiasState::default(),
         }),
         multisample: MultisampleState::default(),
+        multiview: None,
     });
     entity_pipeline_component.write().set_ready(entity_pipeline);
 
@@ -219,7 +203,7 @@ pub fn skybox_prepare(
         TextureFormat::Astc4x4RgbaUnormSrgb
     } else if device_features.contains(Features::TEXTURE_COMPRESSION_ETC2) {
         println!("Using ETC2");
-        TextureFormat::Etc2RgbUnormSrgb
+        TextureFormat::Etc2Rgb8UnormSrgb
     } else if device_features.contains(Features::TEXTURE_COMPRESSION_BC) {
         println!("Using BC");
         TextureFormat::Bc1RgbaUnormSrgb
@@ -247,7 +231,7 @@ pub fn skybox_prepare(
 
     let bytes = match skybox_format {
         TextureFormat::Astc4x4RgbaUnormSrgb => &include_bytes!("images/astc.dds")[..],
-        TextureFormat::Etc2RgbUnormSrgb => &include_bytes!("images/etc2.dds")[..],
+        TextureFormat::Etc2Rgb8UnormSrgb => &include_bytes!("images/etc2.dds")[..],
         TextureFormat::Bc1RgbaUnormSrgb => &include_bytes!("images/bc1.dds")[..],
         TextureFormat::Bgra8UnormSrgb => &include_bytes!("images/bgra.dds")[..],
         _ => unreachable!(),

@@ -21,8 +21,8 @@ use antigen_wgpu::{
         BufferSize, Color, ColorTargetState, ColorWrites, CommandEncoderDescriptor, Device,
         DynamicOffset, FragmentState, LoadOp, MultisampleState, Operations,
         PipelineLayoutDescriptor, PrimitiveState, PrimitiveTopology, RenderPassColorAttachment,
-        RenderPassDescriptor, RenderPipelineDescriptor, ShaderStages, TextureSampleType,
-        TextureViewDimension, VertexState,
+        RenderPassDescriptor, RenderPipelineDescriptor, SamplerBindingType, ShaderStages,
+        TextureSampleType, TextureViewDimension, VertexState,
     },
     CommandBuffersComponent, RenderAttachmentTextureView, RenderPipelineComponent,
     ShaderModuleComponent, SurfaceConfigurationComponent,
@@ -118,10 +118,7 @@ pub fn bunnymark_prepare(
             BindGroupLayoutEntry {
                 binding: 2,
                 visibility: ShaderStages::FRAGMENT,
-                ty: BindingType::Sampler {
-                    filtering: true,
-                    comparison: false,
-                },
+                ty: BindingType::Sampler(SamplerBindingType::Filtering),
                 count: None,
             },
         ],
@@ -173,6 +170,7 @@ pub fn bunnymark_prepare(
             },
             depth_stencil: None,
             multisample: MultisampleState::default(),
+            multiview: None,
         }));
 
     global_bind_group
@@ -215,10 +213,7 @@ pub fn bunnymark_prepare(
 }
 
 #[legion::system(par_for_each)]
-pub fn bunnymark_tick(
-    bunnies: &Changed<BunniesComponent>,
-    extent: &PlayfieldExtentComponent,
-) {
+pub fn bunnymark_tick(bunnies: &Changed<BunniesComponent>, extent: &PlayfieldExtentComponent) {
     let delta = 0.01;
     for bunny in bunnies.write().iter_mut() {
         bunny.position[0] += bunny.velocity[0] * delta;

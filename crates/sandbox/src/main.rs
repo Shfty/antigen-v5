@@ -109,6 +109,9 @@ fn main() -> ! {
     // Create world
     let world = ImmutableWorld::default();
 
+    // Assemble args
+    antigen_core::assemble_args(&mut world.write());
+
     // Assemble winit backend
     antigen_winit::assemble_winit_backend(&mut world.write());
 
@@ -150,6 +153,13 @@ fn main() -> ! {
     single![demos::transform_integration::assemble_system()].execute_and_flush(&world);
     //demos::wgpu_examples::assemble_schedule().execute_and_flush(&world);
     single![demos::phosphor::assemble_system()].execute_and_flush(&world);
+    serial![
+        antigen_fs::load_files_system::<crate::demos::phosphor::MapFile>(),
+        antigen_fs::read_file_string_system::<crate::demos::phosphor::MapFile>(),
+        antigen_shambler::parse_map_file_system::<crate::demos::phosphor::MapFile>(),
+        crate::demos::phosphor::build_map_system(false),
+    ]
+    .execute_and_flush(&world);
 
     // Spawn threads
     std::thread::spawn(game_thread(world.clone()));
@@ -159,13 +169,16 @@ fn main() -> ! {
 pub fn game_thread(world: ImmutableWorld) -> impl Fn() {
     move || {
         // Crate schedule
-        let mut schedule = serial![
+        let mut tick_schedule = serial![
             crate::demos::transform_integration::integrate_schedule(),
             crate::demos::transform_integration::print_schedule(),
         ];
 
         // Run schedule in loop
-        antigen_util::spin_loop(GAME_TICK_DURATION, || schedule.execute(&world))
+        antigen_util::spin_loop(GAME_TICK_DURATION, || {
+            tick_schedule.execute(&world);
+            //io_schedule.execute_and_flush(&world);
+        })
     }
 }
 

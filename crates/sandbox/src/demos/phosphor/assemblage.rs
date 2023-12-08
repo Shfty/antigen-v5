@@ -1,130 +1,394 @@
 use std::num::NonZeroU32;
 
 use antigen_core::Construct;
-use antigen_wgpu::{AssembleWgpu, buffer_size_of, wgpu::{BufferAddress, Extent3d, ImageCopyTextureBase, ImageDataLayout, TextureAspect, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages, TextureViewDescriptor}};
+use antigen_wgpu::{
+    buffer_size_of,
+    wgpu::{
+        BufferAddress, Extent3d, ImageCopyTextureBase, ImageDataLayout, TextureAspect,
+        TextureDescriptor, TextureDimension, TextureFormat, TextureUsages, TextureViewDescriptor,
+        COPY_BUFFER_ALIGNMENT,
+    },
+    AssembleWgpu,
+};
 use legion::Entity;
 
-use crate::phosphor::{GradientDataComponent, Gradients, LineInstanceData, LineInstanceDataComponent, OriginComponent};
+use crate::phosphor::{LineIndex, LineIndexDataComponent, OriginComponent};
 
 use super::{
-    LineInstance, MeshIndex, MeshIndexDataComponent, MeshVertex, MeshVertexData,
-    MeshVertexDataComponent, Oscilloscope,
+    MeshIndex, MeshIndexDataComponent, MeshVertex, MeshVertexData, MeshVertexDataComponent,
+    Oscilloscope, BLACK, BLUE, GREEN, RED, WHITE,
 };
 
 pub fn assemble_oscilloscope(
     cmd: &mut legion::systems::CommandBuffer,
     buffer_target: Entity,
-    buffer_index: usize,
+    vertex_head: &mut BufferAddress,
+    index_head: &mut BufferAddress,
     origin: (f32, f32, f32),
+    color: (f32, f32, f32),
     osc: Oscilloscope,
     intensity: f32,
     delta_intensity: f32,
-    delta_delta: f32,
-    gradient: f32,
 ) {
     let entity = cmd.push(());
     cmd.add_component(entity, OriginComponent::construct(origin));
     cmd.add_component(entity, osc);
-    cmd.assemble_wgpu_buffer_data_with_usage::<LineInstance, _>(
+
+    let vertices = vec![
+        MeshVertexData {
+            position: [0.0, 0.0, 0.0],
+            surface_color: [color.0, color.1, color.2],
+            line_color: [color.0, color.1, color.2],
+            intensity,
+            delta_intensity,
+            ..Default::default()
+        },
+        MeshVertexData {
+            position: [0.0, 0.0, 0.0],
+            surface_color: [color.0, color.1, color.2],
+            line_color: [color.0, color.1, color.2],
+            intensity,
+            delta_intensity,
+            ..Default::default()
+        },
+    ];
+    cmd.assemble_wgpu_buffer_data_with_usage::<MeshVertex, _>(
         entity,
-        LineInstanceDataComponent::construct(vec![LineInstanceData {
-            v0: MeshVertexData {
-                position: [0.0, 0.0, 0.0, 1.0],
-                intensity,
-                delta_intensity,
-                delta_delta,
-                gradient,
-            },
-            v1: MeshVertexData {
-                position: [0.0, 0.0, 0.0, 1.0],
-                intensity,
-                delta_intensity,
-                delta_delta,
-                gradient,
-            },
-        }]),
-        buffer_size_of::<LineInstanceData>() * buffer_index as BufferAddress,
+        MeshVertexDataComponent::construct(vertices),
+        buffer_size_of::<MeshVertexData>() * *vertex_head as BufferAddress,
         Some(buffer_target),
+    );
+
+    let indices = vec![(*vertex_head as u32), (*vertex_head + 1) as u32];
+    println!("Ocilloscope indices: {:#?}", indices);
+
+    cmd.assemble_wgpu_buffer_data_with_usage::<LineIndex, _>(
+        entity,
+        LineIndexDataComponent::construct(indices),
+        buffer_size_of::<u32>() * *index_head as BufferAddress,
+        Some(buffer_target),
+    );
+
+    *vertex_head += 2;
+    *index_head += 2;
+}
+
+pub fn assemble_box_bot(
+    cmd: &mut legion::systems::CommandBuffer,
+    buffer_target: Entity,
+    vertex_head: &mut BufferAddress,
+    mesh_index_head: &mut BufferAddress,
+    line_index_head: &mut BufferAddress,
+    (x, y, z): (f32, f32, f32),
+) {
+    // Cube lines
+    assemble_line_strip(
+        cmd,
+        buffer_target,
+        vertex_head,
+        line_index_head,
+        vec![
+            MeshVertexData::new((-25.0, -25.0, -25.0), RED, RED, 2.0, -30.0),
+            MeshVertexData::new((25.0, -25.0, -25.0), GREEN, GREEN, 2.0, -30.0),
+            MeshVertexData::new((25.0, -25.0, 25.0), BLUE, GREEN, 2.0, -30.0),
+            MeshVertexData::new((-25.0, -25.0, 25.0), WHITE, WHITE, 2.0, -30.0),
+            MeshVertexData::new((-25.0, -25.0, -25.0), RED, RED, 2.0, -30.0),
+        ]
+        .into_iter()
+        .map(|mut v| {
+            v.position[0] += x;
+            v.position[1] += y;
+            v.position[2] += z;
+            v
+        })
+        .collect(),
+    );
+
+    assemble_line_strip(
+        cmd,
+        buffer_target,
+        vertex_head,
+        line_index_head,
+        vec![
+            MeshVertexData::new((-25.0, 25.0, -25.0), RED, RED, 2.0, -30.0),
+            MeshVertexData::new((25.0, 25.0, -25.0), GREEN, RED, 2.0, -30.0),
+            MeshVertexData::new((25.0, 25.0, 25.0), BLUE, RED, 2.0, -30.0),
+            MeshVertexData::new((-25.0, 25.0, 25.0), WHITE, RED, 2.0, -30.0),
+            MeshVertexData::new((-25.0, 25.0, -25.0), BLACK, RED, 2.0, -30.0),
+        ]
+        .into_iter()
+        .map(|mut v| {
+            v.position[0] += x;
+            v.position[1] += y;
+            v.position[2] += z;
+            v
+        })
+        .collect(),
+    );
+
+    assemble_line_list(
+        cmd,
+        buffer_target,
+        vertex_head,
+        line_index_head,
+        vec![
+            MeshVertexData::new((-25.0, -25.0, -25.0), RED, RED, 2.0, -30.0),
+            MeshVertexData::new((-25.0, 25.0, -25.0), RED, RED, 2.0, -30.0),
+            MeshVertexData::new((25.0, -25.0, -25.0), GREEN, GREEN, 2.0, -30.0),
+            MeshVertexData::new((25.0, 25.0, -25.0), GREEN, GREEN, 2.0, -30.0),
+            MeshVertexData::new((25.0, -25.0, 25.0), BLUE, BLUE, 2.0, -30.0),
+            MeshVertexData::new((25.0, 25.0, 25.0), BLUE, BLUE, 2.0, -30.0),
+            MeshVertexData::new((-25.0, -25.0, 25.0), WHITE, WHITE, 2.0, -30.0),
+            MeshVertexData::new((-25.0, 25.0, 25.0), WHITE, WHITE, 2.0, -30.0),
+        ]
+        .into_iter()
+        .map(|mut v| {
+            v.position[0] += x;
+            v.position[1] += y;
+            v.position[2] += z;
+            v
+        })
+        .collect(),
+    );
+
+    // Body cube
+    assemble_mesh(
+        cmd,
+        buffer_target,
+        vertex_head,
+        mesh_index_head,
+        vec![
+            MeshVertexData::new((1.0, 1.0, 1.0), BLACK, BLACK, 0.0, -16.0),
+            MeshVertexData::new((-1.0, 1.0, 1.0), BLACK, BLACK, 0.0, -16.0),
+            MeshVertexData::new((-1.0, 1.0, -1.0), BLACK, BLACK, 0.0, -16.0),
+            MeshVertexData::new((1.0, 1.0, -1.0), BLACK, BLACK, 0.0, -16.0),
+            MeshVertexData::new((1.0, -1.0, 1.0), BLACK, BLACK, 0.0, -16.0),
+            MeshVertexData::new((-1.0, -1.0, 1.0), BLACK, BLACK, 0.0, -16.0),
+            MeshVertexData::new((-1.0, -1.0, -1.0), BLACK, BLACK, 0.0, -16.0),
+            MeshVertexData::new((1.0, -1.0, -1.0), BLACK, BLACK, 0.0, -16.0),
+        ]
+        .into_iter()
+        .map(|mut vd| {
+            vd.position[0] *= 25.0;
+            vd.position[1] *= 25.0;
+            vd.position[2] *= 25.0;
+            vd.position[0] += x;
+            vd.position[1] += y;
+            vd.position[2] += z;
+            vd
+        })
+        .collect(),
+        vec![
+            // Top
+            0, 1, 2, 0, 2, 3, // Bottom
+            4, 7, 5, 7, 6, 5, // Front
+            3, 2, 6, 3, 6, 7, // Back
+            0, 5, 1, 0, 4, 5, // Right
+            0, 3, 7, 0, 7, 4, // Left
+            1, 5, 6, 1, 6, 2,
+        ]
+        .into_iter()
+        .map(|id| id + (*vertex_head) as u16)
+        .collect(),
+    );
+
+    // Visor cube
+    assemble_mesh(
+        cmd,
+        buffer_target,
+        vertex_head,
+        mesh_index_head,
+        vec![
+            MeshVertexData::new((1.0, 1.0, 1.0), RED, RED, 2.0, -14.0),
+            MeshVertexData::new((-1.0, 1.0, 1.0), RED, RED, 2.0, -14.0),
+            MeshVertexData::new((-1.0, 1.0, -1.0), RED, RED, 2.0, -14.0),
+            MeshVertexData::new((1.0, 1.0, -1.0), RED, RED, 2.0, -14.0),
+            MeshVertexData::new((1.0, -1.0, 1.0), RED, RED, 2.0, -14.0),
+            MeshVertexData::new((-1.0, -1.0, 1.0), RED, RED, 2.0, -14.0),
+            MeshVertexData::new((-1.0, -1.0, -1.0), RED, RED, 2.0, -14.0),
+            MeshVertexData::new((1.0, -1.0, -1.0), RED, RED, 2.0, -14.0),
+        ]
+        .into_iter()
+        .map(|mut vd| {
+            vd.position[0] *= 10.0;
+            vd.position[1] *= 2.5;
+            vd.position[2] *= 2.5;
+            vd.position[2] -= 25.0;
+            vd.position[0] += x;
+            vd.position[1] += y;
+            vd.position[2] += z;
+            vd
+        })
+        .collect(),
+        vec![
+            // Top
+            0, 1, 2, 0, 2, 3, // Bottom
+            4, 7, 5, 7, 6, 5, // Front
+            3, 2, 6, 3, 6, 7, // Back
+            0, 5, 1, 0, 4, 5, // Right
+            0, 3, 7, 0, 7, 4, // Left
+            1, 5, 6, 1, 6, 2,
+        ]
+        .into_iter()
+        .map(|id| id + (*vertex_head as u16))
+        .collect(),
     );
 }
 
 pub fn assemble_lines(
     cmd: &mut legion::systems::CommandBuffer,
     buffer_target: Entity,
-    buffer_index: usize,
-    lines: Vec<LineInstanceData>
+    vertex_head: &mut BufferAddress,
+    index_head: &mut BufferAddress,
+    vertices: Vec<MeshVertexData>,
+    indices: Vec<u32>,
 ) {
     let entity = cmd.push(());
-    cmd.assemble_wgpu_buffer_data_with_usage::<LineInstance, _>(
+    let vertex_count = vertices.len();
+    let index_count = indices.len();
+    cmd.assemble_wgpu_buffer_data_with_usage::<MeshVertex, _>(
         entity,
-        LineInstanceDataComponent::construct(lines),
-        buffer_size_of::<LineInstanceData>() * buffer_index as BufferAddress,
+        MeshVertexDataComponent::construct(vertices),
+        buffer_size_of::<MeshVertexData>() * *vertex_head as BufferAddress,
         Some(buffer_target),
     );
+    cmd.assemble_wgpu_buffer_data_with_usage::<LineIndex, _>(
+        entity,
+        LineIndexDataComponent::construct(indices),
+        buffer_size_of::<u32>() * *index_head as BufferAddress,
+        Some(buffer_target),
+    );
+
+    *vertex_head += vertex_count as BufferAddress;
+    *index_head += index_count as BufferAddress;
 }
 
 pub fn assemble_line_list(
     cmd: &mut legion::systems::CommandBuffer,
     buffer_target: Entity,
-    buffer_index: usize,
+    vertex_head: &mut BufferAddress,
+    index_head: &mut BufferAddress,
     vertices: Vec<MeshVertexData>,
 ) {
-    let lines = vertices
+    let mut vs = *vertex_head as u32;
+    let indices = vertices
         .chunks(2)
-        .map(|vs| LineInstanceData {
-            v0: vs[0],
-            v1: vs[1],
+        .flat_map(|_| {
+            let ret = [vs, vs + 1];
+            vs += 2;
+            ret
         })
         .collect::<Vec<_>>();
 
-    assemble_lines(cmd, buffer_target, buffer_index, lines)
+    println!("Line list indices: {:#?}", indices);
+
+    assemble_lines(
+        cmd,
+        buffer_target,
+        vertex_head,
+        index_head,
+        vertices,
+        indices,
+    )
+}
+
+pub fn assemble_line_indices(
+    cmd: &mut legion::systems::CommandBuffer,
+    buffer_target: Entity,
+    line_index_head: &mut BufferAddress,
+    indices: Vec<u32>,
+) {
+    let entity = cmd.push(());
+    let index_count = indices.len();
+    cmd.assemble_wgpu_buffer_data_with_usage::<LineIndex, _>(
+        entity,
+        LineIndexDataComponent::construct(indices),
+        buffer_size_of::<u32>() * *line_index_head as BufferAddress,
+        Some(buffer_target),
+    );
+
+    *line_index_head += index_count as BufferAddress;
 }
 
 pub fn assemble_line_strip(
     cmd: &mut legion::systems::CommandBuffer,
     buffer_target: Entity,
-    buffer_index: usize,
-    mut vertices: Vec<MeshVertexData>,
+    vertex_head: &mut BufferAddress,
+    index_head: &mut BufferAddress,
+    vertices: Vec<MeshVertexData>,
 ) {
-    let first = vertices.remove(0);
-    let last = vertices.pop().unwrap();
-    let inter = vertices.into_iter().flat_map(|v| [v, v]);
-    let vertices = std::iter::once(first)
+    let mut indices =
+        (*vertex_head..(*vertex_head + vertices.len() as BufferAddress)).collect::<Vec<_>>();
+
+    let first = indices.remove(0) as u32;
+    let last = indices.pop().unwrap() as u32;
+    let inter = indices.into_iter().flat_map(|i| [i as u32, i as u32]);
+    let indices = std::iter::once(first)
         .chain(inter)
         .chain(std::iter::once(last))
         .collect();
 
-    assemble_line_list(cmd, buffer_target, buffer_index, vertices)
+    println!("Line strip indices: {:#?}", indices);
+
+    assemble_lines(
+        cmd,
+        buffer_target,
+        vertex_head,
+        index_head,
+        vertices,
+        indices,
+    )
+}
+
+pub fn pad_align_triangle_list(indices: &mut Vec<u16>) {
+    while (buffer_size_of::<u16>() * indices.len() as BufferAddress) % COPY_BUFFER_ALIGNMENT > 0 {
+        indices.extend(std::iter::repeat(0).take(3));
+    }
 }
 
 pub fn assemble_mesh(
     cmd: &mut legion::systems::CommandBuffer,
     buffer_target: Entity,
-    vertex_buffer_index: BufferAddress,
-    index_buffer_index: BufferAddress,
+    vertex_buffer_index: &mut BufferAddress,
+    index_buffer_index: &mut BufferAddress,
     vertices: Vec<MeshVertexData>,
-    indices: Vec<u16>,
+    mut indices: Vec<u16>,
 ) {
     let entity = cmd.push(());
+    let vertex_offset = buffer_size_of::<MeshVertexData>() * *vertex_buffer_index;
+    let index_offset = buffer_size_of::<u16>() * *index_buffer_index;
+
+    pad_align_triangle_list(&mut indices);
+
+    let vertex_count = vertices.len();
+    let index_count = indices.len();
+
+    println!("Index count: {}", index_count);
+    println!("Index offset: {}", index_offset);
+
     cmd.assemble_wgpu_buffer_data_with_usage::<MeshVertex, _>(
         entity,
         MeshVertexDataComponent::construct(vertices),
-        buffer_size_of::<MeshVertexData>() * vertex_buffer_index,
+        vertex_offset,
         Some(buffer_target),
     );
+
     cmd.assemble_wgpu_buffer_data_with_usage::<MeshIndex, _>(
         entity,
         MeshIndexDataComponent::construct(indices),
-        buffer_size_of::<u16>() * index_buffer_index,
+        index_offset,
         Some(buffer_target),
     );
+
+    *vertex_buffer_index += vertex_count as BufferAddress;
+    *index_buffer_index += index_count as BufferAddress;
 }
 
 pub fn assemble_triangle_list(
     cmd: &mut legion::systems::CommandBuffer,
     buffer_target: Entity,
-    vertex_buffer_index: BufferAddress,
-    index_buffer_index: BufferAddress,
+    vertex_buffer_index: &mut BufferAddress,
+    index_buffer_index: &mut BufferAddress,
     mut base_index: u16,
     vertices: Vec<MeshVertexData>,
 ) {
@@ -150,8 +414,8 @@ pub fn assemble_triangle_list(
 pub fn assemble_triangle_fan(
     cmd: &mut legion::systems::CommandBuffer,
     buffer_target: Entity,
-    vertex_buffer_index: BufferAddress,
-    index_buffer_index: BufferAddress,
+    vertex_buffer_index: &mut BufferAddress,
+    index_buffer_index: &mut BufferAddress,
     base_index: u16,
     vertices: Vec<MeshVertexData>,
 ) {
@@ -174,12 +438,15 @@ pub fn assemble_triangle_fan(
     );
 }
 
-pub fn assemble_png_texture(
+pub fn assemble_png_texture_with_usage<C, U, I>(
     cmd: &mut legion::systems::CommandBuffer,
     renderer_entity: Entity,
     label: Option<&'static str>,
     png_bytes: &[u8],
-) {
+) where
+    C: Construct<Vec<u8>, I> + Send + Sync + 'static,
+    U: Send + Sync + 'static,
+{
     // Gradients texture
     let decoder = png::Decoder::new(std::io::Cursor::new(png_bytes));
     let mut reader = decoder.read_info().unwrap();
@@ -192,7 +459,7 @@ pub fn assemble_png_texture(
         depth_or_array_layers: 1,
     };
 
-    cmd.assemble_wgpu_texture_with_usage::<Gradients>(
+    cmd.assemble_wgpu_texture_with_usage::<U>(
         renderer_entity,
         TextureDescriptor {
             label,
@@ -205,9 +472,9 @@ pub fn assemble_png_texture(
         },
     );
 
-    cmd.assemble_wgpu_texture_data_with_usage::<Gradients, _>(
+    cmd.assemble_wgpu_texture_data_with_usage::<U, _>(
         renderer_entity,
-        GradientDataComponent::construct(buf),
+        C::construct(buf),
         ImageCopyTextureBase {
             texture: (),
             mip_level: 0,
@@ -221,7 +488,7 @@ pub fn assemble_png_texture(
         },
     );
 
-    cmd.assemble_wgpu_texture_view_with_usage::<Gradients>(
+    cmd.assemble_wgpu_texture_view_with_usage::<U>(
         renderer_entity,
         renderer_entity,
         TextureViewDescriptor {

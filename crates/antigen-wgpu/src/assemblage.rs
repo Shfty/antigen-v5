@@ -82,6 +82,9 @@ pub trait AssembleWgpu {
     /// Adds a compute pipeline to an entity
     fn assemble_wgpu_compute_pipeline(self, entity: Entity);
 
+    /// Adds a usage-tagged compute pipeline to an entity
+    fn assemble_wgpu_compute_pipeline_with_usage<U: Send + Sync + 'static>(self, entity: Entity);
+
     /// Adds a bind group layout to an entity
     fn assemble_wgpu_bind_group_layout(self, entity: Entity);
 
@@ -188,7 +191,7 @@ impl AssembleWgpu for &mut legion::systems::CommandBuffer {
                 format: TextureFormat::Bgra8UnormSrgb,
                 width: 0,
                 height: 0,
-                present_mode: wgpu::PresentMode::Mailbox,
+                present_mode: wgpu::PresentMode::Immediate,
             })
             .with(ChangedFlag(false)),
         );
@@ -242,6 +245,13 @@ impl AssembleWgpu for &mut legion::systems::CommandBuffer {
         self.add_component(
             entity,
             ComputePipelineComponent::construct(LazyComponent::Pending),
+        );
+    }
+
+    fn assemble_wgpu_compute_pipeline_with_usage<U: Send + Sync + 'static>(self, entity: Entity) {
+        self.add_component(
+            entity,
+            Usage::<U, ComputePipelineComponent>::construct(LazyComponent::Pending),
         );
     }
 

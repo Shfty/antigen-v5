@@ -124,6 +124,7 @@ pub fn msaa_line_prepare(
             count: msaa_framebuffer_desc.sample_count,
             ..Default::default()
         },
+        multiview: None,
     });
 
     let mut encoder = device.create_render_bundle_encoder(&RenderBundleEncoderDescriptor {
@@ -131,6 +132,7 @@ pub fn msaa_line_prepare(
         color_formats: &[config.format],
         depth_stencil: None,
         sample_count: msaa_framebuffer_desc.sample_count,
+        multiview: None,
     });
 
     encoder.set_pipeline(&pipeline);

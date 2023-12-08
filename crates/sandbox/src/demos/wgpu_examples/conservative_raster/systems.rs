@@ -17,8 +17,8 @@ use antigen_wgpu::{
         BindingResource, BindingType, Color, CommandEncoderDescriptor, Device, Extent3d, Features,
         FragmentState, LoadOp, MultisampleState, Operations, PipelineLayoutDescriptor, PolygonMode,
         PrimitiveState, PrimitiveTopology, RenderPassColorAttachment, RenderPassDescriptor,
-        RenderPipelineDescriptor, ShaderStages, TextureSampleType, TextureViewDimension,
-        VertexState,
+        RenderPipelineDescriptor, SamplerBindingType, ShaderStages, TextureSampleType,
+        TextureViewDimension, VertexState,
     },
     CommandBuffersComponent, RenderAttachmentTextureView, SurfaceConfigurationComponent,
     TextureViewDescriptorComponent,
@@ -65,10 +65,7 @@ pub fn conservative_raster_prepare(
                     BindGroupLayoutEntry {
                         binding: 1,
                         visibility: ShaderStages::FRAGMENT,
-                        ty: BindingType::Sampler {
-                            filtering: false,
-                            comparison: false,
-                        },
+                        ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
                         count: None,
                     },
                 ],
@@ -174,6 +171,7 @@ pub fn conservative_raster_prepare(
         },
         depth_stencil: None,
         multisample: MultisampleState::default(),
+        multiview: None,
     });
     pipeline_conservative_component
         .write()
@@ -195,6 +193,7 @@ pub fn conservative_raster_prepare(
         primitive: PrimitiveState::default(),
         depth_stencil: None,
         multisample: MultisampleState::default(),
+        multiview: None,
     });
     pipeline_regular_component
         .write()
@@ -221,6 +220,7 @@ pub fn conservative_raster_prepare(
             },
             depth_stencil: None,
             multisample: MultisampleState::default(),
+            multiview: None,
         });
 
         pipeline_lines_component.write().set_ready(pipeline);
@@ -249,6 +249,7 @@ pub fn conservative_raster_prepare(
             primitive: PrimitiveState::default(),
             depth_stencil: None,
             multisample: MultisampleState::default(),
+            multiview: None,
         })
     };
 

@@ -161,6 +161,7 @@ pub fn cube_prepare(
         },
         depth_stencil: None,
         multisample: MultisampleState::default(),
+        multiview: None,
     });
 
     if device.features().contains(Features::POLYGON_MODE_LINE) {
@@ -196,6 +197,7 @@ pub fn cube_prepare(
             },
             depth_stencil: None,
             multisample: MultisampleState::default(),
+            multiview: None,
         });
         wire_pipeline_component.write().set_ready(pipeline_wire);
     };

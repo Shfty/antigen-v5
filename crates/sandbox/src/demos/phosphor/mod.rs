@@ -1,44 +1,100 @@
-// TODO: Render tonemap pass into its own float buffer
+// TODO: [✓] Evaluate gradient before phosphor front buffer is written
+//           * Will prevent per-pixel animations,
+//             but allow for proper color combination in phosphor buffer
+//           * Fixes trails all fading to red, as the background is cleared to red
 //
-// TODO: Apply sobel edge detection filter to smooth edges of tonemap buffer
+// TODO: [✓] Implement MSAA for beam buffer
+//           * Will likely involve moving gradient evaluation into the beam vertex shaders
 //
-// TODO: Render mipmaps for tonemap buffer
-//
-// TODO: Render HDR bloom using mipmaps
-//
-// TODO: Switch to EXR + float format for gradient texture
+// TODO: [✓] Remove gradient code
 //
 // TODO: 3D Rendering
 //       * Need to figure out how to make a phosphor decay model work with a rotateable camera
 //       * Want to avoid UE4-style whole screen smearing
+//       [✓] Depth offset for beam lines
+//           * Ideally should appear as if they're 3D w.r.t. depth vs meshes
+//             * No Z-fighting with parent geometry
+//           * cos(length(vertex_pos.xy))?
+//           * Doesn't achieve desired effect
+//             * Render pipeline depth bias not controllable enough
+//             * Fragment shader math too complex, needs depth sample
+//             * Mesh inset doesn't align with line geometry
+//             * Applying in vertex space w/appropriate projection matrix tweaks is viable
 //
-//       [ ] Convert line rendering to true 3D
-//           [ ] Use hemisphere meshes as end caps
-//           [ ] Calculate 3D look-at rotation in vertex shader
+//       [✓] Compute shader for generating lines from mesh vertex buffer and line index buffer
 //
-//       * Depth buffer
-//         [ ] Sample depth along with color in decay shader
-//             * Decay toward far plane
-//             * Use offset to account for movement
-//               * Example case - mech with glowing visor running at camera
-//               * Glow should persist, but will pass inside mech body due to motion
-//               * Offset will allow motion to be counteracted, retaining the desired effect
-//             * Zero out when intensity reaches 0?
+//       [✗] Sort lines back-to-front for proper overlay behavior
+//           * Not necessary with proper additive rendering
 //
-//       * Cubemap-style setup seems like the best approach currently
-//         * Is a geometry-based solution to this viable?
-//         * Geometry layer using polar coordinates
-//         * Tesselate lines to counteract linear transform artifacts
-//         * Current phosphor rendering relies on rasterization
-//           * Could supersample, or render cubemap texels via shaped point sprites as a design workaround
-//         * Alternately, devise an equivalent-looking effect using geometry animation
-//           * Viable - current effect could be achieved with fine enough geo
-//           * Can take advantage of MSAA to avoid framebuffer size issues
+//       [✓] Combine duplicate lines via averaging
+//           * Will prevent Z-fighting
+//           [✓] Initial implementation
+//           [✓] Correct evaluation when va0 == vb1 && vb0 == va1
+//
+//       [>] Render triangle meshes from map file
+//           * Can use to clear a specific area to black w/a given decay rate
+//           [✓] Basic implementation
+//           [✓] More robust predicate for face pruning
+//           [✓] Fix erroneous line indices in map geometry
+//               * Lines appear to be using mesh vertices rather than line vertices
+//                 * Suggested by the purple color
+//               * Not dependent on the presence of other geometry
+//               * This would suggest an issue in assemble_map_geometry
+//           [✗] Apply interior face filter recursively to prune leftover faces
+//               * Doesn't work for closed loops like pillars
+//               * Not worth the additional cost to remove caps
+//               * May be worth looking at some means to detect and prune caps
+//           [✓] Fix index buffer alignment crash with test map
+//           [✓] Allow lines to override vertex color
+//               * Allows for black geo with colored lines without duplicating verts
+//           [ ] Account for portal entities when calculating internal faces
+//               * Will need some predicate that can be passed to the InternalFaces constructor
+//           [ ] Investigate calculating subsectors from internal faces
+//           [ ] Paralellize shambler
+//
+//       [ ] Figure out how to flush command buffers at runtime
+//           * Needed to add, remove components or entities
+//           * Want to avoid the Godot issue of stalling the main thread for object allocation
+//           * Only the allocating thread should block
+//           * This would suggest maintaining one world per thread and
+//             shuttling data between them via channel through a centralized 'world manager'
+//           * May be wiser to downgrade the RwLock-first approach back to special-case usage
+//           * Is there a way to compose systems that doesn't involve customized legion types?
+//
+//       [ ] Changed<PathComponent> map file reloading
+//           * Will allow a system to read ArgsComponent and load a map based on its value
+//
+//       [ ] Investigate infinite perspective projection + reversed Z
+//
+// TODO: [ ] Implement HDR bloom
+//           * Render mipmaps for final buffer
+//           * Render HDR bloom using mipmaps
+//
+//       [ ] Implement automatic line smearing via compute shader
+//           * Double-buffer vertices, use to construct quads
+//           * Will need to update backbuffer if lines are added / removed at runtime
+//             * Ex. Via frustum culling or portal rendering
+//
+//       [ ] Is automatic mesh smearing viable?
+//
+//       [ ] Experiment with scrolling / smearing the phosphor buffer based on camera motion
+//           * Should be able to move it in a somewhat perspective-correct fashion
+//
+//       [ ] Sort meshes front-to-back for optimal z-fail behavior
+//
+//       [ ] Downsample prototype.wad textures to 1x1px to determine color
+//
+// TODO: [ ] Implement LUT mapping via 3D texture
+//           * Replaces per-fragment gradient animation
+//           * Will need to figure out how to generate data
+//             * Rendering to 3D texture
+//             * Unit LUT is just a color cube with B/RGB/CMY/W vertices
 //
 //       * MechWarrior 2 gradient skybox background
 //         * Setting for underlay / overlay behavior
 //         * Overlay acts like a vectrex color overlay
 //         * Underlay respects depth and doesn't draw behind solid objects
+//
 
 mod assemblage;
 mod components;
@@ -46,9 +102,13 @@ mod systems;
 
 pub use assemblage::*;
 pub use components::*;
+use legion::Entity;
 pub use systems::*;
 
-use std::time::{Duration, Instant};
+use expression::EvalTrait;
+use std::{collections::BTreeMap, time::Instant};
+
+use legion::IntoQuery;
 
 use antigen_winit::{
     winit::{
@@ -58,7 +118,9 @@ use antigen_winit::{
     AssembleWinit, EventLoopHandler, RedrawUnconditionally, WindowComponent,
 };
 
-use antigen_core::{parallel, serial, single, AddIndirectComponent, Construct, ImmutableWorld};
+use antigen_core::{
+    parallel, serial, single, AddIndirectComponent, Construct, ImmutableWorld, LazyComponent, Usage,
+};
 
 use antigen_wgpu::{
     buffer_size_of,
@@ -70,31 +132,98 @@ use antigen_wgpu::{
     AssembleWgpu, RenderAttachmentTextureView, SurfaceConfigurationComponent,
 };
 
-const HDR_TEXTURE_FORMAT: TextureFormat = TextureFormat::Rgba16Float;
-const MAX_MESH_VERTICES: usize = 100;
-const MAX_MESH_INDICES: usize = 100;
-const MAX_LINES: usize = 10000;
-const BASE_FLASH_LINE: usize = MAX_LINES / 2;
+use antigen_shambler::MapFileComponent;
 
-pub fn orthographic_matrix(aspect: f32, zoom: f32) -> [[f32; 4]; 4] {
-    println!("Zoomed aspect: {}", zoom * aspect);
-    let projection =
-        nalgebra_glm::ortho_lh_zo(-zoom * aspect, zoom * aspect, -zoom, zoom, 0.0, 1.0);
+const HDR_TEXTURE_FORMAT: TextureFormat = TextureFormat::Rgba16Float;
+const MAX_MESH_VERTICES: usize = 10000;
+const MAX_MESH_INDICES: usize = 10000;
+const MAX_LINE_INDICES: usize = 20000;
+const MAX_LINES: usize = MAX_LINE_INDICES / 2;
+const CLEAR_COLOR: antigen_wgpu::wgpu::Color = antigen_wgpu::wgpu::Color {
+    r: 0.0,
+    g: 0.0,
+    b: 0.0,
+    a: -8.0,
+};
+
+pub const BLACK: (f32, f32, f32) = (0.0, 0.0, 0.0);
+pub const RED: (f32, f32, f32) = (1.0, 0.0, 0.0);
+pub const GREEN: (f32, f32, f32) = (0.0, 1.0, 0.0);
+pub const BLUE: (f32, f32, f32) = (0.0, 0.0, 1.0);
+pub const WHITE: (f32, f32, f32) = (1.0, 1.0, 1.0);
+
+pub fn orthographic_matrix(aspect: f32, zoom: f32, near: f32, far: f32) -> [[f32; 4]; 4] {
+    let projection = nalgebra_glm::ortho_lh_zo(
+        -zoom * aspect,
+        zoom * aspect,
+        -zoom,
+        zoom,
+        0.0,
+        zoom * (far - near) * 2.0,
+    );
     projection.into()
 }
 
-pub fn perspective_matrix(aspect: f32, (ofs_x, ofs_y): (f32, f32)) -> [[f32; 4]; 4] {
+pub fn perspective_matrix(
+    aspect: f32,
+    (ofs_x, ofs_y): (f32, f32),
+    near: f32,
+    far: f32,
+) -> [[f32; 4]; 4] {
     let x = ofs_x * std::f32::consts::PI;
     let view = nalgebra_glm::look_at_lh(
         &nalgebra::vector![x.sin() * 300.0, ofs_y * 150.0, -x.cos() * 300.0],
         &nalgebra::vector![0.0, 0.0, 0.0],
         &nalgebra::Vector3::y_axis(),
     );
-    let projection = nalgebra_glm::perspective_lh_zo(aspect, (45.0f32).to_radians(), 1.0, 500.0);
+    let projection = nalgebra_glm::perspective_lh_zo(aspect, (45.0f32).to_radians(), near, far);
 
     let matrix = projection * view;
 
     matrix.into()
+}
+
+fn circle_strip(subdiv: usize) -> Vec<LineVertexData> {
+    let subdiv = subdiv as isize;
+    let half = 1 + subdiv;
+
+    // Generate left quarter-circle
+    let mut left = (-half..1)
+        .map(|i| i as f32 / half as f32)
+        .map(|f| {
+            let f = f * (std::f32::consts::PI * 0.5);
+            (f.sin(), f.cos(), 0.0)
+        })
+        .collect::<Vec<_>>();
+
+    // Generate right quarter-circle
+    let mut right = (0..half + 1)
+        .map(|i| i as f32 / half as f32)
+        .map(|f| {
+            let f = f * (std::f32::consts::PI * 0.5);
+            (f.sin(), f.cos(), 1.0)
+        })
+        .collect::<Vec<_>>();
+
+    // Find intermediate vertices and duplicate them with negative Y
+    let first = left.remove(0);
+    let last = right.pop().unwrap();
+
+    let inter = left
+        .into_iter()
+        .chain(right.into_iter())
+        .flat_map(|(x, y, s)| [(x, -y, s), (x, y, s)]);
+
+    // Stitch the first, intermediate and last vertices back together and convert into line vertex data
+    std::iter::once(first)
+        .chain(inter)
+        .chain(std::iter::once(last))
+        .map(|(x, y, s)| LineVertexData {
+            position: [x, y, -1.0],
+            end: s,
+            ..Default::default()
+        })
+        .collect()
 }
 
 #[legion::system]
@@ -133,9 +262,11 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
 
     // Renderer
     cmd.add_component(renderer_entity, PhosphorRenderer);
+    cmd.assemble_wgpu_compute_pipeline_with_usage::<ComputeLineInstances>(renderer_entity);
     cmd.assemble_wgpu_render_pipeline_with_usage::<PhosphorDecay>(renderer_entity);
     cmd.assemble_wgpu_render_pipeline_with_usage::<BeamLine>(renderer_entity);
     cmd.assemble_wgpu_render_pipeline_with_usage::<BeamMesh>(renderer_entity);
+    cmd.assemble_wgpu_bind_group_with_usage::<ComputeLineInstances>(renderer_entity);
     cmd.assemble_wgpu_bind_group_with_usage::<Uniform>(renderer_entity);
     cmd.assemble_wgpu_bind_group_with_usage::<PhosphorFrontBuffer>(renderer_entity);
     cmd.assemble_wgpu_bind_group_with_usage::<PhosphorBackBuffer>(renderer_entity);
@@ -192,7 +323,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
-            sample_count: 1,
+            sample_count: 4,
             dimension: TextureDimension::D2,
             format: TextureFormat::Depth32Float,
             usage: TextureUsages::RENDER_ATTACHMENT,
@@ -204,6 +335,39 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         renderer_entity,
         TextureViewDescriptor {
             label: Some("Beam Depth Buffer View"),
+            format: None,
+            dimension: None,
+            aspect: TextureAspect::All,
+            base_mip_level: 0,
+            mip_level_count: None,
+            base_array_layer: 0,
+            array_layer_count: None,
+        },
+    );
+
+    // Beam multisample
+    cmd.assemble_wgpu_texture_with_usage::<BeamMultisample>(
+        renderer_entity,
+        TextureDescriptor {
+            label: Some("Beam Multisample"),
+            size: Extent3d {
+                width: 640,
+                height: 480,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 4,
+            dimension: TextureDimension::D2,
+            format: HDR_TEXTURE_FORMAT,
+            usage: TextureUsages::RENDER_ATTACHMENT,
+        },
+    );
+
+    cmd.assemble_wgpu_texture_view_with_usage::<BeamMultisample>(
+        renderer_entity,
+        renderer_entity,
+        TextureViewDescriptor {
+            label: Some("Beam Multisample View"),
             format: None,
             dimension: None,
             aspect: TextureAspect::All,
@@ -280,14 +444,6 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         },
     );
 
-    // Gradients texture
-    assemble_png_texture(
-        cmd,
-        renderer_entity,
-        Some("Gradients Texture"),
-        include_bytes!("textures/gradients.png"),
-    );
-
     // Phosphor sampler
     cmd.assemble_wgpu_sampler_with_usage::<Linear>(
         renderer_entity,
@@ -304,12 +460,22 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
     );
 
     // Shaders
+    cmd.assemble_wgpu_shader_with_usage::<ComputeLineInstances>(
+        renderer_entity,
+        ShaderModuleDescriptor {
+            label: None,
+            source: ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!(
+                "shaders/line_instances.wgsl"
+            ))),
+        },
+    );
+
     cmd.assemble_wgpu_shader_with_usage::<PhosphorDecay>(
         renderer_entity,
         ShaderModuleDescriptor {
             label: None,
             source: ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!(
-                "shaders/hdr_decay.wgsl"
+                "shaders/phosphor_decay.wgsl"
             ))),
         },
     );
@@ -319,7 +485,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         ShaderModuleDescriptor {
             label: None,
             source: ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!(
-                "shaders/hdr_line.wgsl"
+                "shaders/beam_line.wgsl"
             ))),
         },
     );
@@ -328,7 +494,7 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         ShaderModuleDescriptor {
             label: None,
             source: ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!(
-                "shaders/hdr_mesh.wgsl"
+                "shaders/beam_mesh.wgsl"
             ))),
         },
     );
@@ -356,57 +522,49 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
 
     cmd.assemble_wgpu_buffer_data_with_usage::<Uniform, _>(
         renderer_entity,
-        PerspectiveMatrixComponent::construct(perspective_matrix(640.0 / 480.0, (0.0, 0.0))),
+        PerspectiveMatrixComponent::construct(perspective_matrix(
+            640.0 / 480.0,
+            (0.0, 0.0),
+            1.0,
+            500.0,
+        )),
         0,
         Some(renderer_entity),
     );
 
     cmd.assemble_wgpu_buffer_data_with_usage::<Uniform, _>(
         renderer_entity,
-        OrthographicMatrixComponent::construct(orthographic_matrix(640.0 / 480.0, 200.0)),
+        OrthographicMatrixComponent::construct(orthographic_matrix(
+            640.0 / 480.0,
+            200.0,
+            1.0,
+            500.0,
+        )),
         buffer_size_of::<[[f32; 4]; 4]>(),
         Some(renderer_entity),
     );
 
-    fn circle_strip(subdiv: usize) -> Vec<LineVertexData> {
-        let subdiv = subdiv as isize;
-        let half = 1 + subdiv;
+    // Mesh Vertex buffer
+    cmd.assemble_wgpu_buffer_with_usage::<MeshVertex>(
+        renderer_entity,
+        BufferDescriptor {
+            label: Some("Mesh Vertex Buffer"),
+            size: buffer_size_of::<MeshVertexData>() * MAX_MESH_VERTICES as BufferAddress,
+            usage: BufferUsages::VERTEX | BufferUsages::STORAGE | BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        },
+    );
 
-        // Generate left quarter-circle
-        let mut left = (-half..1)
-            .map(|i| i as f32 / half as f32)
-            .map(|f| {
-                let f = f * (std::f32::consts::PI * 0.5);
-                (f.sin(), f.cos(), 0.0)
-            })
-            .collect::<Vec<_>>();
-
-        let mut right = (0..half + 1)
-            .map(|i| i as f32 / half as f32)
-            .map(|f| {
-                let f = f * (std::f32::consts::PI * 0.5);
-                (f.sin(), f.cos(), 1.0)
-            })
-            .collect::<Vec<_>>();
-
-        let first = left.remove(0);
-        let last = right.pop().unwrap();
-
-        let inter = left
-            .into_iter()
-            .chain(right.into_iter())
-            .flat_map(|(x, y, s)| [(x, -y, s), (x, y, s)]);
-
-        std::iter::once(first)
-            .chain(inter)
-            .chain(std::iter::once(last))
-            .map(|(x, y, s)| LineVertexData {
-                position: [x, y, 0.0, 1.0],
-                end: s,
-                ..Default::default()
-            })
-            .collect()
-    }
+    // Mesh Index buffer
+    cmd.assemble_wgpu_buffer_with_usage::<MeshIndex>(
+        renderer_entity,
+        BufferDescriptor {
+            label: Some("Mesh Index Buffer"),
+            size: buffer_size_of::<u16>() * MAX_MESH_INDICES as BufferAddress,
+            usage: BufferUsages::INDEX | BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        },
+    );
 
     // Line Vertex buffer
     let vertices = circle_strip(2);
@@ -428,251 +586,202 @@ pub fn assemble(cmd: &mut legion::systems::CommandBuffer) {
         None,
     );
 
+    // Line Index buffer
+    cmd.assemble_wgpu_buffer_with_usage::<LineIndex>(
+        renderer_entity,
+        BufferDescriptor {
+            label: Some("Line Index Buffer"),
+            size: buffer_size_of::<u32>() * MAX_LINE_INDICES as BufferAddress,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        },
+    );
+
     // Line Instance buffer
     cmd.assemble_wgpu_buffer_with_usage::<LineInstance>(
         renderer_entity,
         BufferDescriptor {
             label: Some("Line Instance Buffer"),
             size: buffer_size_of::<LineInstanceData>() * MAX_LINES as BufferAddress,
-            usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
+            usage: BufferUsages::VERTEX | BufferUsages::STORAGE | BufferUsages::COPY_DST,
             mapped_at_creation: false,
         },
     );
 
+    // Assemble geometry
+    let mut vertex_head = 0;
+    let mut line_index_head = 0;
+    let mut mesh_index_head = 0;
+
+    assemble_test_geometry(
+        cmd,
+        renderer_entity,
+        &mut vertex_head,
+        &mut mesh_index_head,
+        &mut line_index_head,
+    );
+
+    // Load map file
+    antigen_shambler::assemble_map_file::<MapFile>(
+        cmd,
+        renderer_entity,
+        std::path::PathBuf::from("crates/sandbox/src/demos/phosphor/maps/index_align_test.map"),
+    );
+
+    // Store mesh and line index counts for render system
+    let vertex_count = VertexCountComponent::construct(vertex_head);
+    let mesh_index_count = MeshIndexCountComponent::construct(mesh_index_head);
+    let line_index_count = LineIndexCountComponent::construct(line_index_head);
+
+    cmd.add_component(renderer_entity, vertex_count);
+    cmd.add_component(renderer_entity, mesh_index_count);
+    cmd.add_component(renderer_entity, line_index_count);
+}
+
+fn assemble_test_geometry(
+    cmd: &mut legion::systems::CommandBuffer,
+    buffer_target: Entity,
+    vertex_head: &mut BufferAddress,
+    mesh_index_head: &mut BufferAddress,
+    line_index_head: &mut BufferAddress,
+) {
+    // Test triangles
+    /*
+    assemble_triangle_list(
+        cmd,
+        renderer_entity,
+        &mut vertex_head,
+        &mut mesh_index_head,
+        0,
+        vec![
+            MeshVertexData::new((50.0, -80.0, 0.0), BLUE, 1.0, -10.0),
+            MeshVertexData::new((90.0, -20.0, 0.0), GREEN, 1.0, -10.0),
+            MeshVertexData::new((10.0, -20.0, 0.0), RED, 1.0, -10.0),
+            MeshVertexData::new((-50.0, -20.0, 0.0), WHITE, 1.0, -10.0),
+            MeshVertexData::new((-90.0, -80.0, 0.0), WHITE, 1.0, -10.0),
+            MeshVertexData::new((-10.0, -80.0, 0.0), WHITE, 1.0, -10.0),
+        ],
+    );
+    */
+
     // Oscilloscopes
     assemble_oscilloscope(
         cmd,
-        renderer_entity,
-        0,
-        (0.0, 0.0, 0.0),
-        Oscilloscope::new(6.66, 30.0, |_| (0.0, 0.0, 0.0)),
-        7.0,
-        -6.0,
-        -0.0,
-        0.0,
-    );
-
-    assemble_oscilloscope(
-        cmd,
-        renderer_entity,
-        1,
-        (-80.0, 40.0, -25.0),
+        buffer_target,
+        vertex_head,
+        line_index_head,
+        (-80.0, 40.0, -80.0),
+        RED,
         Oscilloscope::new(3.33, 30.0, |f| (f.sin(), f.cos(), f.sin())),
-        7.0,
-        -0.0,
-        -240.0,
-        0.0,
-    );
-
-    assemble_oscilloscope(
-        cmd,
-        renderer_entity,
-        2,
-        (0.0, 40.0, 0.0),
-        Oscilloscope::new(2.22, 30.0, |f| (f.sin(), (f * 1.2).sin(), (f * 1.4).cos())),
-        7.0,
-        -7.0,
-        0.0,
-        1.0,
-    );
-
-    assemble_oscilloscope(
-        cmd,
-        renderer_entity,
-        3,
-        (80.0, 40.0, 25.0),
-        Oscilloscope::new(3.33, 30.0, |f| (f.cos(), (f * 1.2).cos(), (f * 1.4).cos())),
-        7.0,
-        -12.0,
-        12.0,
         2.0,
+        -1.0,
     );
 
-    // Flash timer
-    cmd.add_component(
-        renderer_entity,
-        TimerComponent::construct(Timer {
-            timestamp: Instant::now(),
-            duration: Duration::from_secs_f32(2.0),
-        }),
+    assemble_oscilloscope(
+        cmd,
+        buffer_target,
+        vertex_head,
+        line_index_head,
+        (-80.0, 40.0, 0.0),
+        GREEN,
+        Oscilloscope::new(2.22, 30.0, |f| (f.sin(), (f * 1.2).sin(), (f * 1.4).cos())),
+        2.0,
+        -2.0,
+    );
+
+    assemble_oscilloscope(
+        cmd,
+        buffer_target,
+        vertex_head,
+        line_index_head,
+        (-80.0, 40.0, 80.0),
+        BLUE,
+        Oscilloscope::new(3.33, 30.0, |f| (f.cos(), (f * 1.2).cos(), (f * 1.4).cos())),
+        2.0,
+        -4.0,
     );
 
     // Gradient 3 Triangle
     assemble_line_strip(
         cmd,
-        renderer_entity,
-        BASE_FLASH_LINE,
+        buffer_target,
+        vertex_head,
+        line_index_head,
         vec![
-            MeshVertexData::new((-50.0, -20.0, 0.0), 11.0, -10.0, 0.0, 3.0),
-            MeshVertexData::new((-90.0, -80.0, 0.0), 10.0, -10.0, 0.0, 3.0),
-            MeshVertexData::new((-10.0, -80.0, 0.0), 9.0, -10.0, 0.0, 3.0),
-            MeshVertexData::new((-50.0, -20.0, 0.0), 8.0, -10.0, 0.0, 3.0),
+            MeshVertexData::new((-50.0, -20.0, 0.0), RED, RED, 5.0, -20.0),
+            MeshVertexData::new((-90.0, -80.0, 0.0), GREEN, GREEN, 4.0, -20.0),
+            MeshVertexData::new((-10.0, -80.0, 0.0), BLUE, BLUE, 3.0, -20.0),
+            MeshVertexData::new((-50.0, -20.0, 0.0), RED, RED, 2.0, -20.0),
         ],
     );
 
     // Gradients 0-2 Triangle
     assemble_line_list(
         cmd,
-        renderer_entity,
-        BASE_FLASH_LINE + 3,
+        buffer_target,
+        vertex_head,
+        line_index_head,
         vec![
-            MeshVertexData::new((50.0, -80.0, 0.0), 11.0, -10.0, 0.0, 2.0),
-            MeshVertexData::new((90.0, -20.0, 0.0), 10.0, -10.0, 0.0, 2.0),
-            MeshVertexData::new((90.0, -20.0, 0.0), 10.0, -10.0, 0.0, 1.0),
-            MeshVertexData::new((10.0, -20.0, 0.0), 9.0, -10.0, 0.0, 1.0),
-            MeshVertexData::new((10.0, -20.0, 0.0), 9.0, -10.0, 0.0, 0.0),
-            MeshVertexData::new((50.0, -80.0, 0.0), 8.0, -10.0, 0.0, 0.0),
+            MeshVertexData::new((50.0, -80.0, 0.0), BLUE, BLUE, 7.0, -10.0),
+            MeshVertexData::new((90.0, -20.0, 0.0), BLUE, BLUE, 6.0, -10.0),
+            MeshVertexData::new((90.0, -20.0, 0.0), GREEN, GREEN, 5.0, -10.0),
+            MeshVertexData::new((10.0, -20.0, 0.0), GREEN, GREEN, 4.0, -10.0),
+            MeshVertexData::new((10.0, -20.0, 0.0), RED, RED, 3.0, -10.0),
+            MeshVertexData::new((50.0, -80.0, 0.0), RED, RED, 2.0, -10.0),
         ],
     );
-
-    // Cube lines
-    assemble_line_strip(
-        cmd,
-        renderer_entity,
-        4,
-        vec![
-            MeshVertexData::new((-25.0, -25.0, -25.0), 7.0, -30.0, 0.0, 0.0),
-            MeshVertexData::new((25.0, -25.0, -25.0), 7.0, -30.0, 0.0, 1.0),
-            MeshVertexData::new((25.0, -25.0, 25.0), 7.0, -30.0, 0.0, 2.0),
-            MeshVertexData::new((-25.0, -25.0, 25.0), 7.0, -30.0, 0.0, 3.0),
-            MeshVertexData::new((-25.0, -25.0, -25.0), 7.0, -30.0, 0.0, 0.0),
-        ],
-    );
-
-    assemble_line_strip(
-        cmd,
-        renderer_entity,
-        8,
-        vec![
-            MeshVertexData::new((-25.0, 25.0, -25.0), 7.0, -30.0, 0.0, 0.0),
-            MeshVertexData::new((25.0, 25.0, -25.0), 7.0, -30.0, 0.0, 1.0),
-            MeshVertexData::new((25.0, 25.0, 25.0), 7.0, -30.0, 0.0, 2.0),
-            MeshVertexData::new((-25.0, 25.0, 25.0), 7.0, -30.0, 0.0, 3.0),
-            MeshVertexData::new((-25.0, 25.0, -25.0), 7.0, -30.0, 0.0, 0.0),
-        ],
-    );
-
-    assemble_line_list(
-        cmd,
-        renderer_entity,
-        12,
-        vec![
-            MeshVertexData::new((-25.0, -25.0, -25.0), 7.0, -30.0, 0.0, 0.0),
-            MeshVertexData::new((-25.0, 25.0, -25.0), 7.0, -30.0, 0.0, 0.0),
-            MeshVertexData::new((25.0, -25.0, -25.0), 7.0, -30.0, 0.0, 1.0),
-            MeshVertexData::new((25.0, 25.0, -25.0), 7.0, -30.0, 0.0, 1.0),
-            MeshVertexData::new((25.0, -25.0, 25.0), 7.0, -30.0, 0.0, 2.0),
-            MeshVertexData::new((25.0, 25.0, 25.0), 7.0, -30.0, 0.0, 2.0),
-            MeshVertexData::new((-25.0, -25.0, 25.0), 7.0, -30.0, 0.0, 3.0),
-            MeshVertexData::new((-25.0, 25.0, 25.0), 7.0, -30.0, 0.0, 3.0),
-        ],
-    );
-
-    // Mesh Vertex buffer
-    cmd.assemble_wgpu_buffer_with_usage::<MeshVertex>(
-        renderer_entity,
-        BufferDescriptor {
-            label: Some("Mesh Vertex Buffer"),
-            size: buffer_size_of::<MeshVertexData>() * MAX_MESH_VERTICES as BufferAddress,
-            usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        },
-    );
-
-    // Mesh Index buffer
-    cmd.assemble_wgpu_buffer_with_usage::<MeshIndex>(
-        renderer_entity,
-        BufferDescriptor {
-            label: Some("Mesh Index Buffer"),
-            size: buffer_size_of::<u16>() * MAX_MESH_INDICES as BufferAddress,
-            usage: BufferUsages::INDEX | BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        },
-    );
-
-    assemble_mesh(
-        cmd,
-        renderer_entity,
-        8,
-        6 * 6,
-        vec![
-            MeshVertexData::new((1.0, 1.0, 1.0), 7.0, -14.0, 0.0, 0.0),
-            MeshVertexData::new((-1.0, 1.0, 1.0), 7.0, -14.0, 0.0, 0.0),
-            MeshVertexData::new((-1.0, 1.0, -1.0), 7.0, -14.0, 0.0, 0.0),
-            MeshVertexData::new((1.0, 1.0, -1.0), 7.0, -14.0, 0.0, 0.0),
-            MeshVertexData::new((1.0, -1.0, 1.0), 7.0, -14.0, 0.0, 0.0),
-            MeshVertexData::new((-1.0, -1.0, 1.0), 7.0, -14.0, 0.0, 0.0),
-            MeshVertexData::new((-1.0, -1.0, -1.0), 7.0, -14.0, 0.0, 0.0),
-            MeshVertexData::new((1.0, -1.0, -1.0), 7.0, -14.0, 0.0, 0.0),
-        ]
-        .into_iter()
-        .map(|mut vd| {
-            vd.position[0] *= 10.0;
-            vd.position[1] *= 2.5;
-            vd.position[2] *= 2.5;
-            vd.position[2] -= 25.0;
-            vd
-        })
-        .collect(),
-        vec![
-            // Top
-            0, 1, 2, 0, 2, 3, // Bottom
-            4, 7, 5, 7, 6, 5, // Front
-            3, 2, 6, 3, 6, 7, // Back
-            0, 5, 1, 0, 4, 5, // Right
-            0, 3, 7, 0, 7, 4, // Left
-            1, 5, 6, 1, 6, 2,
-        ]
-        .into_iter()
-        .map(|id| id + 8)
-        .collect(),
-    );
-
-    assemble_triangle_list(
-        cmd,
-        renderer_entity,
-        0,
-        0,
-        0,
-        vec![
-            MeshVertexData::new((50.0, -80.0, 0.0), 2.0, -10.0, 0.0, 7.0),
-            MeshVertexData::new((90.0, -20.0, 0.0), 4.0, -10.0, 0.0, 7.0),
-            MeshVertexData::new((10.0, -20.0, 0.0), 3.0, -10.0, 0.0, 7.0),
-            MeshVertexData::new((-50.0, -20.0, 0.0), 9.0, -10.0, 0.0, 3.0),
-            MeshVertexData::new((-90.0, -80.0, 0.0), 11.0, -10.0, 0.0, 3.0),
-            MeshVertexData::new((-10.0, -80.0, 0.0), 10.0, -10.0, 0.0, 3.0),
-        ],
-    );
-
-    /*
-    assemble_triangle_fan(
-        cmd,
-        renderer_entity,
-        0,
-        0,
-        0,
-        vec![
-            MeshVertexData::new((50.0, -40.0), 1.0, -10.0, 0.0, 7.0),
-            MeshVertexData::new((50.0, -80.0), 2.0, -10.0, 0.0, 7.0),
-            MeshVertexData::new((10.0, -20.0), 3.0, -10.0, 0.0, 7.0),
-            MeshVertexData::new((90.0, -20.0), 4.0, -10.0, 0.0, 7.0),
-            MeshVertexData::new((50.0, -80.0), 5.0, -10.0, 0.0, 7.0),
-            MeshVertexData::new((50.0, -80.0), 5.0, -10.0, 0.0, 7.0),
-        ],
-    );
-    */
-
-    // Load map file
-    let map = include_str!("maps/lunatic_fringe.map");
-    let map = map.parse::<shambler::shalrath::repr::Map>().unwrap();
-    let map_data = build_map_data(map);
-
-    assemble_lines(cmd, renderer_entity, 16, map_data);
 }
 
-fn build_map_data(map: shambler::shalrath::repr::Map) -> Vec<LineInstanceData> {
-    // Convert to flat structure
-    let geo_map = shambler::GeoMap::from(map);
+#[legion::system]
+#[read_component(Usage<MapFile, MapFileComponent>)]
+#[read_component(VertexCountComponent)]
+#[read_component(MeshIndexCountComponent)]
+#[read_component(LineIndexCountComponent)]
+pub fn build_map(
+    world: &legion::world::SubWorld,
+    cmd: &mut legion::systems::CommandBuffer,
+    #[state] done: &mut bool,
+) -> Option<()> {
+    if *done {
+        return None;
+    }
+
+    let geo_map = <&Usage<MapFile, MapFileComponent>>::query()
+        .iter(world)
+        .next()
+        .unwrap();
+
+    let geo_map = geo_map.read();
+    let geo_map = if let LazyComponent::Ready(geo_map) = &*geo_map {
+        geo_map
+    } else {
+        panic!("Geo map is not ready");
+    };
+
+    let (buffer_target, vertex_head) = <(Entity, &VertexCountComponent)>::query()
+        .iter(world)
+        .next()
+        .unwrap();
+
+    let buffer_target = *buffer_target;
+    let mut vertex_head = vertex_head.write();
+    let vertex_head = &mut *vertex_head;
+
+    let mesh_index_head = <&MeshIndexCountComponent>::query()
+        .iter(world)
+        .next()
+        .unwrap();
+    let mut mesh_index_head = mesh_index_head.write();
+    let mesh_index_head = &mut *mesh_index_head;
+
+    let line_index_head = <&LineIndexCountComponent>::query()
+        .iter(world)
+        .next()
+        .unwrap();
+    let mut line_index_head = line_index_head.write();
+    let line_index_head = &mut *line_index_head;
+
+    println!("Building map...");
 
     // Create geo planes from brush planes
     let face_planes = shambler::face::FacePlanes::new(&geo_map.face_planes);
@@ -683,9 +792,6 @@ fn build_map_data(map: shambler::shalrath::repr::Map) -> Vec<LineInstanceData> {
     // Generate face vertices
     let face_vertices =
         shambler::face::FaceVertices::new(&geo_map.brush_faces, &face_planes, &brush_hulls);
-
-    // Generate flat face normals
-    let face_normals = shambler::face::FaceNormals::flat(&face_vertices, &face_planes);
 
     // Find duplicate faces
     let face_duplicates =
@@ -703,6 +809,17 @@ fn build_map_data(map: shambler::shalrath::repr::Map) -> Vec<LineInstanceData> {
         shambler::face::FaceWinding::Clockwise,
     );
 
+    let face_triangle_indices = shambler::face::FaceTriangleIndices::new(&face_indices);
+    let face_line_indices = shambler::line::Lines::new(&face_indices);
+
+    let interior_faces = shambler::face::InteriorFaces::new(
+        &geo_map.entity_brushes,
+        &geo_map.brush_faces,
+        &face_duplicates,
+        &face_vertices,
+        &face_line_indices,
+    );
+
     // Generate tangents
     let face_bases = shambler::face::FaceBases::new(
         &geo_map.faces,
@@ -712,16 +829,13 @@ fn build_map_data(map: shambler::shalrath::repr::Map) -> Vec<LineInstanceData> {
         &geo_map.face_scales,
     );
 
-    // Generate line indices
-    let lines = shambler::line::Lines::new(&face_indices);
-
     // Calculate face-face containment
     let face_face_containment = shambler::face::FaceFaceContainment::new(
         &geo_map.faces,
         &face_planes,
         &face_bases,
         &face_vertices,
-        &lines,
+        &face_line_indices,
     );
 
     // Calculate brush-face containment
@@ -734,13 +848,14 @@ fn build_map_data(map: shambler::shalrath::repr::Map) -> Vec<LineInstanceData> {
     );
 
     // Generate mesh
-    let mut mesh_normals: Vec<shambler::Vector3> = Default::default();
-    let mut mesh_vertices: Vec<shambler::Vector3> = Default::default();
-    let mut mesh_lines: Vec<(shambler::face::FaceId, shambler::line::LineIndices)> =
-        Default::default();
+    let mut mesh_vertices: Vec<MeshVertexData> = Default::default();
+    let mut mesh_indices: Vec<u16> = Default::default();
+    let mut line_indices: Vec<u32> = Default::default();
 
     let scale_factor = 1.0;
 
+    // Gather mesh and line geometry
+    let mut face_index_head = *vertex_head as u16;
     for face_id in &geo_map.faces {
         if face_duplicates.contains(&face_id) {
             continue;
@@ -754,116 +869,263 @@ fn build_map_data(map: shambler::shalrath::repr::Map) -> Vec<LineInstanceData> {
             continue;
         }
 
-        let index_offset = mesh_vertices.len();
-        let face_lines = &lines.face_lines[&face_id];
+        if !interior_faces.contains(&face_id) {
+            continue;
+        }
 
-        mesh_vertices.extend(face_vertices.vertices(&face_id).unwrap().iter().map(|v| {
-            nalgebra::vector![-v.x * scale_factor, v.z * scale_factor, v.y * scale_factor]
-        }));
-        mesh_normals.extend(
-            face_normals[&face_id]
-                .iter()
-                .map(|n| nalgebra::vector![-n.x, n.z, n.y]),
-        );
-        mesh_lines.extend(face_lines.iter().map(|line_id| {
-            let shambler::line::LineIndices { v0, v1 } = lines.line_indices[line_id];
-            (
-                *face_id,
-                shambler::line::LineIndices {
-                    v0: v0 + index_offset,
-                    v1: v1 + index_offset,
-                },
-            )
-        }));
+        // Fetch and interpret texture data
+        let texture_id = geo_map.face_textures[&face_id];
+        let texture_name = &geo_map.textures[&texture_id];
+
+        let color = if texture_name.contains("blood") {
+            RED
+        } else if texture_name.contains("green") {
+            GREEN
+        } else if texture_name.contains("blue") {
+            BLUE
+        } else {
+            WHITE
+        };
+
+        let intensity = if texture_name.ends_with("3") {
+            0.25
+        } else if texture_name.ends_with("2") {
+            0.375
+        } else if texture_name.ends_with("1") {
+            0.5
+        } else {
+            0.125
+        };
+
+        let face_vertices = face_vertices.vertices(&face_id).unwrap();
+        let vertices = face_vertices
+            .iter()
+            .map(|v| MeshVertexData {
+                position: [v.x * scale_factor, v.z * scale_factor, v.y * scale_factor],
+                surface_color: [0.0, 0.0, 0.0],
+                line_color: [color.0, color.1, color.2],
+                intensity,
+                delta_intensity: -8.0,
+                ..Default::default()
+            })
+            .collect::<Vec<_>>();
+        mesh_vertices.extend(vertices);
+
+        let face_triangle_indices = face_triangle_indices.get(&face_id).unwrap();
+        let triangle_indices = face_triangle_indices
+            .iter()
+            .map(|i| *i as u16 + face_index_head)
+            .collect::<Vec<_>>();
+        mesh_indices.extend(triangle_indices);
+
+        let face_lines = &face_line_indices.face_lines[&face_id];
+        let face_line_indices = face_lines
+            .iter()
+            .flat_map(|line_id| {
+                let shambler::line::LineIndices { v0, v1 } =
+                    face_line_indices.line_indices[line_id];
+                [
+                    (v0 + face_index_head as usize) as u32,
+                    (v1 + face_index_head as usize) as u32,
+                ]
+            })
+            .collect::<Vec<_>>();
+        line_indices.extend(face_line_indices);
+
+        face_index_head += face_vertices.len() as u16;
     }
 
-    mesh_lines
-        .into_iter()
-        .map(|(face, shambler::line::LineIndices { v0, v1 })| {
-            let texture_id = geo_map.face_textures[&face];
-            let texture_name = &geo_map.textures[&texture_id];
+    assemble_mesh(
+        cmd,
+        buffer_target,
+        vertex_head,
+        mesh_index_head,
+        mesh_vertices,
+        mesh_indices,
+    );
 
-            let gradient = if texture_name.contains("blood") {
-                0.0
-            } else if texture_name.contains("green") {
-                1.0
-            } else if texture_name.contains("blue") {
-                2.0
+    assemble_line_indices(cmd, buffer_target, line_index_head, line_indices);
+
+    // Spawn player start entities
+    let player_start_entities = geo_map.point_entities.iter().flat_map(|point_entity| {
+        let properties = geo_map.entity_properties.get(point_entity)?;
+        if let Some(classname) = properties.0.iter().find(|p| p.key == "classname") {
+            if classname.value == "info_player_start" {
+                Some(properties)
             } else {
-                7.0
-            };
+                None
+            }
+        } else {
+            None
+        }
+    });
 
-            let intensity = if texture_name.ends_with("3") {
-                2.0
-            } else if texture_name.ends_with("2") {
-                4.0
-            } else if texture_name.ends_with("1") {
-                6.0
+    for player_start in player_start_entities.into_iter() {
+        let origin = player_start.0.iter().find(|p| p.key == "origin").unwrap();
+        let mut origin = origin.value.split_whitespace();
+        let x = origin.next().unwrap().parse::<f32>().unwrap();
+        let y = origin.next().unwrap().parse::<f32>().unwrap();
+        let z = origin.next().unwrap().parse::<f32>().unwrap();
+        assemble_box_bot(
+            cmd,
+            buffer_target,
+            vertex_head,
+            mesh_index_head,
+            line_index_head,
+            (x, z, y),
+        );
+    }
+
+    // Spawn oscilloscope entities
+    let oscilloscope_entities = geo_map.point_entities.iter().flat_map(|point_entity| {
+        let properties = geo_map.entity_properties.get(point_entity)?;
+        if let Some(classname) = properties.0.iter().find(|p| p.key == "classname") {
+            if classname.value == "oscilloscope" {
+                Some(properties)
             } else {
-                0.0
-            };
+                None
+            }
+        } else {
+            None
+        }
+    });
 
-            let v0 = mesh_vertices[v0];
-            let v1 = mesh_vertices[v1];
+    for oscilloscope in oscilloscope_entities.into_iter() {
+        let origin = oscilloscope.0.iter().find(|p| p.key == "origin").unwrap();
+        let mut origin = origin.value.split_whitespace();
+        let x = origin.next().unwrap().parse::<f32>().unwrap();
+        let z = origin.next().unwrap().parse::<f32>().unwrap();
+        let y = origin.next().unwrap().parse::<f32>().unwrap();
+        let origin = (x, y, z);
 
-            let v0 = MeshVertexData {
-                position: [v0.x, v0.y, v0.z, 1.0],
-                intensity,
-                delta_intensity: -160.0,
-                delta_delta: 0.0,
-                gradient,
-            };
+        let color = oscilloscope.0.iter().find(|p| p.key == "color").unwrap();
+        let mut color = color.value.split_whitespace();
+        let x = color.next().unwrap().parse::<f32>().unwrap();
+        let z = color.next().unwrap().parse::<f32>().unwrap();
+        let y = color.next().unwrap().parse::<f32>().unwrap();
+        let color = (x, y, z);
 
-            let v1 = MeshVertexData {
-                position: [v1.x, v1.y, v1.z, 1.0],
-                intensity,
-                delta_intensity: -160.0,
-                delta_delta: 0.0,
-                gradient,
-            };
+        let intensity = oscilloscope
+            .0
+            .iter()
+            .find(|p| p.key == "intensity")
+            .unwrap()
+            .value
+            .parse::<f32>()
+            .unwrap();
+        let delta_intensity = oscilloscope
+            .0
+            .iter()
+            .find(|p| p.key == "delta_intensity")
+            .unwrap()
+            .value
+            .parse::<f32>()
+            .unwrap();
+        let speed = oscilloscope
+            .0
+            .iter()
+            .find(|p| p.key == "speed")
+            .unwrap()
+            .value
+            .parse::<f32>()
+            .unwrap();
+        let magnitude = oscilloscope
+            .0
+            .iter()
+            .find(|p| p.key == "magnitude")
+            .unwrap()
+            .value
+            .parse::<f32>()
+            .unwrap();
 
-            LineInstanceData { v0, v1 }
-        })
-        .collect()
+        let x = &oscilloscope.0.iter().find(|p| p.key == "x").unwrap().value;
+        let x = expression::parse_expression(x);
+
+        let y = &oscilloscope.0.iter().find(|p| p.key == "y").unwrap().value;
+        let y = expression::parse_expression(y);
+
+        let z = &oscilloscope.0.iter().find(|p| p.key == "z").unwrap().value;
+        let z = expression::parse_expression(z);
+
+        assemble_oscilloscope(
+            cmd,
+            buffer_target,
+            vertex_head,
+            line_index_head,
+            origin,
+            color,
+            Oscilloscope::new(speed, magnitude, move |f| {
+                let vars = [("f", f)].into_iter().collect::<BTreeMap<_, _>>();
+                (x.eval(&vars), y.eval(&vars), z.eval(&vars))
+            }),
+            intensity,
+            delta_intensity,
+        );
+    }
+
+    println!("Map build complete");
+
+    *done = true;
+
+    Some(())
 }
 
 pub fn winit_event_handler<T>(mut f: impl EventLoopHandler<T>) -> impl EventLoopHandler<T> {
     let mut prepare_schedule = serial![
-        antigen_wgpu::create_shader_modules_with_usage_system::<BeamLine>(),
-        antigen_wgpu::create_shader_modules_with_usage_system::<BeamMesh>(),
-        antigen_wgpu::create_shader_modules_with_usage_system::<PhosphorDecay>(),
-        antigen_wgpu::create_shader_modules_with_usage_system::<Tonemap>(),
-        antigen_wgpu::create_buffers_system::<Uniform>(),
-        antigen_wgpu::create_buffers_system::<LineVertex>(),
-        antigen_wgpu::create_buffers_system::<LineInstance>(),
-        antigen_wgpu::create_buffers_system::<MeshVertex>(),
-        antigen_wgpu::create_buffers_system::<MeshIndex>(),
-        antigen_wgpu::create_textures_system::<BeamBuffer>(),
-        antigen_wgpu::create_textures_system::<BeamDepthBuffer>(),
-        antigen_wgpu::create_textures_system::<PhosphorFrontBuffer>(),
-        antigen_wgpu::create_textures_system::<PhosphorBackBuffer>(),
-        antigen_wgpu::create_textures_system::<Gradients>(),
-        antigen_wgpu::create_texture_views_system::<BeamBuffer>(),
-        antigen_wgpu::create_texture_views_system::<BeamDepthBuffer>(),
-        antigen_wgpu::create_texture_views_system::<PhosphorFrontBuffer>(),
-        antigen_wgpu::create_texture_views_system::<PhosphorBackBuffer>(),
-        antigen_wgpu::create_texture_views_system::<Gradients>(),
-        antigen_wgpu::create_samplers_with_usage_system::<Linear>(),
-        antigen_wgpu::buffer_write_system::<Uniform, TotalTimeComponent, f32>(),
-        antigen_wgpu::buffer_write_system::<Uniform, DeltaTimeComponent, f32>(),
-        antigen_wgpu::buffer_write_system::<Uniform, PerspectiveMatrixComponent, [[f32; 4]; 4]>(),
-        antigen_wgpu::buffer_write_system::<Uniform, OrthographicMatrixComponent, [[f32; 4]; 4]>(),
-        antigen_wgpu::buffer_write_system::<LineVertex, LineVertexDataComponent, Vec<LineVertexData>>(
-        ),
-        antigen_wgpu::buffer_write_system::<
-            LineInstance,
-            LineInstanceDataComponent,
-            Vec<LineInstanceData>,
-        >(),
-        antigen_wgpu::buffer_write_system::<MeshVertex, MeshVertexDataComponent, Vec<MeshVertexData>>(
-        ),
-        antigen_wgpu::buffer_write_system::<MeshIndex, MeshIndexDataComponent, Vec<u16>>(),
-        antigen_wgpu::texture_write_system::<Gradients, GradientDataComponent, GradientData>(),
+        parallel![
+            antigen_wgpu::create_shader_modules_with_usage_system::<ComputeLineInstances>(),
+            antigen_wgpu::create_shader_modules_with_usage_system::<BeamLine>(),
+            antigen_wgpu::create_shader_modules_with_usage_system::<BeamMesh>(),
+            antigen_wgpu::create_shader_modules_with_usage_system::<PhosphorDecay>(),
+            antigen_wgpu::create_shader_modules_with_usage_system::<Tonemap>(),
+            antigen_wgpu::create_buffers_system::<Uniform>(),
+            antigen_wgpu::create_buffers_system::<LineVertex>(),
+            antigen_wgpu::create_buffers_system::<LineIndex>(),
+            antigen_wgpu::create_buffers_system::<LineInstance>(),
+            antigen_wgpu::create_buffers_system::<MeshVertex>(),
+            antigen_wgpu::create_buffers_system::<MeshIndex>(),
+            serial![
+                antigen_wgpu::create_textures_system::<BeamBuffer>(),
+                antigen_wgpu::create_texture_views_system::<BeamBuffer>(),
+            ],
+            serial![
+                antigen_wgpu::create_textures_system::<BeamDepthBuffer>(),
+                antigen_wgpu::create_texture_views_system::<BeamDepthBuffer>(),
+            ],
+            serial![
+                antigen_wgpu::create_textures_system::<BeamMultisample>(),
+                antigen_wgpu::create_texture_views_system::<BeamMultisample>(),
+            ],
+            serial![
+                antigen_wgpu::create_textures_system::<PhosphorFrontBuffer>(),
+                antigen_wgpu::create_texture_views_system::<PhosphorFrontBuffer>(),
+            ],
+            serial![
+                antigen_wgpu::create_textures_system::<PhosphorBackBuffer>(),
+                antigen_wgpu::create_texture_views_system::<PhosphorBackBuffer>(),
+            ],
+            antigen_wgpu::create_samplers_with_usage_system::<Linear>(),
+        ],
+        parallel![
+            antigen_wgpu::buffer_write_system::<Uniform, TotalTimeComponent, f32>(),
+            antigen_wgpu::buffer_write_system::<Uniform, DeltaTimeComponent, f32>(),
+            antigen_wgpu::buffer_write_system::<Uniform, PerspectiveMatrixComponent, [[f32; 4]; 4]>(
+            ),
+            antigen_wgpu::buffer_write_system::<Uniform, OrthographicMatrixComponent, [[f32; 4]; 4]>(
+            ),
+            antigen_wgpu::buffer_write_system::<
+                LineVertex,
+                LineVertexDataComponent,
+                Vec<LineVertexData>,
+            >(),
+            antigen_wgpu::buffer_write_system::<LineIndex, LineIndexDataComponent, Vec<u32>>(),
+            antigen_wgpu::buffer_write_system::<
+                MeshVertex,
+                MeshVertexDataComponent,
+                Vec<MeshVertexData>,
+            >(),
+            antigen_wgpu::buffer_write_system::<MeshIndex, MeshIndexDataComponent, Vec<u16>>(),
+        ],
         phosphor_prepare_system()
     ];
 
@@ -873,7 +1135,6 @@ pub fn winit_event_handler<T>(mut f: impl EventLoopHandler<T>) -> impl EventLoop
             phosphor_update_delta_time_system(),
         ],
         phosphor_update_oscilloscopes_system(),
-        phosphor_update_timers_system(),
         phosphor_render_system(),
         phosphor_update_timestamp_system(),
         antigen_wgpu::device_poll_system(Maintain::Wait),
@@ -889,7 +1150,7 @@ pub fn winit_event_handler<T>(mut f: impl EventLoopHandler<T>) -> impl EventLoop
         match &event {
             Event::MainEventsCleared => {
                 surface_resize_schedule.execute(world);
-                prepare_schedule.execute(world);
+                prepare_schedule.execute_and_flush(world);
             }
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::Resized(_) => {

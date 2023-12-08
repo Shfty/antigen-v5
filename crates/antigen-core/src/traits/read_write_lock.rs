@@ -5,7 +5,13 @@ pub use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 /// Trait for newtypes that wrap a [`parking_lot::RwLock`]
 pub trait ReadWriteLock<T> {
     fn read(&self) -> RwLockReadGuard<T>;
+    fn try_read(&self) -> Option<RwLockReadGuard<T>> {
+        None
+    }
     fn write(&self) -> RwLockWriteGuard<T>;
+    fn try_write(&self) -> Option<RwLockWriteGuard<T>> {
+        None
+    }
 }
 
 impl<T> ReadWriteLock<T> for RwLock<T> {
@@ -13,8 +19,16 @@ impl<T> ReadWriteLock<T> for RwLock<T> {
         self.read()
     }
 
+    fn try_read(&self) -> Option<RwLockReadGuard<T>> {
+        self.try_read()
+    }
+
     fn write(&self) -> RwLockWriteGuard<T> {
         self.write()
+    }
+
+    fn try_write(&self) -> Option<RwLockWriteGuard<T>> {
+        self.try_write()
     }
 }
 
@@ -25,6 +39,14 @@ impl<T> ReadWriteLock<T> for Arc<RwLock<T>> {
 
     fn write(&self) -> RwLockWriteGuard<T> {
         self.deref().write()
+    }
+
+    fn try_read(&self) -> Option<RwLockReadGuard<T>> {
+        self.deref().try_read()
+    }
+
+    fn try_write(&self) -> Option<RwLockWriteGuard<T>> {
+        self.deref().try_write()
     }
 }
 
